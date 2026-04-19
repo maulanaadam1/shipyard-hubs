@@ -1,7 +1,7 @@
 'use client';
 
 import React, { createContext, useContext, useState, ReactNode, useEffect, useCallback } from 'react';
-import { supabase } from '@/lib/supabase';
+import { api } from '@/lib/api-client';
 
 // --- Interfaces ---
 
@@ -231,14 +231,14 @@ export function DataProvider({ children }: { children: ReactNode }) {
 
     try {
       const results = await Promise.allSettled([
-        supabase.from('equipment').select('*').order('created_at', { ascending: false }),
-        supabase.from('loan_requests').select('*').order('date_created', { ascending: false }),
-        supabase.from('deployment_records').select('*').order('create_date', { ascending: false }),
-        supabase.from('profiles').select('*'),
-        supabase.from('vendors').select('*').order('vendor', { ascending: true }),
-        supabase.from('companies').select('*').order('company_name', { ascending: true }),
-        supabase.from('ships').select('*').order('shipname', { ascending: true }),
-        supabase.from('projects').select('*').order('create_date', { ascending: false })
+        api.from('equipment').select('*').order('created_at', { ascending: false }),
+        api.from('loan_requests').select('*').order('date_created', { ascending: false }),
+        api.from('deployment_records').select('*').order('create_date', { ascending: false }),
+        api.from('profiles').select('*'),
+        api.from('vendors').select('*').order('vendor', { ascending: true }),
+        api.from('companies').select('*').order('company_name', { ascending: true }),
+        api.from('ships').select('*').order('shipname', { ascending: true }),
+        api.from('projects').select('*').order('create_date', { ascending: false })
       ]);
 
       results.forEach((result, index) => {
@@ -360,7 +360,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
     }, 5000);
 
     // Check initial session
-    supabase.auth.getSession().then(({ data: { session }, error }) => {
+    api.auth.getSession().then(({ data: { session }, error }) => {
       console.log('getSession Result:', { hasSession: !!session, error });
       if (!session || error) {
         clearTimeout(authTimeout);
@@ -374,7 +374,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
 
     // Listen for auth changes
     const fetchSession = async () => {
-      const { data: sessionData } = await supabase.auth.getSession();
+      const { data: sessionData } = await api.auth.getSession();
       const session = sessionData?.session;
 
       console.log('Session Extracted:', { hasSession: !!session, hasUser: !!session?.user });
@@ -389,7 +389,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
         if (lastActivity && ((now - parseInt(lastActivity)) > TWELVE_HOURS)) {
           // Session expired due to idle
           localStorage.removeItem('lastActivity');
-          await supabase.auth.signOut();
+          await api.auth.signOut();
           setCurrentUser(null);
           setIsAuthLoading(false);
           return;

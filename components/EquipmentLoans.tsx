@@ -23,7 +23,7 @@ import {
 } from 'lucide-react';
 
 import { useData, LoanRequest, RequestedItem } from '@/context/DataContext';
-import { supabase } from '@/lib/supabase';
+import { api } from '@/lib/api-client';
 
 const statusColors: Record<string, string> = {
   Draft: 'bg-slate-100 text-slate-600 border-slate-200',
@@ -106,7 +106,7 @@ export default function EquipmentLoans() {
 
   const handleBulkDelete = async () => {
     if (window.confirm(`Are you sure you want to delete ${selectedIds.size} requests?`)) {
-      const { error } = await supabase.from('loan_requests').delete().in('id', Array.from(selectedIds));
+      const { error } = await api.from('loan_requests').delete().in('id', Array.from(selectedIds));
       if (error) {
         console.error('Error deleting loans from Supabase:', error.message);
         alert('Error deleting: ' + error.message);

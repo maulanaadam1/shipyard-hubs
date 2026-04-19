@@ -4,7 +4,7 @@ import React, { useState } from 'react';
 import { motion } from 'motion/react';
 import { Ship, Lock, Mail, ArrowRight, AlertCircle } from 'lucide-react';
 import { useData } from '@/context/DataContext';
-import { supabase } from '@/lib/supabase';
+import { api } from '@/lib/api-client';
 
 export default function LandingPage() {
   const { setCurrentUser } = useData();
@@ -19,7 +19,7 @@ export default function LandingPage() {
     setError('');
     
     try {
-      const { error: authError } = await supabase.auth.signInWithPassword({
+      const { error: authError } = await api.auth.signInWithPassword({
         email,
         password,
       });
@@ -34,7 +34,7 @@ export default function LandingPage() {
     setIsLoading(true);
     setError('');
     try {
-      const { error: authError } = await supabase.auth.signInWithOAuth({
+      const { error: authError } = await api.auth.signInWithOAuth({
         provider: 'google',
         options: {
           redirectTo: window.location.origin

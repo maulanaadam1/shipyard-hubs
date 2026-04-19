@@ -21,7 +21,7 @@ import {
 } from 'lucide-react';
 import { useData, Vendor } from '@/context/DataContext';
 import { motion, AnimatePresence } from 'motion/react';
-import { supabase } from '@/lib/supabase';
+import { api } from '@/lib/api-client';
 import Papa from 'papaparse';
 import * as XLSX from 'xlsx';
 
@@ -222,7 +222,7 @@ export default function VendorManagement() {
 
   const handleBulkDelete = async () => {
     if (confirm(`Are you sure you want to delete ${selectedIds.size} vendors?`)) {
-      const { error } = await supabase.from('vendors').delete().in('id', Array.from(selectedIds));
+      const { error } = await api.from('vendors').delete().in('id', Array.from(selectedIds));
       if (error) {
         alert('Error deleting: ' + error.message);
       } else {

@@ -4,7 +4,7 @@ import React from 'react';
 import { Bell, User as UserIcon, LogOut, UserCircle, X, Ship } from 'lucide-react';
 import { useData } from '@/context/DataContext';
 import { motion, AnimatePresence } from 'motion/react';
-import { supabase } from '@/lib/supabase';
+import { api } from '@/lib/api-client';
 import Image from 'next/image';
 import ProfileModal from './ProfileModal';
 
@@ -54,16 +54,16 @@ export default function Header({ onMenuClick }: { onMenuClick?: () => void }) {
       const authEmail = isEmail ? identifier : `${identifier}@shipyard.local`;
 
       if (authMode === 'login') {
-        const { error } = await supabase.auth.signInWithPassword({ email: authEmail, password });
+        const { error } = await api.auth.signInWithPassword({ email: authEmail, password });
         
         if (error) {
           // Auto-create default admin if it doesn't exist
           if (isDefaultAdminLogin && error.message.includes('Invalid login credentials')) {
-            const { data: authData, error: signUpError } = await supabase.auth.signUp({ email: authEmail, password });
+            const { data: authData, error: signUpError } = await api.auth.signUp({ email: authEmail, password });
             if (signUpError) throw signUpError;
             
             if (authData.user) {
-              await supabase.from('profiles').upsert({ 
+              await api.from('profiles').upsert({ 
                 id: authData.user.id, 
                 name: 'Super Admin', 
                 email: '', 
@@ -71,7 +71,7 @@ export default function Header({ onMenuClick }: { onMenuClick?: () => void }) {
               }, { onConflict: 'id' });
               
               // Sign in after creation
-              const { error: retryError } = await supabase.auth.signInWithPassword({ email: authEmail, password });
+              const { error: retryError } = await api.auth.signInWithPassword({ email: authEmail, password });
               if (retryError) throw retryError;
             }
           } else {
@@ -80,7 +80,7 @@ export default function Header({ onMenuClick }: { onMenuClick?: () => void }) {
         }
         setIsLoginModalOpen(false);
       } else {
-        const { data: authData, error: signUpError } = await supabase.auth.signUp({ email: authEmail, password });
+        const { data: authData, error: signUpError } = await api.auth.signUp({ email: authEmail, password });
         if (signUpError) throw signUpError;
         
         if (authData.user) {
@@ -88,7 +88,7 @@ export default function Header({ onMenuClick }: { onMenuClick?: () => void }) {
           const displayName = !isEmail && identifier === defaultAdminUsername ? 'Super Admin' : (isEmail ? authEmail.split('@')[0] : identifier);
           const displayEmail = isEmail ? authEmail : '';
 
-          await supabase.from('profiles').upsert({ 
+          await api.from('profiles').upsert({ 
             id: authData.user.id, 
             name: displayName, 
             email: displayEmail, 
@@ -122,7 +122,7 @@ export default function Header({ onMenuClick }: { onMenuClick?: () => void }) {
       // Race supabase signout against a 1.5-second timeout to prevent deadlocks
       // if internet connection is lagging or the websocket is unresponsive.
       await Promise.race([
-        supabase.auth.signOut(),
+        api.auth.signOut(),
         new Promise(resolve => setTimeout(resolve, 1500))
       ]);
     } catch (error) {

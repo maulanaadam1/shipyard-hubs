@@ -21,7 +21,7 @@ import {
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { useData, Equipment } from '@/context/DataContext';
-import { supabase } from '@/lib/supabase';
+import { api } from '@/lib/api-client';
 
 export default function EquipmentFleet() {
   const { fleet: data, setFleet: setData, currentUser, fetchData } = useData();
@@ -191,7 +191,7 @@ export default function EquipmentFleet() {
     if (itemToDelete) {
       const idsToDelete = Array.isArray(itemToDelete) ? itemToDelete : [itemToDelete];
       
-      const { error } = await supabase.from('equipment').delete().in('id', idsToDelete);
+      const { error } = await api.from('equipment').delete().in('id', idsToDelete);
       
       if (error) {
         console.error('Error deleting from Supabase:', error.message);
@@ -259,7 +259,7 @@ export default function EquipmentFleet() {
         insertedOrUpdatedData = insertData;
       }
 
-      console.log("[Supabase Auth] Current User ID:", (await supabase.auth.getSession()).data.session?.user?.id);
+      console.log("[Supabase Auth] Current User ID:", (await api.auth.getSession()).data.session?.user?.id);
       console.log("[Supabase Write Result] Error:", error, "Data:", insertedOrUpdatedData);
 
       if (error) {
@@ -374,7 +374,7 @@ export default function EquipmentFleet() {
               <button 
                 onClick={async () => {
                   try {
-                    const { data, error } = await supabase.from('equipment').select('*');
+                    const { data, error } = await api.from('equipment').select('*');
                     console.log("Direct db diagnostic:", data, error);
                     alert(`Database Sync Diagnostic:\nData Found: ${data?.length} rows\nError Status: ${error?.message || 'None'}`);
                   } catch(e: any) { alert(e.message) }

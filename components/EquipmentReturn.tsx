@@ -18,7 +18,7 @@ import {
 } from 'lucide-react';
 
 import { useData, LoanRequest, DeploymentRecord } from '@/context/DataContext';
-import { supabase } from '@/lib/supabase';
+import { api } from '@/lib/api-client';
 
 export default function EquipmentReturn() {
   const { fleet: assets, setFleet: setAssets, loans, setLoans, deployments, setDeployments } = useData();

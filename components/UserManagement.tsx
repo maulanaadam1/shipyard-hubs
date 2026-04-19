@@ -15,7 +15,7 @@ import {
   MoreVertical
 } from 'lucide-react';
 import { useData, User } from '@/context/DataContext';
-import { supabase } from '@/lib/supabase';
+import { api } from '@/lib/api-client';
 
 export default function UserManagement() {
   const { users, setUsers, currentUser } = useData();
@@ -107,7 +107,7 @@ export default function UserManagement() {
       return;
     }
     if (confirm('Are you sure you want to delete this user profile?')) {
-      const { error } = await supabase.from('profiles').delete().eq('id', id);
+      const { error } = await api.from('profiles').delete().eq('id', id);
       if (error) {
         console.error('Error deleting profile from Supabase:', error.message);
         alert('Error deleting: ' + error.message);

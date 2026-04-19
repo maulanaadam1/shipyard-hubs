@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { X, User, Mail, Shield, KeyRound, AlertCircle, CheckCircle2 } from 'lucide-react';
 import { useData } from '@/context/DataContext';
-import { supabase } from '@/lib/supabase';
+import { api } from '@/lib/api-client';
 import Image from 'next/image';
 
 export default function ProfileModal({ isOpen, onClose }: { isOpen: boolean; onClose: () => void }) {
@@ -19,7 +19,7 @@ export default function ProfileModal({ isOpen, onClose }: { isOpen: boolean; onC
     setErrorMessage('');
 
     try {
-      const { error } = await supabase.auth.resetPasswordForEmail(currentUser.email, {
+      const { error } = await api.auth.resetPasswordForEmail(currentUser.email, {
         redirectTo: window.location.origin,
       });
 

@@ -19,7 +19,7 @@ import {
 } from 'lucide-react';
 
 import { useData, LoanRequest, DeploymentRecord, Equipment as EquipmentAsset } from '@/context/DataContext';
-import { supabase } from '@/lib/supabase';
+import { api } from '@/lib/api-client';
 
 export default function EquipmentDeployment() {
   const { fleet: assets, setFleet: setAssets, loans, setLoans, deployments, setDeployments } = useData();
@@ -185,7 +185,7 @@ export default function EquipmentDeployment() {
     // Perform all updates in Supabase
     try {
       // 1. Insert deployments
-      const { error: depError } = await supabase.from('deployment_records').insert(newDeployments);
+      const { error: depError } = await api.from('deployment_records').insert(newDeployments);
       if (depError) throw depError;
 
       // 2. Update assets status

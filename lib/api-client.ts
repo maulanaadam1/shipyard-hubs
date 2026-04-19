@@ -19,7 +19,7 @@ const restCall = async (method: string, table: string, body?: any, query?: strin
     }
 };
 
-class SupabaseQueryBuilder {
+class ApiQueryBuilder {
     table: string;
     action: string = 'GET';
     queryData?: any;
@@ -93,8 +93,8 @@ class SupabaseQueryBuilder {
     }
 }
 
-export const supabase = {
-    from: (table: string) => new SupabaseQueryBuilder(table),
+export const api = {
+    from: (table: string) => new ApiQueryBuilder(table),
     auth: {
         getSession: async () => {
             const session = await getSession();
