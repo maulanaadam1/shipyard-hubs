@@ -1,0 +1,179 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Profile {
+  id         String   @id @default(uuid())
+  email      String   @unique
+  password   String?
+  name       String?
+  role       String   @default("Staff")
+  avatar_url String?
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  @@map("profiles")
+}
+
+model Equipment {
+  id          String   @id @default(uuid())
+  created_at  DateTime @default(now())
+  updated_at  DateTime @updatedAt
+  source      String?
+  no_asset    String?
+  type        String?
+  brand       String?
+  name        String?
+  capacity    String?
+  year_invest String?
+  available   String?
+  alias       String?
+  price       String?
+
+  @@map("equipment")
+}
+
+model LoanRequest {
+  id             String   @id @default(uuid())
+  date_created   DateTime @default(now())
+  request_id     String?
+  project_id     String?
+  shipname       String?
+  vendor         String?
+  work_order     String?
+  date_start     String?
+  date_finish    String?
+  duration       Int?
+  lampiran       String?
+  change         String?
+  status         String?
+  items          Json?
+  approval_steps Json?
+
+  @@map("loan_requests")
+}
+
+model DeploymentRecord {
+  unique_id      String   @id @default(uuid())
+  create_date    DateTime @default(now())
+  create_by      String?
+  last_updated   DateTime @updatedAt
+  request_id     String?
+  year           Int?
+  month          Int?
+  item           String?
+  product_id     String?
+  product_name   String?
+  code_project   String?
+  project_name   String?
+  shipname       String?
+  vendor_list    String?
+  vendor         String?
+  start_date     String?
+  finish_date    String?
+  duration       Float?
+  duration_hour  Float?
+  return_date    String?
+  return_status  String?
+  description    String?
+
+  @@map("deployment_records")
+}
+
+model Vendor {
+  id             String   @id @default(uuid())
+  vendor         String?
+  nama_pt        String?
+  whatapps       String?
+  category       String?
+  jumlah_anggota Int?
+
+  @@map("vendors")
+}
+
+model Company {
+  id           String   @id @default(uuid())
+  company_type String?
+  company_name String?
+
+  @@map("companies")
+}
+
+model Ship {
+  id       String   @id @default(uuid())
+  type     String?
+  shipname String?
+  company  String?
+  loa      Float?
+  breadth  Float?
+  depth    Float?
+  draft    Float?
+  gt       Float?
+  buid     String?
+
+  @@map("ships")
+}
+
+model Project {
+  id                 String   @id @default(uuid())
+  idproject          String?
+  shipname           String?
+  cust_company       String?
+  approval_status    String?
+  m_employee_id      String?
+  est_start          String?
+  est_finish         String?
+  est_docking_date   String?
+  est_undocking_date String?
+  est_trial_date     String?
+  est_arrival_date   String?
+  est_departure_date String?
+  docking            String?
+  undocking          String?
+  act_arrival_date   String?
+  actual_start       String?
+  actual_finish      String?
+  act_trial_date     String?
+  act_departure_date String?
+  no                 Int?
+  year               Int?
+  company            String?
+  docking_id         String?
+  docking_type       String?
+  number_project     String?
+  type               String?
+  width              Float?
+  length             Float?
+  location           String?
+  x_coordinate       Float?
+  y_coordinate       Float?
+  status_dock        String?
+  ship_visibility    String?
+  ship_condition     String?
+  status             String?
+  status_comercial   String?
+  duration_dock      Float?
+  duration_project   Float?
+  project_lead       String?
+  price_contract     Float?
+  cost_actual        Float?
+  gross_profit       Float?
+  safetyman          String?
+  project_team       String?
+  vendor_team        String?
+  manpower_all       Int?
+  manpower_in        Int?
+  manpower_ven       Int?
+  update_pdf         String?
+  print              String?
+  create_date        DateTime @default(now())
+  updated_at         DateTime @updatedAt
+  id_siaga           Int?
+
+  @@map("projects")
+}
