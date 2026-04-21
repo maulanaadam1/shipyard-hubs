@@ -1,22 +1,11 @@
 'use client';
 
-import { signIn, signOut, getSession } from 'next-auth/react';
-
-const restCall = async (method: string, table: string, body?: any, query?: string) => {
-    let url = `/api/data/${table}`;
-    if (query) url += `?${query}`;
-    
-    try {
-        const res = await fetch(url, {
-            method,
-            headers: { 'Content-Type': 'application/json' },
-            body: body ? JSON.stringify(body) : undefined
-        });
-        const result = await res.json();
-        return { data: result.data || null, error: result.error ? { message: result.error } : null };
-    } catch (e: any) {
-        return { data: null, error: { message: e.message } };
-    }
+// Helper to add auth headers to fetch requests
+const getHeaders = () => {
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    const token = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null;
+    if (token) headers['Authorization'] = `Bearer ${token}`;
+    return headers;
 };
 
 class ApiQueryBuilder {
@@ -80,14 +69,19 @@ class ApiQueryBuilder {
         reject?: ((reason: any) => TResult2 | PromiseLike<TResult2>) | undefined | null
     ): Promise<TResult1 | TResult2> {
         return new Promise<any>(async (res) => {
+            // Note: Use absolute URL for dev testing, or relative for prod
             let url = `/api/data/${this.table}`;
+            if (process.env.NODE_ENV === 'development') {
+                url = `http://localhost:3000${url}`;
+            }
+            
             const qs = this.params.toString();
             if (qs) url += `?${qs}`;
 
             try {
                 const response = await fetch(url, {
                     method: this.action,
-                    headers: { 'Content-Type': 'application/json' },
+                    headers: getHeaders(),
                     body: this.queryData ? JSON.stringify(this.queryData) : undefined
                 });
                 const result = await response.json();
@@ -103,32 +97,50 @@ export const api = {
     from: (table: string) => new ApiQueryBuilder(table),
     auth: {
         getSession: async () => {
-            const session = await getSession();
-            return { data: { session: session ? { user: session.user } : null }, error: null };
+            try {
+                let url = `/api/auth/session`;
+                if (process.env.NODE_ENV === 'development') url = `http://localhost:3000${url}`;
+                
+                const res = await fetch(url, { headers: getHeaders() });
+                const data = await res.json();
+                return { data: { session: data.session }, error: null };
+            } catch(e: any) {
+                return { data: { session: null }, error: { message: e.message } };
+            }
         },
         signInWithPassword: async ({ email, password }: any) => {
-            const result = await signIn('credentials', { email, password, redirect: false });
-            if (result?.error) return { error: { message: result.error }, data: null };
-            return { data: { user: { email } }, error: null };
+             let url = `/api/auth/login`;
+             if (process.env.NODE_ENV === 'development') url = `http://localhost:3000${url}`;
+             
+             try {
+                const res = await fetch(url, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ email, password })
+                });
+                const data = await res.json();
+                if (data.error) return { error: { message: data.error }, data: null };
+                
+                localStorage.setItem('auth_token', data.token);
+                return { data: { user: data.user }, error: null };
+             } catch(e: any) {
+                 return { error: { message: e.message }, data: null };
+             }
         },
         signOut: async () => {
-            await signOut({ redirect: false });
+            localStorage.removeItem('auth_token');
+            // Trigger a hard reload to clear React state easily since 
+            // we removed Next-auth's hook-based session manager
+            typeof window !== 'undefined' ? window.location.href = '/' : null;
             return { error: null };
         },
         signUp: async ({ email, password}: any) => {
-           const res = await fetch('/api/auth/register', {
-               method: 'POST',
-               headers: { 'Content-Type': 'application/json' },
-               body: JSON.stringify({ email, password })
-           });
-           const result = await res.json();
-           return { data: { user: result.user }, error: result.error ? { message: result.error } : null };
+            return { data: null, error: { message: 'Signup disabled. Contact admin.' } };
         },
         onAuthStateChange: (callback: any) => {
-            // NextAuth handles this automatically. We mock it for context.
             return { data: { subscription: { unsubscribe: () => {} } } };
         },
-        resetPasswordForEmail: async (email: string) => { return { error: null } }
+        resetPasswordForEmail: async (email: string) => { return { error: null, data: null } }
     },
     channel: (name: string) => ({
         on: (event: any, payload: any, callback: any) => ({

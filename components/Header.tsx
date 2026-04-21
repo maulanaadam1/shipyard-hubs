@@ -5,7 +5,6 @@ import { Bell, User as UserIcon, LogOut, UserCircle, X, Ship } from 'lucide-reac
 import { useData } from '@/context/DataContext';
 import { motion, AnimatePresence } from 'motion/react';
 import { api } from '@/lib/api-client';
-import Image from 'next/image';
 import ProfileModal from './ProfileModal';
 
 export default function Header({ onMenuClick }: { onMenuClick?: () => void }) {
@@ -62,7 +61,7 @@ export default function Header({ onMenuClick }: { onMenuClick?: () => void }) {
             const { data: authData, error: signUpError } = await api.auth.signUp({ email: authEmail, password });
             if (signUpError) throw signUpError;
             
-            if (authData.user) {
+            if (authData?.user) {
               await api.from('profiles').upsert({ 
                 id: authData.user.id, 
                 name: 'Super Admin', 
@@ -83,7 +82,7 @@ export default function Header({ onMenuClick }: { onMenuClick?: () => void }) {
         const { data: authData, error: signUpError } = await api.auth.signUp({ email: authEmail, password });
         if (signUpError) throw signUpError;
         
-        if (authData.user) {
+        if (authData?.user) {
           const isDefaultAdmin = authEmail === process.env.NEXT_PUBLIC_DEFAULT_ADMIN_EMAIL || identifier === defaultAdminUsername;
           const displayName = !isEmail && identifier === defaultAdminUsername ? 'Super Admin' : (isEmail ? authEmail.split('@')[0] : identifier);
           const displayEmail = isEmail ? authEmail : '';
@@ -181,11 +180,10 @@ export default function Header({ onMenuClick }: { onMenuClick?: () => void }) {
               </div>
               <div className="w-10 h-10 bg-white rounded-full flex items-center justify-center border-2 border-white shadow-sm overflow-hidden shrink-0 relative">
                 {currentUser.avatar ? (
-                  <Image 
+                  <img 
                     src={currentUser.avatar} 
                     alt={currentUser.name} 
-                    fill 
-                    className="object-cover"
+                    className="object-cover w-full h-full"
                     referrerPolicy="no-referrer"
                   />
                 ) : (

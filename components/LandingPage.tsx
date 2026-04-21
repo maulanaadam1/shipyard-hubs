@@ -31,16 +31,7 @@ export default function LandingPage() {
   };
 
   const handleGoogleLogin = async () => {
-    setIsLoading(true);
-    setError('');
-    try {
-      const { signIn } = require('next-auth/react');
-      const result = await signIn('google', { callbackUrl: '/' });
-      if (result?.error) throw new Error(result.error);
-    } catch (err: any) {
-      setError(err.message);
-      setIsLoading(false);
-    }
+    alert("Login with Google is currently disabled in local SQLite mode.");
   };
 
   return (

@@ -3,7 +3,6 @@ import { motion, AnimatePresence } from 'motion/react';
 import { X, User, Mail, Shield, KeyRound, AlertCircle, CheckCircle2 } from 'lucide-react';
 import { useData } from '@/context/DataContext';
 import { api } from '@/lib/api-client';
-import Image from 'next/image';
 
 export default function ProfileModal({ isOpen, onClose }: { isOpen: boolean; onClose: () => void }) {
   const { currentUser } = useData();
@@ -63,11 +62,10 @@ export default function ProfileModal({ isOpen, onClose }: { isOpen: boolean; onC
               <div className="flex items-center gap-4">
                 <div className="w-20 h-20 bg-slate-100 rounded-full flex items-center justify-center border-4 border-white shadow-md overflow-hidden shrink-0 relative">
                   {currentUser.avatar ? (
-                    <Image 
+                    <img 
                       src={currentUser.avatar} 
                       alt={currentUser.name} 
-                      fill 
-                      className="object-cover"
+                      className="object-cover w-full h-full"
                       referrerPolicy="no-referrer"
                     />
                   ) : (
