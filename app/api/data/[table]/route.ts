@@ -61,12 +61,35 @@ export async function POST(req: Request, context: any) {
         const url = new URL(req.url);
         const isUpsert = url.searchParams.get('upsert') === 'true';
 
-        if (isUpsert && body.id) {
-             const existing = await model.findUnique({ where: { id: body.id } });
-             if (existing) {
-                 resultData = await model.update({ where: { id: body.id }, data: body });
+        if (isUpsert) {
+             if (Array.isArray(body)) {
+                 // naive bulk upsert
+                 const results = [];
+                 for(const item of body) {
+                     if (item.id) {
+                         const existing = await model.findUnique({ where: { id: item.id } });
+                         if (existing) {
+                             results.push(await model.update({ where: { id: item.id }, data: item }));
+                         } else {
+                             results.push(await model.create({ data: item }));
+                         }
+                     } else {
+                         results.push(await model.create({ data: item }));
+                     }
+                 }
+                 resultData = results;
              } else {
-                 resultData = await model.create({ data: body });
+                 if (body.id) {
+                     const existing = await model.findUnique({ where: { id: body.id } });
+                     if (existing) {
+                         resultData = await model.update({ where: { id: body.id }, data: body });
+                     } else {
+                         resultData = await model.create({ data: body });
+                     }
+                 } else {
+                     resultData = await model.create({ data: body });
+                 }
+                 resultData = [resultData]; // return as array for supbase compat
              }
         } else {
              if (Array.isArray(body)) {

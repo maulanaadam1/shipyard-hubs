@@ -31,8 +31,9 @@ ENV NEXTAUTH_SECRET=$NEXTAUTH_SECRET
 # Uncomment the following line in case you want to disable telemetry during the build.
 ENV NEXT_TELEMETRY_DISABLED=1
 
-# Sync database schema before prerendering pages
-RUN npx prisma db push --accept-data-loss
+# Skip Prisma type checking during Next.js build
+ENV PRISMA_IGNORE_DB_ERROR=1
+ENV NEXT_IGNORE_DB_ERROR=1
 
 RUN npm run build
 
