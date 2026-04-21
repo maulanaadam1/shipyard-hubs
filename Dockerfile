@@ -17,6 +17,15 @@ WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 
+# Pass build args to Next.js so it can embed what it needs during pre-rendering
+ARG DATABASE_URL
+ARG NEXTAUTH_URL
+ARG NEXTAUTH_SECRET
+
+ENV DATABASE_URL=$DATABASE_URL
+ENV NEXTAUTH_URL=$NEXTAUTH_URL
+ENV NEXTAUTH_SECRET=$NEXTAUTH_SECRET
+
 # Next.js collects completely anonymous telemetry data about general usage.
 # Learn more here: https://nextjs.org/telemetry
 # Uncomment the following line in case you want to disable telemetry during the build.

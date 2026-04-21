@@ -1,5 +1,5 @@
-import { createClient } from '@supabase/supabase-js';
 import { NextResponse } from 'next/server';
+import prisma from '@/lib/db';
 
 export async function POST(request: Request) {
   try {
@@ -9,30 +9,15 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'User ID is required' }, { status: 400 });
     }
 
-    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-    const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+    const profile = await prisma.profile.findUnique({
+      where: { id: userId }
+    });
 
-    if (!supabaseUrl || !supabaseServiceKey) {
-      return NextResponse.json({ error: 'Server configuration error' }, { status: 500 });
-    }
-
-    const supabase = createClient(supabaseUrl, supabaseServiceKey);
-
-    const { data: profiles, error } = await supabase
-      .from('profiles')
-      .select('*')
-      .eq('id', userId)
-      .limit(1);
-
-    if (error) {
-      return NextResponse.json({ error: error.message }, { status: 400 });
-    }
-
-    if (!profiles || profiles.length === 0) {
+    if (!profile) {
       return NextResponse.json({ error: 'Profile not found' }, { status: 404 });
     }
 
-    return NextResponse.json({ profile: profiles[0] });
+    return NextResponse.json({ profile });
   } catch (error: any) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
