@@ -104,7 +104,7 @@ export default function EquipmentReturn() {
       
       if (fetchError) throw fetchError;
 
-      const allReturned = currentDeployments.every(d => d.return_status === 'Returned' || d.return_status === 'Damaged');
+      const allReturned = currentDeployments.every((d: any) => d.return_status === 'Returned' || d.return_status === 'Damaged');
       
       if (allReturned) {
         const { error: loanError } = await api.from('loan_requests')

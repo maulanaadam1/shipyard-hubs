@@ -256,7 +256,7 @@ export default function EquipmentFleet() {
         insertedOrUpdatedData = insertData;
       }
 
-      console.log("[Supabase Auth] Current User ID:", (await api.auth.getSession()).data.session?.user?.id);
+      console.log("[Supabase Auth] Current User ID:", ((await api.auth.getSession()).data.session?.user as any)?.id);
       console.log("[Supabase Write Result] Error:", error, "Data:", insertedOrUpdatedData);
 
       if (error) {

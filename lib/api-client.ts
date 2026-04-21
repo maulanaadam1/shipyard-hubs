@@ -66,30 +66,36 @@ class ApiQueryBuilder {
        return this; 
     }
     
-    upsert(data: any) { 
+    upsert(data: any, options?: any) { 
        this.action = 'POST'; 
        this.queryData = data; 
        this.params.set('upsert', 'true'); 
+       if (options?.onConflict) this.params.set('onConflict', options.onConflict);
        return this; 
     }
 
     // Resolves standard Javascript `await` directly on `.select()`, `.insert()`, etc
-    async then(resolve: any, reject: any) {
-        let url = `/api/data/${this.table}`;
-        const qs = this.params.toString();
-        if (qs) url += `?${qs}`;
+    then<TResult1 = any, TResult2 = never>(
+        resolve?: ((value: any) => TResult1 | PromiseLike<TResult1>) | undefined | null,
+        reject?: ((reason: any) => TResult2 | PromiseLike<TResult2>) | undefined | null
+    ): Promise<TResult1 | TResult2> {
+        return new Promise<any>(async (res) => {
+            let url = `/api/data/${this.table}`;
+            const qs = this.params.toString();
+            if (qs) url += `?${qs}`;
 
-        try {
-            const res = await fetch(url, {
-                method: this.action,
-                headers: { 'Content-Type': 'application/json' },
-                body: this.queryData ? JSON.stringify(this.queryData) : undefined
-            });
-            const result = await res.json();
-            resolve({ data: result.data || null, error: result.error ? { message: result.error } : null });
-        } catch (e: any) {
-            resolve({ data: null, error: { message: e.message }});
-        }
+            try {
+                const response = await fetch(url, {
+                    method: this.action,
+                    headers: { 'Content-Type': 'application/json' },
+                    body: this.queryData ? JSON.stringify(this.queryData) : undefined
+                });
+                const result = await response.json();
+                res({ data: result.data || null, error: result.error ? { message: result.error } : null });
+            } catch (e: any) {
+                res({ data: null, error: { message: e.message }});
+            }
+        }).then(resolve, reject);
     }
 }
 

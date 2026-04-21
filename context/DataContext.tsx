@@ -243,7 +243,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
 
       results.forEach((result, index) => {
         if (result.status === 'fulfilled') {
-          const { data, error } = result.value;
+          const { data, error } = result.value as any;
           if (error) {
             console.error(`Error fetching table ${index}:`, error.message);
             return;
@@ -311,7 +311,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
       .subscribe();
 
     const profilesSubscription = api.channel('profiles_changes')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'profiles' }, (payload) => {
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'profiles' }, (payload: any) => {
         fetchData();
         if (payload.new && (payload.new as any).id) {
           setCurrentUser(prev => {
@@ -396,12 +396,13 @@ export function DataProvider({ children }: { children: ReactNode }) {
         if (isDefaultAdmin) finalRole = 'Admin';
         else if ((session.user as any)?.role) finalRole = (session.user as any).role;
         
+        const userData = session.user as any;
         setCurrentUser({
-          id: session.user.id || '',
-          name: session.user.name || session.user.email?.split('@')[0] || 'Unknown',
-          email: session.user.email || '',
+          id: userData.id || '',
+          name: userData.name || userData.email?.split('@')[0] || 'Unknown',
+          email: userData.email || '',
           role: finalRole as 'Admin' | 'Manager' | 'Staff',
-          avatar: session.user.image || ''
+          avatar: userData.image || ''
         });
       } else {
         setCurrentUser(null);
@@ -426,7 +427,6 @@ export function DataProvider({ children }: { children: ReactNode }) {
       companiesSubscription.unsubscribe();
       shipsSubscription.unsubscribe();
       projectsSubscription.unsubscribe();
-      authSubscription.unsubscribe();
     };
   }, [fetchData]);
 

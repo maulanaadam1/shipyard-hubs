@@ -19,9 +19,7 @@ export default function ProfileModal({ isOpen, onClose }: { isOpen: boolean; onC
     setErrorMessage('');
 
     try {
-      const { error } = await api.auth.resetPasswordForEmail(currentUser.email, {
-        redirectTo: window.location.origin,
-      });
+      const { error } = await api.auth.resetPasswordForEmail(currentUser.email);
 
       if (error) throw error;
       setResetStatus('success');

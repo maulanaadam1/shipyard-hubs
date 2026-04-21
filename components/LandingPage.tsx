@@ -34,13 +34,9 @@ export default function LandingPage() {
     setIsLoading(true);
     setError('');
     try {
-      const { error: authError } = await api.auth.signInWithOAuth({
-        provider: 'google',
-        options: {
-          redirectTo: window.location.origin
-        }
-      });
-      if (authError) throw authError;
+      const { signIn } = require('next-auth/react');
+      const result = await signIn('google', { callbackUrl: '/' });
+      if (result?.error) throw new Error(result.error);
     } catch (err: any) {
       setError(err.message);
       setIsLoading(false);
