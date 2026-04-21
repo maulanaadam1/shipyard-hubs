@@ -169,8 +169,7 @@ export default function EquipmentLoans() {
         return step;
       });
 
-      const { error } = await supabase
-        .from('loan_requests')
+      const { error } = await api.from('loan_requests')
         .update({ status: 'Approved', approval_steps: newSteps })
         .eq('id', loanToApprove);
 
@@ -215,14 +214,12 @@ export default function EquipmentLoans() {
 
     let error;
     if (selectedLoan) {
-      const { error: updateError } = await supabase
-        .from('loan_requests')
+      const { error: updateError } = await api.from('loan_requests')
         .update(loanData)
         .eq('id', selectedLoan.id);
       error = updateError;
     } else {
-      const { error: insertError } = await supabase
-        .from('loan_requests')
+      const { error: insertError } = await api.from('loan_requests')
         .insert([loanData]);
       error = insertError;
     }

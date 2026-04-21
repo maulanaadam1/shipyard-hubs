@@ -65,16 +65,14 @@ export default function CompanyManagement() {
     
     try {
       if (editingCompany) {
-        const { error } = await supabase
-          .from('companies')
+        const { error } = await api.from('companies')
           .update(formData)
           .eq('id', editingCompany.id);
         
         if (error) throw error;
       } else {
         const newId = Math.random().toString(16).substring(2, 10);
-        const { error } = await supabase
-          .from('companies')
+        const { error } = await api.from('companies')
           .insert([{ id: newId, ...formData }]);
         
         if (error) throw error;
@@ -93,8 +91,7 @@ export default function CompanyManagement() {
     if (!confirm('Are you sure you want to delete this company?')) return;
     
     try {
-      const { error } = await supabase
-        .from('companies')
+      const { error } = await api.from('companies')
         .delete()
         .eq('id', id);
       
@@ -155,8 +152,7 @@ export default function CompanyManagement() {
         };
       });
 
-      const { error } = await supabase
-        .from('companies')
+      const { error } = await api.from('companies')
         .upsert(formattedData, { onConflict: 'id' });
 
       if (error) throw error;

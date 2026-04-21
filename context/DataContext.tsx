@@ -298,23 +298,19 @@ export function DataProvider({ children }: { children: ReactNode }) {
     }
 
     // --- Realtime Subscriptions ---
-    const fleetSubscription = supabase
-      .channel('fleet_changes')
+    const fleetSubscription = api.channel('fleet_changes')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'equipment' }, () => fetchData())
       .subscribe();
 
-    const loansSubscription = supabase
-      .channel('loans_changes')
+    const loansSubscription = api.channel('loans_changes')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'loan_requests' }, () => fetchData())
       .subscribe();
 
-    const deploymentsSubscription = supabase
-      .channel('deployments_changes')
+    const deploymentsSubscription = api.channel('deployments_changes')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'deployment_records' }, () => fetchData())
       .subscribe();
 
-    const profilesSubscription = supabase
-      .channel('profiles_changes')
+    const profilesSubscription = api.channel('profiles_changes')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'profiles' }, (payload) => {
         fetchData();
         if (payload.new && (payload.new as any).id) {
@@ -333,23 +329,19 @@ export function DataProvider({ children }: { children: ReactNode }) {
       })
       .subscribe();
 
-    const vendorsSubscription = supabase
-      .channel('vendors_changes')
+    const vendorsSubscription = api.channel('vendors_changes')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'vendors' }, () => fetchData())
       .subscribe();
 
-    const companiesSubscription = supabase
-      .channel('companies_changes')
+    const companiesSubscription = api.channel('companies_changes')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'companies' }, () => fetchData())
       .subscribe();
 
-    const shipsSubscription = supabase
-      .channel('ships_changes')
+    const shipsSubscription = api.channel('ships_changes')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'ships' }, () => fetchData())
       .subscribe();
 
-    const projectsSubscription = supabase
-      .channel('projects_changes')
+    const projectsSubscription = api.channel('projects_changes')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'projects' }, () => fetchData())
       .subscribe();
 

@@ -86,22 +86,19 @@ export default function EquipmentReturn() {
 
     try {
       // 1. Update deployment record
-      const { error: depError } = await supabase
-        .from('deployment_records')
+      const { error: depError } = await api.from('deployment_records')
         .update(updatedRecord)
         .eq('unique_id', selectedRecord.unique_id);
       if (depError) throw depError;
 
       // 2. Update asset status
-      const { error: assetError } = await supabase
-        .from('equipment')
+      const { error: assetError } = await api.from('equipment')
         .update({ available: updatedAssetStatus })
         .eq('no_asset', selectedRecord.product_id);
       if (assetError) throw assetError;
 
       // 3. Check if all items for this loan are now returned
-      const { data: currentDeployments, error: fetchError } = await supabase
-        .from('deployment_records')
+      const { data: currentDeployments, error: fetchError } = await api.from('deployment_records')
         .select('return_status')
         .eq('request_id', selectedRecord.request_id);
       
@@ -110,8 +107,7 @@ export default function EquipmentReturn() {
       const allReturned = currentDeployments.every(d => d.return_status === 'Returned' || d.return_status === 'Damaged');
       
       if (allReturned) {
-        const { error: loanError } = await supabase
-          .from('loan_requests')
+        const { error: loanError } = await api.from('loan_requests')
           .update({ status: 'Completed' })
           .eq('request_id', selectedRecord.request_id);
         if (loanError) throw loanError;

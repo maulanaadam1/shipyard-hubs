@@ -89,16 +89,14 @@ export default function ShipManagement() {
     
     try {
       if (editingShip) {
-        const { error } = await supabase
-          .from('ships')
+        const { error } = await api.from('ships')
           .update(formData)
           .eq('id', editingShip.id);
         
         if (error) throw error;
       } else {
         const newId = Math.random().toString(16).substring(2, 10);
-        const { error } = await supabase
-          .from('ships')
+        const { error } = await api.from('ships')
           .insert([{ id: newId, ...formData }]);
         
         if (error) throw error;
@@ -117,8 +115,7 @@ export default function ShipManagement() {
     if (!confirm('Are you sure you want to delete this ship?')) return;
     
     try {
-      const { error } = await supabase
-        .from('ships')
+      const { error } = await api.from('ships')
         .delete()
         .eq('id', id);
       
@@ -186,8 +183,7 @@ export default function ShipManagement() {
         };
       });
 
-      const { error } = await supabase
-        .from('ships')
+      const { error } = await api.from('ships')
         .upsert(formattedData, { onConflict: 'id' });
 
       if (error) throw error;

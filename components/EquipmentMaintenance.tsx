@@ -61,8 +61,7 @@ export default function EquipmentMaintenance() {
   const handleCompleteRepair = async () => {
     if (!selectedAsset) return;
 
-    const { error } = await supabase
-      .from('equipment')
+    const { error } = await api.from('equipment')
       .update({ available: 'Available' })
       .eq('id', selectedAsset.id);
 
@@ -76,8 +75,7 @@ export default function EquipmentMaintenance() {
   };
 
   const handleStartMaintenance = async (asset: Equipment) => {
-    const { error } = await supabase
-      .from('equipment')
+    const { error } = await api.from('equipment')
       .update({ available: 'Maintenance' })
       .eq('id', asset.id);
 

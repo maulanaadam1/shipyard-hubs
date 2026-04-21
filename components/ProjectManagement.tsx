@@ -85,15 +85,13 @@ export default function ProjectManagement() {
     
     try {
       if (editingProject) {
-        const { error } = await supabase
-          .from('projects')
+        const { error } = await api.from('projects')
           .update(formData)
           .eq('id', editingProject.id);
         
         if (error) throw error;
       } else {
-        const { error } = await supabase
-          .from('projects')
+        const { error } = await api.from('projects')
           .insert([formData]);
         
         if (error) throw error;
@@ -112,8 +110,7 @@ export default function ProjectManagement() {
     if (!confirm('Are you sure you want to delete this project?')) return;
     
     try {
-      const { error } = await supabase
-        .from('projects')
+      const { error } = await api.from('projects')
         .delete()
         .eq('id', id);
       
@@ -231,8 +228,7 @@ export default function ProjectManagement() {
         };
       }).filter(p => p.idproject); // Ensure idproject exists
 
-      const { error } = await supabase
-        .from('projects')
+      const { error } = await api.from('projects')
         .upsert(formattedData, { onConflict: 'idproject' });
 
       if (error) throw error;

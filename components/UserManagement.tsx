@@ -59,8 +59,7 @@ export default function UserManagement() {
         alert("You cannot change the role of the default administrator.");
         return;
       }
-      const { error: updateError } = await supabase
-        .from('profiles')
+      const { error: updateError } = await api.from('profiles')
         .update({
           name: formData.name,
           email: formData.email,

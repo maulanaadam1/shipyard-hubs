@@ -190,16 +190,14 @@ export default function EquipmentDeployment() {
 
       // 2. Update assets status
       for (const update of assetUpdates) {
-        const { error: assetError } = await supabase
-          .from('equipment')
+        const { error: assetError } = await api.from('equipment')
           .update({ available: update.status })
           .eq('id', update.id);
         if (assetError) throw assetError;
       }
 
       // 3. Update loan request
-      const { error: loanError } = await supabase
-        .from('loan_requests')
+      const { error: loanError } = await api.from('loan_requests')
         .update({ items: newItems, status: updatedLoanStatus })
         .eq('id', selectedLoan.id);
       if (loanError) throw loanError;

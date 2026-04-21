@@ -76,16 +76,14 @@ export default function VendorManagement() {
     
     try {
       if (editingVendor) {
-        const { error } = await supabase
-          .from('vendors')
+        const { error } = await api.from('vendors')
           .update(formData)
           .eq('id', editingVendor.id);
         
         if (error) throw error;
       } else {
         const newId = Math.random().toString(16).substring(2, 10);
-        const { error } = await supabase
-          .from('vendors')
+        const { error } = await api.from('vendors')
           .insert([{ id: newId, ...formData }]);
         
         if (error) throw error;
@@ -104,8 +102,7 @@ export default function VendorManagement() {
     if (!confirm('Are you sure you want to delete this vendor?')) return;
     
     try {
-      const { error } = await supabase
-        .from('vendors')
+      const { error } = await api.from('vendors')
         .delete()
         .eq('id', id);
       
@@ -173,8 +170,7 @@ export default function VendorManagement() {
         };
       });
 
-      const { error } = await supabase
-        .from('vendors')
+      const { error } = await api.from('vendors')
         .upsert(formattedData, { onConflict: 'id' });
 
       if (error) throw error;

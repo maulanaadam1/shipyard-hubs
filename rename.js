@@ -27,8 +27,8 @@ files.forEach(file => {
         content = content.replace(/import \{ supabase \} from '@\/lib\/supabase'/g, "import { api } from '@/lib/api-client'");
         changed = true;
     }
-    if (content.includes('supabase.')) {
-        content = content.replace(/supabase\./g, "api.");
+    if (/supabase\s*\./.test(content)) {
+        content = content.replace(/supabase\s*\./g, "api.");
         changed = true;
     }
     

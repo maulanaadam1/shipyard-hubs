@@ -168,8 +168,7 @@ export default function EquipmentFleet() {
     );
 
     try {
-      const { error } = await supabase
-        .from('equipment')
+      const { error } = await api.from('equipment')
         .upsert(uniqueData, { onConflict: 'no_asset' });
       if (error) throw error;
       alert(`Data imported successfully! ${uniqueData.length} unique assets processed.`);
@@ -243,16 +242,14 @@ export default function EquipmentFleet() {
       let insertedOrUpdatedData;
 
       if (selectedItem) {
-        const { error: updateError, data: updateData } = await supabase
-          .from('equipment')
+        const { error: updateError, data: updateData } = await api.from('equipment')
           .update(equipmentData)
           .eq('id', selectedItem.id)
           .select();
         error = updateError;
         insertedOrUpdatedData = updateData;
       } else {
-        const { error: insertError, data: insertData } = await supabase
-          .from('equipment')
+        const { error: insertError, data: insertData } = await api.from('equipment')
           .insert([equipmentData])
           .select();
         error = insertError;
