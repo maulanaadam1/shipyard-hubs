@@ -5,6 +5,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
@@ -30,6 +31,8 @@ func Login(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, 400, map[string]string{"error": "Invalid request body"})
 		return
 	}
+
+	body.Email = strings.TrimSpace(body.Email)
 
 	log.Printf("[DEBUG] Login attempt for: %s", body.Email)
 	user := db.GetUserByIdentifier(body.Email)
