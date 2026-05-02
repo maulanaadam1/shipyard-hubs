@@ -59,10 +59,21 @@ func main() {
 
 	// Serve static frontend in production
 	if os.Getenv("NODE_ENV") == "production" {
-		fs := http.FileServer(http.Dir("../dist"))
-		r.Handle("/*", http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+		// Use "./dist" because Docker sets WORKDIR to /app where dist is copied
+		distDir := "./dist"
+		fs := http.FileServer(http.Dir(distDir))
+		
+		r.Get("/*", func(w http.ResponseWriter, req *http.Request) {
+			// Check if the requested file exists
+			path := req.URL.Path
+			if _, err := os.Stat(distDir + path); os.IsNotExist(err) {
+				// File does not exist, serve index.html for SPA routing
+				http.ServeFile(w, req, distDir+"/index.html")
+				return
+			}
+			// File exists, serve it
 			fs.ServeHTTP(w, req)
-		}))
+		})
 	}
 
 	port := os.Getenv("PORT")
