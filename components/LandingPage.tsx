@@ -2,7 +2,7 @@
 
 import React, { useState } from 'react';
 import { motion } from 'motion/react';
-import { Ship, Lock, Mail, ArrowRight, AlertCircle } from 'lucide-react';
+import { Ship, Lock, Mail, User, ArrowRight, AlertCircle } from 'lucide-react';
 import { useData } from '@/context/DataContext';
 import { api } from '@/lib/api-client';
 
@@ -18,14 +18,30 @@ export default function LandingPage() {
     setIsLoading(true);
     setError('');
     
+    console.log('Attempting login for:', email);
     try {
-      const { error: authError } = await api.auth.signInWithPassword({
+      const { data, error: authError } = await api.auth.signInWithPassword({
         email,
         password,
       });
-      if (authError) throw authError;
+
+      if (authError) {
+        console.error('Login error:', authError);
+        setError(authError.message);
+        setIsLoading(false);
+        return;
+      }
+
+      if (data?.user) {
+        console.log('Login successful, user data:', data.user);
+        setCurrentUser(data.user);
+      }
+      
+      // The DataContext has an effect that triggers fetchData when currentUser is set
+      setIsLoading(false);
     } catch (err: any) {
-      setError(err.message);
+      console.error('Unexpected login error:', err);
+      setError(err.message || 'An unexpected error occurred');
       setIsLoading(false);
     }
   };
@@ -92,16 +108,16 @@ export default function LandingPage() {
 
             <form onSubmit={handleLogin} className="space-y-6">
               <div className="space-y-2">
-                <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Email Address</label>
+                <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Email or Username</label>
                 <div className="relative">
-                  <Mail className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
+                  <User className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
                   <input 
-                    type="email" 
+                    type="text" 
                     required
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
                     className="w-full pl-12 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-[#FDB913]/50 focus:border-[#FDB913] transition-all"
-                    placeholder="name@company.com"
+                    placeholder="Username or Email"
                   />
                 </div>
               </div>

@@ -74,17 +74,44 @@ export default function ProfileModal({ isOpen, onClose }: { isOpen: boolean; onC
                 </div>
                 <div>
                   <h4 className="font-bold text-lg text-slate-900">{currentUser.name}</h4>
-                  <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-[#FDB913]/20 text-[#FDB913] text-xs font-bold uppercase tracking-wider mt-1">
-                    <Shield className="w-3 h-3" />
-                    {currentUser.role}
-                  </span>
+                  <div className="flex flex-wrap gap-2 mt-1">
+                    <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-[#FDB913]/20 text-[#FDB913] text-xs font-bold uppercase tracking-wider">
+                      <Shield className="w-3 h-3" />
+                      {currentUser.jabatan || currentUser.role}
+                    </span>
+                    {currentUser.department && (
+                      <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-slate-100 text-slate-500 text-xs font-bold uppercase tracking-wider border border-slate-200">
+                        {currentUser.department}
+                      </span>
+                    )}
+                  </div>
                 </div>
               </div>
 
               {/* Details */}
               <div className="space-y-4 bg-slate-50 p-4 rounded-2xl border border-slate-100">
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1 block">Username</label>
+                    <p className="text-sm font-bold text-slate-700">@{currentUser.username || 'n/a'}</p>
+                  </div>
+                  <div>
+                    <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1 block">Role Access</label>
+                    <p className="text-sm font-bold text-slate-700">{currentUser.role}</p>
+                  </div>
+                </div>
+                
+                {(currentUser.city || currentUser.branch) && (
+                  <div>
+                    <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1 block">Location</label>
+                    <p className="text-sm font-bold text-slate-700">
+                      {currentUser.city}{currentUser.city && currentUser.branch ? ', ' : ''}{currentUser.branch}
+                    </p>
+                  </div>
+                )}
+
                 <div>
-                  <label className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1 block">Email Address</label>
+                  <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1 block">Email Address</label>
                   <div className="flex items-center gap-2 text-slate-700 font-medium bg-white p-3 rounded-xl border border-slate-200">
                     <Mail className="w-4 h-4 text-slate-400" />
                     {currentUser.email}

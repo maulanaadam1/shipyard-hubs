@@ -165,7 +165,7 @@ export default function EquipmentDeployment() {
           description: `Released on ${allocation.releaseDate}`
         };
         newDeployments.push(record);
-        assetUpdates.push({ id: asset.id, status: 'Deployed' });
+        assetUpdates.push({ id: asset.id, status: 'No' });
       }
     });
 
@@ -373,10 +373,10 @@ export default function EquipmentDeployment() {
                                           return (
                                             <tr key={record.unique_id} className="hover:bg-slate-50/50 transition-colors">
                                               <td className="px-4 py-3">
-                                                <span className="text-[11px] font-mono font-bold text-slate-700">{record.product_id}</span>
-                                              </td>
-                                              <td className="px-4 py-3">
-                                                <span className="text-[11px] font-medium text-slate-600">{record.item}</span>
+                                                <div className="flex flex-col">
+                                                  <span className="text-[11px] font-bold text-slate-700">{record.product_name || record.item}</span>
+                                                  <span className="text-[9px] font-mono text-slate-400">{record.product_id}</span>
+                                                </div>
                                               </td>
                                               <td className="px-4 py-3">
                                                 <span className={`text-[9px] px-2 py-0.5 rounded-full font-bold uppercase tracking-wider border ${statusColor}`}>
@@ -606,7 +606,7 @@ export default function EquipmentDeployment() {
                         allocatedAssets.map((allocation, index) => {
                           const availableAssets = assets.filter(a => 
                             a.type === allocation.type && 
-                            (a.available === 'Available' || allocation.assetId === a.id) &&
+                            (a.available === 'Yes' || allocation.assetId === a.id) &&
                             !allocatedAssets.some((other, otherIdx) => otherIdx !== index && other.assetId === a.id)
                           );
 
@@ -638,7 +638,7 @@ export default function EquipmentDeployment() {
                                 >
                                   <option value="">Select Asset...</option>
                                   {availableAssets.map(asset => (
-                                    <option key={asset.id} value={asset.id}>{asset.no_asset} - {asset.name}</option>
+                                    <option key={asset.id} value={asset.id}>{asset.alias}</option>
                                   ))}
                                 </select>
                               </div>

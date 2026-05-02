@@ -44,7 +44,8 @@ export default function VendorManagement() {
     nama_pt: '',
     whatapps: '',
     category: '',
-    jumlah_anggota: 0
+    jumlah_anggota: 0,
+    status: 'Active' as 'Active' | 'Inactive'
   });
 
   const handleOpenModal = (vendor: Vendor | null = null) => {
@@ -55,7 +56,8 @@ export default function VendorManagement() {
         nama_pt: vendor.nama_pt || '', 
         whatapps: vendor.whatapps || '', 
         category: vendor.category || '', 
-        jumlah_anggota: vendor.jumlah_anggota || 0 
+        jumlah_anggota: vendor.jumlah_anggota || 0,
+        status: vendor.status || 'Active'
       });
     } else {
       setEditingVendor(null);
@@ -64,7 +66,8 @@ export default function VendorManagement() {
         nama_pt: '', 
         whatapps: '', 
         category: '', 
-        jumlah_anggota: 0 
+        jumlah_anggota: 0,
+        status: 'Active'
       });
     }
     setIsModalOpen(true);
@@ -166,7 +169,8 @@ export default function VendorManagement() {
           nama_pt: getValue(['namapt', 'namaperusahaan', 'company', 'companyname', 'pt']),
           whatapps: getValue(['whatapps', 'whatsapp', 'wa', 'phone', 'telepon', 'hp']),
           category: getValue(['category', 'kategori', 'type']),
-          jumlah_anggota: parseInt(getValue(['jumlahanggota', 'members', 'anggota', 'total']) || '0') || 0
+          jumlah_anggota: parseInt(getValue(['jumlahanggota', 'members', 'anggota', 'total']) || '0') || 0,
+          status: getValue(['status', 'kondisi', 'state']) || 'Active'
         };
       });
 
@@ -335,6 +339,7 @@ export default function VendorManagement() {
                 <th className="px-6 py-4 border-b border-slate-100">Category</th>
                 <th className="px-6 py-4 border-b border-slate-100">Contact</th>
                 <th className="px-6 py-4 border-b border-slate-100 text-center">Team</th>
+                <th className="px-6 py-4 border-b border-slate-100">Status</th>
                 <th className="px-6 py-4 border-b border-slate-100 text-right">Actions</th>
               </tr>
             </thead>
@@ -383,12 +388,20 @@ export default function VendorManagement() {
                   </td>
                   <td className="px-6 py-4 text-center">
                     <div className="flex items-center justify-center gap-1.5 text-slate-600">
-                      <UsersIcon className="w-3 h-3 text-slate-400" />
+                      <UsersIcon className="w-3.5 h-3.5 text-slate-400" />
                       <span className="text-xs font-bold">{vendor.jumlah_anggota || 0}</span>
                     </div>
                   </td>
+                  <td className="px-6 py-4">
+                    <div className="flex items-center gap-2">
+                      <div className={`w-2 h-2 rounded-full ${vendor.status === 'Inactive' ? 'bg-slate-300' : 'bg-[#FDB913]'}`}></div>
+                      <span className={`text-xs font-medium ${vendor.status === 'Inactive' ? 'text-slate-400' : 'text-slate-600'}`}>
+                        {vendor.status || 'Active'}
+                      </span>
+                    </div>
+                  </td>
                   <td className="px-6 py-4 text-right">
-                    <div className="flex items-center justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <div className="flex items-center justify-end gap-1">
                       <button 
                         onClick={() => handleOpenModal(vendor)}
                         className="p-2 text-slate-400 hover:text-[#FDB913] rounded-lg hover:bg-[#FDB913]/10 transition-colors"
@@ -401,9 +414,6 @@ export default function VendorManagement() {
                       >
                         <Trash2 className="w-4 h-4" />
                       </button>
-                    </div>
-                    <div className="group-hover:hidden">
-                      <MoreVertical className="w-4 h-4 text-slate-300 ml-auto" />
                     </div>
                   </td>
                 </motion.tr>
@@ -533,6 +543,25 @@ export default function VendorManagement() {
                       onChange={(e) => setFormData({ ...formData, jumlah_anggota: parseInt(e.target.value) || 0 })}
                       className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-[#FDB913]/30 focus:border-[#FDB913] transition-all"
                     />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-xs font-bold text-slate-500 uppercase">Status</label>
+                    <div className="flex gap-2">
+                      {['Active', 'Inactive'].map((s) => (
+                        <button
+                          key={s}
+                          type="button"
+                          onClick={() => setFormData({ ...formData, status: s as 'Active' | 'Inactive' })}
+                          className={`flex-1 py-2.5 rounded-xl text-xs font-bold border transition-all ${
+                            formData.status === s
+                              ? 'bg-[#FDB913] text-slate-900 border-[#FDB913] shadow-sm'
+                              : 'bg-white text-slate-500 border-slate-200 hover:border-[#FDB913]/30'
+                          }`}
+                        >
+                          {s}
+                        </button>
+                      ))}
+                    </div>
                   </div>
                 </div>
 

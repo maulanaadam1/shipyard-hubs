@@ -24,7 +24,7 @@ import Papa from 'papaparse';
 import * as XLSX from 'xlsx';
 
 export default function CompanyManagement() {
-  const { companies, setCompanies } = useData();
+  const { companies, setCompanies, dropdownConfigs } = useData();
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [showSuccessModal, setShowSuccessModal] = useState(false);
   const [editingCompany, setEditingCompany] = useState<Company | null>(null);
@@ -39,7 +39,8 @@ export default function CompanyManagement() {
 
   const [formData, setFormData] = useState({
     company_type: '',
-    company_name: ''
+    company_name: '',
+    status: 'Active' as 'Active' | 'Inactive'
   });
 
   const handleOpenModal = (company: Company | null = null) => {
@@ -47,13 +48,15 @@ export default function CompanyManagement() {
       setEditingCompany(company);
       setFormData({ 
         company_type: company.company_type || '', 
-        company_name: company.company_name 
+        company_name: company.company_name,
+        status: company.status || 'Active'
       });
     } else {
       setEditingCompany(null);
       setFormData({ 
         company_type: '', 
-        company_name: '' 
+        company_name: '',
+        status: 'Active'
       });
     }
     setIsModalOpen(true);
@@ -148,7 +151,8 @@ export default function CompanyManagement() {
         return {
           id: getValue(['id']) || Math.random().toString(16).substring(2, 10),
           company_type: getValue(['companytype', 'type', 'kategori']),
-          company_name: getValue(['companyname', 'name', 'nama', 'company', 'perusahaan'])
+          company_name: getValue(['companyname', 'name', 'nama', 'company', 'perusahaan']),
+          status: getValue(['status', 'kondisi', 'state']) || 'Active'
         };
       });
 
@@ -353,12 +357,14 @@ export default function CompanyManagement() {
                   </td>
                   <td className="px-6 py-4">
                     <div className="flex items-center gap-2">
-                      <div className="w-2 h-2 rounded-full bg-[#FDB913]"></div>
-                      <span className="text-xs text-slate-600 font-medium">Active</span>
+                      <div className={`w-2 h-2 rounded-full ${company.status === 'Inactive' ? 'bg-slate-300' : 'bg-[#FDB913]'}`}></div>
+                      <span className={`text-xs font-medium ${company.status === 'Inactive' ? 'text-slate-400' : 'text-slate-600'}`}>
+                        {company.status || 'Active'}
+                      </span>
                     </div>
                   </td>
                   <td className="px-6 py-4 text-right">
-                    <div className="flex items-center justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <div className="flex items-center justify-end gap-1">
                       <button 
                         onClick={() => handleOpenModal(company)}
                         className="p-2 text-slate-400 hover:text-[#FDB913] rounded-lg hover:bg-[#FDB913]/10 transition-colors"
@@ -371,9 +377,6 @@ export default function CompanyManagement() {
                       >
                         <Trash2 className="w-4 h-4" />
                       </button>
-                    </div>
-                    <div className="group-hover:hidden">
-                      <MoreVertical className="w-4 h-4 text-slate-300 ml-auto" />
                     </div>
                   </td>
                 </motion.tr>
@@ -466,14 +469,33 @@ export default function CompanyManagement() {
                     />
                   </div>
                   <div className="space-y-1">
-                    <label className="text-xs font-bold text-slate-500 uppercase">Company Type (PT/CV/etc)</label>
-                    <input 
-                      type="text"
+                    <label className="text-xs font-bold text-slate-500 uppercase">Company Type</label>
+                    <select 
+                      required
                       value={formData.company_type}
                       onChange={(e) => setFormData({ ...formData, company_type: e.target.value })}
                       className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-[#FDB913]/30 focus:border-[#FDB913] transition-all"
                       placeholder="e.g. PT"
                     />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-xs font-bold text-slate-500 uppercase">Status</label>
+                    <div className="flex gap-2">
+                      {['Active', 'Inactive'].map((s) => (
+                        <button
+                          key={s}
+                          type="button"
+                          onClick={() => setFormData({ ...formData, status: s as 'Active' | 'Inactive' })}
+                          className={`flex-1 py-2 rounded-xl text-xs font-bold border transition-all ${
+                            formData.status === s
+                              ? 'bg-[#FDB913] text-slate-900 border-[#FDB913] shadow-sm'
+                              : 'bg-white text-slate-500 border-slate-200 hover:border-[#FDB913]/30'
+                          }`}
+                        >
+                          {s}
+                        </button>
+                      ))}
+                    </div>
                   </div>
                 </div>
 

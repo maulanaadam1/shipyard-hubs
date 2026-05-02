@@ -10,4 +10,14 @@ export default defineConfig({
       '@': path.resolve(__dirname, './'),
     },
   },
+  server: {
+    port: 5173,
+    proxy: {
+      // Forward all /api requests to the Go backend
+      '/api': {
+        target: 'http://localhost:3000',
+        changeOrigin: true,
+      },
+    },
+  },
 });

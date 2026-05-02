@@ -1,18 +1,32 @@
-version: '3.8'
+version: '3.9'
 
 services:
-  postgres:
-    image: postgres:15-alpine
-    container_name: shipyard-postgres
-    restart: always
-    environment:
-      POSTGRES_USER: shipyard_user
-      POSTGRES_PASSWORD: shipyard_secret_password
-      POSTGRES_DB: shipyard_db
+  shipyard:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: shipyard-hub
+    restart: unless-stopped
     ports:
-      - "5432:5432"
+      - "3000:3000"
+    environment:
+      - NODE_ENV=production
+      - PORT=3000
+      - TZ=Asia/Jakarta
+      - NEXTAUTH_SECRET=${NEXTAUTH_SECRET:-vivo1234_change_in_prod}
+      - NEXT_PUBLIC_DEFAULT_ADMIN_EMAIL=${NEXT_PUBLIC_DEFAULT_ADMIN_EMAIL:-admin@shipyard.local}
+      - NEXT_PUBLIC_DEFAULT_ADMIN_PASSWORD=${NEXT_PUBLIC_DEFAULT_ADMIN_PASSWORD:-admin123}
+      - DATABASE_PATH=/data/shipyard.sqlite
     volumes:
-      - postgres_data:/var/lib/postgresql/data
+      # Persist SQLite database across container restarts
+      - shipyard_data:/data
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:3000/api/auth/session"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
 
 volumes:
-  postgres_data:
+  shipyard_data:
+    driver: local

@@ -22,6 +22,7 @@ export interface Equipment {
 }
 
 export interface RequestedItem {
+  id: string;
   type: string;
   quantity: number;
   deployedQuantity?: number;
@@ -35,6 +36,9 @@ export interface ApprovalStep {
   user?: string;
   isCompleted: boolean;
   isCurrent: boolean;
+  jabatan?: string;
+  user_id?: string;
+  user_ids?: string; // JSON array string e.g. '["id1","id2"]'
 }
 
 export interface LoanRequest {
@@ -84,8 +88,41 @@ export interface User {
   id: string;
   name: string;
   email: string;
+  username?: string;
   role: 'Admin' | 'Manager' | 'Staff';
-  avatar?: string;
+  jabatan?: string;
+  city?: string;
+  branch?: string;
+  department?: string;
+  whatsapp?: string;
+  roles?: string;
+  extra_roles?: string;
+  avatar_url?: string;
+}
+
+export interface Notification {
+  id: string;
+  user_id: string;
+  title: string;
+  message: string;
+  type: string;
+  link?: string;
+  is_read: boolean;
+  created_at: string;
+}
+
+export interface RoleMaster {
+  id: string;
+  name: string;
+  description: string;
+}
+
+export interface RolePermission {
+  id: string;
+  role_id: string;
+  resource: string;
+  action: string;
+  is_allowed: boolean;
 }
 
 export interface Vendor {
@@ -95,12 +132,33 @@ export interface Vendor {
   whatapps: string;
   category: string;
   jumlah_anggota: number;
+  status: 'Active' | 'Inactive';
 }
 
 export interface Company {
   id: string;
   company_type: string;
   company_name: string;
+  status: 'Active' | 'Inactive';
+}
+
+export interface ApprovalWorkflow {
+  id: string;
+  module: string;
+  step_order: number;
+  label: string;
+  role: string;
+  jabatan?: string;
+  user_id?: string;
+  user_ids?: string; // JSON array string e.g. '["id1","id2"]'
+}
+
+export interface DropdownConfig {
+  id: string;
+  category: string;
+  label: string;
+  value: string;
+  is_active: boolean;
 }
 
 export interface Ship {
@@ -145,7 +203,6 @@ export interface Project {
   company?: string;
   docking_id?: string;
   docking_type?: string;
-  number_project?: string;
   type?: string;
   width?: number;
   length?: number;
@@ -185,17 +242,30 @@ interface DataContextType {
   users: User[];
   setUsers: React.Dispatch<React.SetStateAction<User[]>>;
   vendors: Vendor[];
-  setVendors: React.Dispatch<React.SetStateAction<Vendor[]>>;
+  setVendors: (vendors: Vendor[]) => void;
+  dropdownConfigs: DropdownConfig[];
+  setDropdownConfigs: (configs: DropdownConfig[]) => void;
   companies: Company[];
   setCompanies: React.Dispatch<React.SetStateAction<Company[]>>;
   ships: Ship[];
   setShips: React.Dispatch<React.SetStateAction<Ship[]>>;
   projects: Project[];
   setProjects: React.Dispatch<React.SetStateAction<Project[]>>;
+  workflows: ApprovalWorkflow[];
+  setWorkflows: React.Dispatch<React.SetStateAction<ApprovalWorkflow[]>>;
+  rolesMaster: RoleMaster[];
+  setRolesMaster: React.Dispatch<React.SetStateAction<RoleMaster[]>>;
+  rolePermissions: RolePermission[];
+  setRolePermissions: React.Dispatch<React.SetStateAction<RolePermission[]>>;
+  releases: ReleaseRecord[];
+  setReleases: React.Dispatch<React.SetStateAction<ReleaseRecord[]>>;
   currentUser: User | null;
   setCurrentUser: React.Dispatch<React.SetStateAction<User | null>>;
   isAuthLoading: boolean;
   fetchData: (isInitial?: boolean) => Promise<void>;
+  notifications: Notification[];
+  markNotificationRead: (id: string) => Promise<void>;
+  createNotification: (userId: string, title: string, message: string, type: string, link?: string) => Promise<void>;
 }
 
 const DataContext = createContext<DataContextType | undefined>(undefined);
@@ -211,14 +281,34 @@ export function DataProvider({ children }: { children: ReactNode }) {
   const [companies, setCompanies] = useState<Company[]>([]);
   const [ships, setShips] = useState<Ship[]>([]);
   const [projects, setProjects] = useState<Project[]>([]);
+  const [workflows, setWorkflows] = useState<ApprovalWorkflow[]>([]);
+  const [dropdownConfigs, setDropdownConfigs] = useState<DropdownConfig[]>([]);
+  const [rolesMaster, setRolesMaster] = useState<RoleMaster[]>([]);
+  const [rolePermissions, setRolePermissions] = useState<RolePermission[]>([]);
+  const [releases, setReleases] = useState<ReleaseRecord[]>([]);
+  const [notifications, setNotifications] = useState<Notification[]>([]);
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [isAuthLoading, setIsAuthLoading] = useState(true);
   const [isLoading, setIsLoading] = useState(true);
   const [hasInitialLoaded, setHasInitialLoaded] = useState(false);
   const [mounted, setMounted] = useState(false);
 
+  // Ref to hold latest user ID — prevents stale closure inside fetchData useCallback
+  const currentUserIdRef = React.useRef<string | null>(null);
+
   // --- Fetch Initial Data ---
   const fetchData = useCallback(async (isInitial = false) => {
+    // Check if we have a session token before fetching
+    const token = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null;
+    if (!token) {
+      console.log('No auth token found, skipping data fetch.');
+      if (isInitial) {
+        setIsLoading(false);
+        setHasInitialLoaded(true);
+      }
+      return;
+    }
+
     if (isInitial) setIsLoading(true);
     console.log('Starting data fetch from Supabase...');
     
@@ -230,6 +320,17 @@ export function DataProvider({ children }: { children: ReactNode }) {
     }, 7000);
 
     try {
+      // Priority 1: RBAC Data (Need this for Sidebar/Menu)
+      if (isInitial) {
+        const [rolesRes, permsRes] = await Promise.all([
+          api.from('roles_master').select('*'),
+          api.from('role_permissions').select('*')
+        ]);
+        if (rolesRes.data) setRolesMaster(rolesRes.data as RoleMaster[]);
+        if (permsRes.data) setRolePermissions(permsRes.data as RolePermission[]);
+      }
+
+      // Priority 2: Everything else
       const results = await Promise.allSettled([
         api.from('equipment').select('*').order('created_at', { ascending: false }),
         api.from('loan_requests').select('*').order('date_created', { ascending: false }),
@@ -238,7 +339,13 @@ export function DataProvider({ children }: { children: ReactNode }) {
         api.from('vendors').select('*').order('vendor', { ascending: true }),
         api.from('companies').select('*').order('company_name', { ascending: true }),
         api.from('ships').select('*').order('shipname', { ascending: true }),
-        api.from('projects').select('*').order('create_date', { ascending: false })
+        api.from('projects').select('*').order('create_date', { ascending: false }),
+        api.from('dropdown_configs').select('*'),
+        api.from('equipment_release').select('*').order('date_released', { ascending: false }),
+        api.from('approval_workflow').select('*').order('step_order', { ascending: true }),
+        currentUserIdRef.current 
+          ? api.from('notifications').select('*').eq('user_id', currentUserIdRef.current).order('created_at', { ascending: false })
+          : Promise.resolve({ data: [], error: null })
       ]);
 
       results.forEach((result, index) => {
@@ -257,9 +364,11 @@ export function DataProvider({ children }: { children: ReactNode }) {
             if (index === 5) setCompanies(data as Company[]);
             if (index === 6) setShips(data as Ship[]);
             if (index === 7) setProjects(data as Project[]);
+            if (index === 8) setDropdownConfigs(data as DropdownConfig[]);
+            if (index === 9) setReleases(data as ReleaseRecord[]);
+            if (index === 10) setWorkflows(data as ApprovalWorkflow[]);
+            if (index === 11) setNotifications(data as Notification[]);
           }
-        } else {
-          console.error(`Promise rejected for table ${index}:`, result.reason);
         }
       });
     } catch (error) {
@@ -272,10 +381,59 @@ export function DataProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
+  const markNotificationRead = async (id: string) => {
+    try {
+      await api.from('notifications').update({ is_read: true }).eq('id', id);
+      setNotifications(prev => prev.map(n => n.id === id ? { ...n, is_read: true } : n));
+    } catch (err) {
+      console.error('Error marking notification as read:', err);
+    }
+  };
+
+  const createNotification = async (userId: string, title: string, message: string, type: string, link?: string) => {
+    try {
+      const id = Math.random().toString(16).substring(2, 10);
+      await api.from('notifications').insert([{
+        id,
+        user_id: userId,
+        title,
+        message,
+        type,
+        link,
+        is_read: false
+      }]);
+      // If the target user is the current user, update local state
+      if (userId === currentUser?.id) {
+        setNotifications(prev => [{
+          id,
+          user_id: userId,
+          title,
+          message,
+          type,
+          link,
+          is_read: false,
+          created_at: new Date().toISOString()
+        }, ...prev]);
+      }
+    } catch (err) {
+      console.error('Error creating notification:', err);
+    }
+  };
+
   useEffect(() => {
     setMounted(true);
     fetchData(true);
+  }, []);
 
+  // Fetch data immediately after login
+  useEffect(() => {
+    if (currentUser?.id) {
+      console.log('User logged in: ' + currentUser.name + '. Fetching data...');
+      fetchData(true); // Use true to show loading spinner during first fetch after login
+    }
+  }, [currentUser?.id, fetchData]);
+
+  useEffect(() => {
     const updateActivity = () => {
       localStorage.setItem('lastActivity', Date.now().toString());
     };
@@ -297,120 +455,65 @@ export function DataProvider({ children }: { children: ReactNode }) {
       window.addEventListener('scroll', throttledUpdateActivity);
     }
 
-    // --- Realtime Subscriptions ---
-    const fleetSubscription = api.channel('fleet_changes')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'equipment' }, () => fetchData())
-      .subscribe();
+    const fetchSession = async () => {
+      try {
+        const { data: sessionData } = await api.auth.getSession();
+        const session = sessionData?.session;
 
-    const loansSubscription = api.channel('loans_changes')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'loan_requests' }, () => fetchData())
-      .subscribe();
+        console.log('Session Extracted:', { hasSession: !!session, hasUser: !!session?.user });
 
-    const deploymentsSubscription = api.channel('deployments_changes')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'deployment_records' }, () => fetchData())
-      .subscribe();
+        if (session?.user && typeof window !== 'undefined') {
+          const lastActivity = localStorage.getItem('lastActivity');
+          const now = Date.now();
+          const TWELVE_HOURS = 12 * 60 * 60 * 1000;
 
-    const profilesSubscription = api.channel('profiles_changes')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'profiles' }, (payload: any) => {
-        fetchData();
-        if (payload.new && (payload.new as any).id) {
-          setCurrentUser(prev => {
-            if (prev && prev.id === (payload.new as any).id) {
-              return {
-                ...prev,
-                name: (payload.new as any).name || prev.name,
-                role: (payload.new as any).role || prev.role,
-                avatar: (payload.new as any).avatar_url || prev.avatar
-              };
-            }
-            return prev;
+          if (lastActivity && ((now - parseInt(lastActivity)) > TWELVE_HOURS)) {
+            localStorage.removeItem('lastActivity');
+            await api.auth.signOut();
+            setCurrentUser(null);
+            setIsAuthLoading(false);
+            return;
+          }
+          localStorage.setItem('lastActivity', now.toString());
+
+          // Role comes directly from the Go JWT token — no env var lookup needed
+          const finalRole = (session.user as any)?.role || 'Staff';
+
+          const userData = session.user as any;
+          setCurrentUser({
+            id: userData.id || '',
+            name: userData.name || userData.email?.split('@')[0] || 'Unknown',
+            email: userData.email || '',
+            username: userData.username || '',
+            role: finalRole as 'Admin' | 'Manager' | 'Staff',
+            jabatan: userData.jabatan || '',
+            department: userData.department || '',
+            branch: userData.branch || '',
+            city: userData.city || '',
+            roles: userData.roles || '',
+            extra_roles: userData.extra_roles || '',
+            avatar: userData.image || ''
           });
+        } else {
+          setCurrentUser(null);
         }
-      })
-      .subscribe();
-
-    const vendorsSubscription = api.channel('vendors_changes')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'vendors' }, () => fetchData())
-      .subscribe();
-
-    const companiesSubscription = api.channel('companies_changes')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'companies' }, () => fetchData())
-      .subscribe();
-
-    const shipsSubscription = api.channel('ships_changes')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'ships' }, () => fetchData())
-      .subscribe();
-
-    const projectsSubscription = api.channel('projects_changes')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'projects' }, () => fetchData())
-      .subscribe();
-
-    // Safety timeout for auth loading
-    const authTimeout = setTimeout(() => {
-      setIsAuthLoading(false);
-      console.warn('Auth check timed out. Continuing...');
-    }, 5000);
-
-    // Check initial session
-    api.auth.getSession().then(({ data: { session }, error }) => {
-      console.log('getSession Result:', { hasSession: !!session, error });
-      if (!session || error) {
-        clearTimeout(authTimeout);
+      } catch (e) {
+        console.error('fetchSession error:', e);
+        setCurrentUser(null);
+      } finally {
         setIsAuthLoading(false);
       }
-    }).catch((e) => {
-      console.error('getSession Error:', e);
-      clearTimeout(authTimeout);
-      setIsAuthLoading(false);
-    });
-
-    // Listen for auth changes
-    const fetchSession = async () => {
-      const { data: sessionData } = await api.auth.getSession();
-      const session = sessionData?.session;
-
-      console.log('Session Extracted:', { hasSession: !!session, hasUser: !!session?.user });
-      clearTimeout(authTimeout);
-      
-      // Idle Session Expiration Check
-      if (session?.user && typeof window !== 'undefined') {
-        const lastActivity = localStorage.getItem('lastActivity');
-        const now = Date.now();
-        const TWELVE_HOURS = 12 * 60 * 60 * 1000;
-        
-        if (lastActivity && ((now - parseInt(lastActivity)) > TWELVE_HOURS)) {
-          // Session expired due to idle
-          localStorage.removeItem('lastActivity');
-          await api.auth.signOut();
-          setCurrentUser(null);
-          setIsAuthLoading(false);
-          return;
-        }
-        localStorage.setItem('lastActivity', now.toString());
-
-        const defaultAdminUsername = process.env.NEXT_PUBLIC_DEFAULT_ADMIN_USERNAME || 'superadmin';
-        const isDefaultAdmin = session.user.email === process.env.NEXT_PUBLIC_DEFAULT_ADMIN_EMAIL || session.user.email === `${defaultAdminUsername}@shipyard.local`;
-        
-        // Use session details set by NextAuth directly
-        let finalRole = 'Staff';
-        if (isDefaultAdmin) finalRole = 'Admin';
-        else if ((session.user as any)?.role) finalRole = (session.user as any).role;
-        
-        const userData = session.user as any;
-        setCurrentUser({
-          id: userData.id || '',
-          name: userData.name || userData.email?.split('@')[0] || 'Unknown',
-          email: userData.email || '',
-          role: finalRole as 'Admin' | 'Manager' | 'Staff',
-          avatar: userData.image || ''
-        });
-      } else {
-        setCurrentUser(null);
-      }
-      setIsAuthLoading(false);
     };
 
     fetchSession();
+
+    // --- Auto-Polling for Data Sync (SQLite Real-time Workaround) ---
+    // Since we use local SQLite, we pull fresh data every 3 seconds
+    const pollInterval = setInterval(() => {
+      if (currentUserIdRef.current) {
+        fetchData(false);
+      }
+    }, 3000);
 
     return () => {
       if (typeof window !== 'undefined') {
@@ -419,16 +522,19 @@ export function DataProvider({ children }: { children: ReactNode }) {
         window.removeEventListener('click', throttledUpdateActivity);
         window.removeEventListener('scroll', throttledUpdateActivity);
       }
-      fleetSubscription.unsubscribe();
-      loansSubscription.unsubscribe();
-      deploymentsSubscription.unsubscribe();
-      profilesSubscription.unsubscribe();
-      vendorsSubscription.unsubscribe();
-      companiesSubscription.unsubscribe();
-      shipsSubscription.unsubscribe();
-      projectsSubscription.unsubscribe();
+      clearInterval(pollInterval);
     };
-  }, [fetchData]);
+  }, [fetchData, currentUser?.id]);
+
+  // Sync ref and re-fetch whenever user logs in/out (fixes stale closure in fetchData)
+  useEffect(() => {
+    currentUserIdRef.current = currentUser?.id ?? null;
+    if (currentUser?.id) {
+      // Immediately fetch fresh data (including notifications) for this user
+      fetchData(false);
+    }
+  }, [currentUser?.id, fetchData]);
+
 
   if (!mounted) {
     return <div suppressHydrationWarning />;
@@ -444,9 +550,36 @@ export function DataProvider({ children }: { children: ReactNode }) {
       companies, setCompanies,
       ships, setShips,
       projects, setProjects,
+      dropdownConfigs, setDropdownConfigs,
+      rolesMaster, setRolesMaster,
+      rolePermissions, setRolePermissions,
+      releases, setReleases,
+      workflows, setWorkflows,
+      notifications, markNotificationRead, createNotification,
       currentUser, setCurrentUser,
+      isLoading, fetchData,
       isAuthLoading,
-      fetchData
+      canAccess: (resource: string, action: string = 'view') => {
+        if (!currentUser) return false;
+        if (currentUser.role === 'Admin') return true;
+
+        // Check extra_roles override (e.g. "Dashboard:view" or "Dashboard")
+        const extraRoles = currentUser.extra_roles?.split(',').filter(Boolean) || [];
+        if (extraRoles.some(r => r === resource || r === `${resource}:${action}`)) return true;
+
+        // Check roles from rolesMaster and rolePermissions
+        const userRoleNames = currentUser.roles?.split(',').filter(Boolean) || [];
+        const userRoleIds = rolesMaster
+          .filter(r => userRoleNames.includes(r.name))
+          .map(r => r.id);
+
+        return rolePermissions.some(p => 
+          userRoleIds.includes(p.role_id) && 
+          p.resource === resource && 
+          (p.action === action || p.action === '*') &&
+          p.is_allowed
+        );
+      }
     }}>
       {children}
     </DataContext.Provider>

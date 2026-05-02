@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
+import { useSearchParams } from 'react-router-dom';
 import { 
   Search, 
   Filter, 
@@ -38,7 +39,8 @@ const statusColors: Record<string, string> = {
 const equipmentTypes = ['SMAW', 'FCAW', 'Blower', 'Angle Grinder', 'Forklift (3T)', 'Forklift (10T)', 'Gantry Crane'];
 
 export default function EquipmentLoans() {
-  const { loans, setLoans, vendors, ships, projects } = useData();
+  const { loans, setLoans, vendors, ships, projects, workflows, currentUser, users, createNotification, notifications, markNotificationRead } = useData();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isApproveModalOpen, setIsApproveModalOpen] = useState(false);
   const [isProgressModalOpen, setIsProgressModalOpen] = useState(false);
@@ -49,11 +51,31 @@ export default function EquipmentLoans() {
   const [requestedItems, setRequestedItems] = useState<RequestedItem[]>([]);
   const [modalProjectId, setModalProjectId] = useState('');
   const [modalShipName, setModalShipName] = useState('');
+  const [dateStart, setDateStart] = useState('');
+  const [dateFinish, setDateFinish] = useState('');
   
   // Paging & Bulk States
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState<number | 'all'>(10);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+
+  // Auto-open approval modal when navigated from notification (?approve=requestId)
+  // Use a ref to prevent re-triggering on every polling cycle
+  const handledApproveParam = React.useRef<string | null>(null);
+  useEffect(() => {
+    const approveRequestId = searchParams.get('approve');
+    if (!approveRequestId || handledApproveParam.current === approveRequestId) return;
+    if (loans.length === 0) return; // Wait for loans to load
+
+    const target = loans.find(l => l.request_id === decodeURIComponent(approveRequestId));
+    if (target) {
+      handledApproveParam.current = approveRequestId;
+      setSelectedLoan(target);
+      setIsProgressModalOpen(true);
+      // Clear the URL param to keep URL clean
+      setSearchParams({}, { replace: true });
+    }
+  }, [searchParams, loans]);
 
   const filteredLoans = loans.filter(loan => {
     const searchStr = searchTerm.toLowerCase();
@@ -67,6 +89,14 @@ export default function EquipmentLoans() {
       loan.items.some(item => item.type.toLowerCase().includes(searchStr))
     );
   });
+
+  // Keep selectedLoan in sync with polling data without closing the modal
+  useEffect(() => {
+    if (selectedLoan && isProgressModalOpen) {
+      const updated = loans.find(l => l.id === selectedLoan.id);
+      if (updated) setSelectedLoan(updated);
+    }
+  }, [loans]);
 
   // Pagination Logic
   const totalItems = filteredLoans.length;
@@ -122,8 +152,12 @@ export default function EquipmentLoans() {
     alert(`Exporting ${dataToExport.length} items to Excel...`);
   };
 
+  const generateHexId = () => {
+    return Math.floor(Math.random() * 0xffffffff).toString(16).padStart(8, '0');
+  };
+
   const handleAddItemType = () => {
-    setRequestedItems([...requestedItems, { type: equipmentTypes[0], quantity: 1 }]);
+    setRequestedItems([...requestedItems, { id: generateHexId(), type: equipmentTypes[0], quantity: 1 }]);
   };
 
   const handleRemoveItemType = (index: number) => {
@@ -138,9 +172,11 @@ export default function EquipmentLoans() {
 
   const openAddModal = () => {
     setSelectedLoan(null);
-    setRequestedItems([{ type: equipmentTypes[0], quantity: 1}]);
+    setRequestedItems([{ id: generateHexId(), type: equipmentTypes[0], quantity: 1}]);
     setModalProjectId('');
     setModalShipName('');
+    setDateStart('');
+    setDateFinish('');
     setIsModalOpen(true);
   };
 
@@ -149,6 +185,8 @@ export default function EquipmentLoans() {
     setRequestedItems(loan.items || []);
     setModalProjectId(loan.project_id || '');
     setModalShipName(loan.shipname || '');
+    setDateStart(loan.date_start || '');
+    setDateFinish(loan.date_finish || '');
     setIsModalOpen(true);
   };
 
@@ -163,14 +201,37 @@ export default function EquipmentLoans() {
       const loan = loans.find(l => l.id === loanToApprove);
       if (!loan) return;
 
-      const newSteps = loan.approval_steps.map(step => {
-        if (step.isCurrent) return { ...step, isCurrent: false, isCompleted: true, date: new Date().toLocaleString(), comment: approvalComment, user: 'Current User' };
-        if (step.status === 'Approved') return { ...step, isCurrent: true };
+      let isAllCompleted = true;
+      const newSteps = loan.approval_steps.map((step, idx) => {
+        if (step.isCurrent) {
+          return { 
+            ...step, 
+            isCurrent: false, 
+            isCompleted: true, 
+            date: new Date().toLocaleString(), 
+            comment: approvalComment, 
+            user: currentUser?.name || 'Authorized User',
+            status: 'Approved'
+          };
+        }
         return step;
       });
 
+      // Find the next step to make current
+      const currentIdx = loan.approval_steps.findIndex(s => s.isCurrent);
+      if (currentIdx !== -1 && currentIdx < newSteps.length - 1) {
+        newSteps[currentIdx + 1].isCurrent = true;
+        newSteps[currentIdx + 1].status = 'Pending';
+        isAllCompleted = false;
+      }
+
+      const finalStatus = isAllCompleted ? 'Approved' : 'Pending';
+
       const { error } = await api.from('loan_requests')
-        .update({ status: 'Approved', approval_steps: newSteps })
+        .update({ 
+          status: finalStatus, 
+          approval_steps: newSteps 
+        })
         .eq('id', loanToApprove);
 
       if (error) {
@@ -179,6 +240,111 @@ export default function EquipmentLoans() {
       } else {
         setIsApproveModalOpen(false);
         setLoanToApprove(null);
+
+        // Auto-mark related approval notifications as read (clears badge count)
+        const relatedNotifs = notifications.filter(n =>
+          !n.is_read &&
+          n.type === 'approval' &&
+          n.message?.includes(loan.request_id)
+        );
+        for (const notif of relatedNotifs) {
+          markNotificationRead(notif.id);
+        }
+
+        // Notify next approver if there is one
+        const nextStep = newSteps.find(s => s.isCurrent);
+        if (nextStep) {
+          notifyApprover(loan.request_id, nextStep);
+        }
+      }
+    }
+  };
+
+  const notifyApprover = async (requestId: string, step: any) => {
+    console.group(`[notifyApprover] ${requestId} → Step "${step.label}" (order: ${step.step_order})`);
+    console.log('Step data:', { jabatan: step.jabatan, user_id: step.user_id, user_ids: step.user_ids, step_order: step.step_order });
+
+    let targetUserIds: string[] = [];
+
+    // Priority 1: Parse user_ids JSON array (specific multi-approver)
+    try {
+      const parsed = JSON.parse(step.user_ids || '[]');
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        targetUserIds = parsed;
+        console.log('✅ Source: user_ids array →', targetUserIds.map(id => users.find(u => u.id === id)?.name));
+      }
+    } catch { /* ignore parse error */ }
+
+    // Priority 2: Single user_id
+    if (targetUserIds.length === 0 && step.user_id) {
+      targetUserIds = [step.user_id];
+      console.log('✅ Source: single user_id →', users.find(u => u.id === step.user_id)?.name);
+    }
+
+    // Priority 3: Jabatan from step data (find all users with matching jabatan)
+    if (targetUserIds.length === 0 && step.jabatan) {
+      const searchJabatan = step.jabatan.trim().toLowerCase();
+      const matched = users.filter(u => u.jabatan?.trim().toLowerCase() === searchJabatan);
+      targetUserIds = matched.map(u => u.id);
+      console.log(`✅ Source: jabatan "${step.jabatan}" → ${matched.map(u => u.name).join(', ') || 'none found'}`);
+    }
+
+    // Priority 4 (FINAL FALLBACK): Look up live workflow by step_order
+    // Only used if step has NO jabatan/user info (e.g. old loan data)
+    if (targetUserIds.length === 0) {
+      console.warn('⚠️ Step missing routing info — using workflow fallback by step_order:', step.step_order);
+      const matchedWorkflow = workflows.find(w =>
+        w.module === 'Equipment Loan' && w.step_order === step.step_order
+      );
+      if (matchedWorkflow) {
+        // Try user_ids from workflow
+        try {
+          const wIds = JSON.parse((matchedWorkflow as any).user_ids || '[]');
+          if (Array.isArray(wIds) && wIds.length > 0) {
+            targetUserIds = wIds;
+            console.log('✅ Fallback: workflow user_ids →', targetUserIds.map(id => users.find(u => u.id === id)?.name));
+          }
+        } catch {}
+
+        // Try jabatan from workflow
+        if (targetUserIds.length === 0 && matchedWorkflow.jabatan) {
+          const jab = matchedWorkflow.jabatan.trim().toLowerCase();
+          const matched = users.filter(u => u.jabatan?.trim().toLowerCase() === jab);
+          targetUserIds = matched.map(u => u.id);
+          console.log(`✅ Fallback: workflow jabatan "${matchedWorkflow.jabatan}" → ${matched.map(u => u.name).join(', ') || 'none found'}`);
+        }
+      }
+    }
+
+    if (targetUserIds.length === 0) {
+      console.error('❌ No target users found. Check workflow configuration.');
+      console.log('Users:', users.map(u => ({ name: u.name, jabatan: u.jabatan })));
+      console.log('Workflows:', workflows.map(w => ({ label: w.label, step_order: w.step_order, jabatan: w.jabatan, user_ids: (w as any).user_ids })));
+    }
+    console.groupEnd();
+
+    // Send notification to each target user
+    for (const uid of targetUserIds) {
+      const name = users.find(u => u.id === uid)?.name || uid;
+      console.log(`📨 Sending notification to: ${name}`);
+      await createNotification(
+        uid,
+        'Approval Required',
+        `Loan request ${requestId} requires your approval for step: ${step.label}`,
+        'approval',
+        '/request'
+      );
+    }
+  };
+
+  const handleDeleteLoan = async (id: string, requestId: string) => {
+    if (confirm(`Are you sure you want to delete loan request ${requestId}?`)) {
+      const { error } = await api.from('loan_requests').delete().eq('id', id);
+      if (error) {
+        console.error('Error deleting loan:', error.message);
+        alert('Error: ' + error.message);
+      } else {
+        // Refresh handled by DataContext
       }
     }
   };
@@ -192,8 +358,16 @@ export default function EquipmentLoans() {
     e.preventDefault();
     const formData = new FormData(e.currentTarget);
     
+    const now = new Date();
+    const currentYear = now.getFullYear();
+    const currentMonth = now.getMonth() + 1;
+    const monthLoansCount = loans.filter(l => {
+      const d = new Date(l.date_created || l.date_start);
+      return d.getFullYear() === currentYear && (d.getMonth() + 1) === currentMonth;
+    }).length;
+
     const loanData = {
-      request_id: selectedLoan?.request_id || `ERQ/${new Date().getFullYear()}/${String(new Date().getMonth() + 1).padStart(2, '0')}/${String(loans.length + 1).padStart(3, '0')}/YWTS`,
+      request_id: selectedLoan?.request_id || `ERQ/${currentYear}/${String(currentMonth).padStart(2, '0')}/${String(monthLoansCount + 1).padStart(3, '0')}/YWTS`,
       project_id: formData.get('project_id') as string,
       shipname: formData.get('shipname') as string,
       vendor: formData.get('vendor') as string,
@@ -206,9 +380,20 @@ export default function EquipmentLoans() {
       status: (formData.get('submit_status') as any) || selectedLoan?.status || 'Pending',
       items: requestedItems,
       approval_steps: selectedLoan?.approval_steps || [
-        { status: 'Draft', label: 'Request Created', date: new Date().toLocaleString(), user: 'Admin', isCompleted: true, isCurrent: false },
-        { status: 'Pending', label: 'Department Approval', isCompleted: false, isCurrent: true },
-        { status: 'Approved', label: 'Final Approval', isCompleted: false, isCurrent: false }
+        { status: 'Draft', label: 'Request Created', date: new Date().toLocaleString(), user: currentUser?.name || 'Admin', isCompleted: true, isCurrent: false },
+        ...workflows
+          .filter(w => w.module === 'Equipment Loan')
+          .sort((a, b) => a.step_order - b.step_order)
+          .map((w, idx) => ({
+            status: idx === 0 ? 'Pending' : 'Awaiting',
+            label: w.label,
+            jabatan: w.jabatan,
+            user_id: w.user_id || '',
+            user_ids: (w as any).user_ids || '[]',
+            step_order: w.step_order,
+            isCompleted: false,
+            isCurrent: idx === 0
+          }))
       ]
     };
 
@@ -219,8 +404,9 @@ export default function EquipmentLoans() {
         .eq('id', selectedLoan.id);
       error = updateError;
     } else {
+      const newId = generateHexId();
       const { error: insertError } = await api.from('loan_requests')
-        .insert([loanData]);
+        .insert([{ ...loanData, id: newId }]);
       error = insertError;
     }
 
@@ -229,6 +415,14 @@ export default function EquipmentLoans() {
       alert('Error saving: ' + error.message);
     } else {
       setIsModalOpen(false);
+      
+      // Notify the first approver if it's a new request and status is Pending
+      if (!selectedLoan && loanData.status === 'Pending') {
+        const firstStep = loanData.approval_steps.find(s => s.isCurrent);
+        if (firstStep) {
+          notifyApprover(loanData.request_id, firstStep);
+        }
+      }
     }
   };
 
@@ -363,7 +557,7 @@ export default function EquipmentLoans() {
                         {loan.request_id}
                       </span>
                     </button>
-                    <p className="text-[10px] text-slate-400 mt-1 font-medium">{loan.date_created}</p>
+                    <p className="text-[10px] text-slate-400 mt-1 font-medium">{loan.date_created?.split('T')[0]}</p>
                   </td>
                   <td className="px-6 py-4">
                     <div className="flex items-center gap-3">
@@ -409,16 +603,27 @@ export default function EquipmentLoans() {
                     </button>
                   </td>
                   <td className="px-6 py-4 text-right">
-                    <div className="flex items-center justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                      {loan.status === 'Pending' && (
-                        <button 
-                          onClick={() => handleApprove(loan.id)}
-                          className="p-2 text-slate-400 hover:text-[#FDB913] rounded-lg hover:bg-[#FDB913]/10 transition-colors"
-                          title="Approve"
-                        >
-                          <Check className="w-4 h-4" />
-                        </button>
-                      )}
+                    <div className="flex items-center justify-end gap-1">
+                      {(() => {
+                        const currentStep = loan.approval_steps.find(s => s.isCurrent);
+                        const stepUserIds: string[] = (() => { try { return currentStep?.user_ids ? JSON.parse(currentStep.user_ids) : []; } catch { return []; } })();
+                        const canApprove = currentStep && (
+                          (currentUser?.role === 'Admin') ||
+                          (stepUserIds.length > 0 && stepUserIds.includes(currentUser?.id || '')) ||
+                          (stepUserIds.length === 0 && currentStep.user_id && currentStep.user_id === currentUser?.id) ||
+                          (stepUserIds.length === 0 && !currentStep.user_id && currentStep.jabatan && currentStep.jabatan?.trim().toLowerCase() === currentUser?.jabatan?.trim().toLowerCase())
+                        );
+                        
+                        return loan.status === 'Pending' && canApprove && (
+                          <button 
+                            onClick={() => handleApprove(loan.id)}
+                            className="p-2 text-slate-400 hover:text-[#FDB913] rounded-lg hover:bg-[#FDB913]/10 transition-colors"
+                            title="Approve"
+                          >
+                            <Check className="w-4 h-4" />
+                          </button>
+                        );
+                      })()}
                       {loan.status === 'Draft' && (
                         <button 
                           onClick={() => openEditModal(loan)}
@@ -428,12 +633,13 @@ export default function EquipmentLoans() {
                           <Edit2 className="w-4 h-4" />
                         </button>
                       )}
-                      <button className="p-2 text-slate-400 hover:text-red-600 rounded-lg hover:bg-red-50 transition-colors">
+                      <button 
+                        onClick={() => handleDeleteLoan(loan.id, loan.request_id)}
+                        className="p-2 text-slate-400 hover:text-red-600 rounded-lg hover:bg-red-50 transition-colors"
+                        title="Delete"
+                      >
                         <Trash2 className="w-4 h-4" />
                       </button>
-                    </div>
-                    <div className="group-hover:hidden">
-                      <MoreHorizontal className="w-4 h-4 text-slate-300 ml-auto" />
                     </div>
                   </td>
                 </motion.tr>
@@ -522,33 +728,21 @@ export default function EquipmentLoans() {
                 {(() => {
                   const isEditable = !selectedLoan || selectedLoan.status === 'Draft';
                   
-                  // Extract years for all projects to find the latest available year dynamically
-                  const projectYears = projects.map(p => {
-                    if (p.year && Number(p.year) > 2000) return Number(p.year);
-                    if (p.create_date) return new Date(p.create_date).getFullYear();
-                    if (p.idproject && p.idproject.length >= 5) {
-                      const match = p.idproject.match(/\d{2}/);
-                      if (match) return 2000 + parseInt(match[0]);
-                    }
-                    return 0;
-                  }).filter(y => !isNaN(y) && y > 2000);
+                  const currentYear = new Date().getFullYear();
                   
-                  const maxYear = projectYears.length > 0 ? Math.max(...projectYears) : new Date().getFullYear();
-                  
-                  // Filter projects from the max year and the previous year (Last 2 Years)
-                  const activeProjects = projects.filter((p, index) => {
-                    let pYear = 0;
-                    if (p.year && Number(p.year) > 2000) {
-                      pYear = Number(p.year);
-                    } else if (p.create_date) {
-                      pYear = new Date(p.create_date).getFullYear();
-                    } else if (p.idproject && p.idproject.length >= 5) {
-                      const match = p.idproject.match(/\d{2}/);
-                      if (match) pYear = 2000 + parseInt(match[0]);
-                    }
-                    
-                    // Show from Max Year and Previous Year or generic fallback
-                    return pYear >= maxYear - 1 || (!pYear && index < 50); // Fallback to include unparseable projects if we have to
+                  // Filter projects based on create_date in the last 2 years
+                  // BUT always include the currently selected project if it exists (for legacy support)
+                  const activeProjects = projects.filter(p => {
+                    const isSelected = p.id === modalProjectId || p.idproject === modalProjectId;
+                    if (isSelected) return true;
+
+                    if (!p.create_date) return false;
+                    const createYear = new Date(p.create_date).getFullYear();
+                    return createYear >= currentYear - 1 && createYear <= currentYear;
+                  }).sort((a, b) => {
+                    const dateA = new Date(a.create_date || 0).getTime();
+                    const dateB = new Date(b.create_date || 0).getTime();
+                    return dateB - dateA; // Descending (Newest first)
                   });
 
                   return (
@@ -579,6 +773,11 @@ export default function EquipmentLoans() {
                           {p.idproject} {p.shipname ? `- ${p.shipname}` : ''}
                         </option>
                       ))}
+                      {modalProjectId && !activeProjects.find(p => p.idproject === modalProjectId || p.id === modalProjectId) && (
+                        <option value={modalProjectId}>
+                          {modalProjectId} (Legacy Reference)
+                        </option>
+                      )}
                     </select>
                   </div>
                   <div className="space-y-2">
@@ -586,18 +785,11 @@ export default function EquipmentLoans() {
                     <input 
                       name="shipname"
                       value={modalShipName}
-                      onChange={(e) => setModalShipName(e.target.value)}
-                      list="ships-list"
+                      readOnly
                       required
-                      disabled={!isEditable}
-                      placeholder="Type or select ship name"
-                      className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-[#FDB913]/30 focus:border-[#FDB913] disabled:opacity-60"
+                      placeholder="Auto-filled from Project ID"
+                      className="w-full px-4 py-2.5 bg-slate-100 text-slate-500 border border-slate-200 rounded-xl text-sm outline-none cursor-not-allowed"
                     />
-                    <datalist id="ships-list">
-                      {ships.map(ship => (
-                        <option key={ship.id} value={ship.shipname}>{ship.shipname}</option>
-                      ))}
-                    </datalist>
                   </div>
                   <div className="space-y-2">
                     <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Work Order</label>
@@ -619,7 +811,7 @@ export default function EquipmentLoans() {
                       className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-[#FDB913]/30 focus:border-[#FDB913] disabled:opacity-60"
                     >
                       <option value="">Select Vendor</option>
-                      {vendors.map(vendor => (
+                      {vendors.filter(v => v.status !== 'Inactive').map(vendor => (
                         <option key={vendor.id} value={vendor.vendor}>{vendor.vendor}</option>
                       ))}
                     </select>
@@ -629,7 +821,8 @@ export default function EquipmentLoans() {
                     <input 
                       type="date"
                       name="date_start"
-                      defaultValue={selectedLoan?.date_start}
+                      value={dateStart}
+                      onChange={(e) => setDateStart(e.target.value)}
                       required
                       disabled={!isEditable}
                       className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-[#FDB913]/30 focus:border-[#FDB913] disabled:opacity-60"
@@ -640,13 +833,35 @@ export default function EquipmentLoans() {
                     <input 
                       type="date"
                       name="date_finish"
-                      defaultValue={selectedLoan?.date_finish}
+                      value={dateFinish}
+                      onChange={(e) => setDateFinish(e.target.value)}
                       required
                       disabled={!isEditable}
                       className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-[#FDB913]/30 focus:border-[#FDB913] disabled:opacity-60"
                     />
                   </div>
                 </div>
+
+                {/* Automatic Duration */}
+                {(() => {
+                  const days = (dateStart && dateFinish) 
+                    ? Math.max(1, Math.ceil((new Date(dateFinish).getTime() - new Date(dateStart).getTime()) / (1000 * 60 * 60 * 24)) + 1)
+                    : 1;
+                  return (
+                    <div className="p-4 bg-slate-900 rounded-2xl flex items-center justify-between">
+                      <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 bg-white/10 rounded-xl flex items-center justify-center text-[#FDB913]">
+                          <Clock className="w-5 h-5" />
+                        </div>
+                        <div>
+                          <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Calculated Duration</p>
+                          <p className="text-xl font-display font-bold text-white">{days} Days</p>
+                        </div>
+                      </div>
+                      <input type="hidden" name="duration" value={days} />
+                    </div>
+                  );
+                })()}
 
                 <div className="space-y-4">
                   <div className="flex items-center justify-between">
@@ -922,17 +1137,28 @@ export default function EquipmentLoans() {
                 >
                   Close
                 </button>
-                {selectedLoan.status === 'Pending' && (
-                  <button 
-                    onClick={() => {
-                      setIsProgressModalOpen(false);
-                      handleApprove(selectedLoan.id);
-                    }}
-                    className="px-6 py-2 bg-[#FDB913] text-slate-900 rounded-xl text-sm font-bold hover:bg-[#e5a611] transition-colors shadow-lg shadow-[#FDB913]/20"
-                  >
-                    Approve Now
-                  </button>
-                )}
+                {(() => {
+                  const currentStep = selectedLoan.approval_steps.find(s => s.isCurrent);
+                  const stepUserIds2: string[] = (() => { try { return currentStep?.user_ids ? JSON.parse(currentStep.user_ids) : []; } catch { return []; } })();
+                  const canApprove = currentStep && (
+                    (currentUser?.role === 'Admin') ||
+                    (stepUserIds2.length > 0 && stepUserIds2.includes(currentUser?.id || '')) ||
+                    (stepUserIds2.length === 0 && currentStep.user_id && currentStep.user_id === currentUser?.id) ||
+                    (stepUserIds2.length === 0 && !currentStep.user_id && currentStep.jabatan && currentStep.jabatan?.trim().toLowerCase() === currentUser?.jabatan?.trim().toLowerCase())
+                  );
+                  
+                  return selectedLoan.status === 'Pending' && canApprove && (
+                    <button 
+                      onClick={() => {
+                        setIsProgressModalOpen(false);
+                        handleApprove(selectedLoan.id);
+                      }}
+                      className="px-6 py-2 bg-[#FDB913] text-slate-900 rounded-xl text-sm font-bold hover:bg-[#e5a611] transition-colors shadow-lg shadow-[#FDB913]/20"
+                    >
+                      Approve Now
+                    </button>
+                  );
+                })()}
               </div>
             </motion.div>
           </div>

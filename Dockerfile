@@ -1,37 +1,58 @@
-# Stage 1: Install dependencies & Build
-FROM node:20-alpine AS builder
+# ============================================================
+# Stage 1: Build React frontend
+# ============================================================
+FROM node:20-alpine AS frontend-builder
 WORKDIR /app
 
-# Install native build tools required by better-sqlite3 (Python, Make, GCC)
-RUN apk add --no-cache python3 make g++
-
 COPY package*.json ./
-RUN npm ci
+RUN npm ci --ignore-scripts
 
 COPY . .
 RUN npm run build
 
-# Prune devDependencies so we don't carry them over, 
-# while keeping the successfully compiled better-sqlite3 binary.
-RUN npm prune --omit=dev
+# ============================================================
+# Stage 2: Build Go backend binary
+# ============================================================
+FROM golang:1.23-alpine AS go-builder
+WORKDIR /go-server
 
-# Stage 2: Production runner
-FROM node:20-alpine AS runner
+# Install git (needed by some Go modules)
+RUN apk add --no-cache git
+
+COPY go-server/go.mod go-server/go.sum ./
+RUN go mod download
+
+COPY go-server/ ./
+RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-w -s" -o /shipyard-server .
+
+# ============================================================
+# Stage 3: Final minimal production image (~30MB)
+# ============================================================
+FROM alpine:3.19 AS runner
+
+# Add CA certificates for HTTPS calls
+RUN apk add --no-cache ca-certificates tzdata
+
 WORKDIR /app
 
 ENV NODE_ENV=production
+ENV PORT=3000
+ENV TZ=Asia/Jakarta
 
-# Copy configuration and pre-built node_modules
-COPY package*.json ./
-COPY --from=builder /app/node_modules ./node_modules
+# Copy Go binary
+COPY --from=go-builder /shipyard-server ./shipyard-server
 
-# Copy built frontend and server backend
-COPY --from=builder /app/dist ./dist
-COPY server.js ./
+# Copy built React frontend into dist/
+COPY --from=frontend-builder /app/dist ./dist
+
+# Create data directory for SQLite persistence
+RUN mkdir -p /data && chown -R 1000:1000 /data /app
+USER 1000
 
 EXPOSE 3000
 
-ENV PORT=3000
+# Health check
+HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
+  CMD wget -qO- http://localhost:3000/api/auth/session || exit 1
 
-# Server JS will handle both API and serving dist/
-CMD ["node", "server.js"]
+CMD ["./shipyard-server"]

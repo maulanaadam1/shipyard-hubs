@@ -7,3 +7,16 @@ coverage/
 !.env.example
 
 /generated/prisma
+
+# Go build artifacts
+go-server/shipyard
+go-server/shipyard.exe
+go-server/*.exe
+
+# SQLite database files (data stays on server, not in git)
+go-server/*.sqlite
+go-server/*.sqlite-shm
+go-server/*.sqlite-wal
+
+# CSV imports
+*.csv

@@ -32,7 +32,7 @@ export default function FleetStatusChart() {
       <h3 className="font-display font-bold text-slate-800 mb-4">Fleet Status & Health Overview</h3>
       <div className="h-[300px] w-full">
         {mounted && (
-          <ResponsiveContainer width="100%" height="100%">
+          <ResponsiveContainer width="99%" height="100%">
             <PieChart>
               <Pie
                 data={data}

@@ -29,11 +29,12 @@ class ApiQueryBuilder {
     }
     
     eq(col: string, val: any) { 
-       this.params.set('id', val.toString()); 
+       this.params.set(col, val.toString()); 
        return this; 
     }
     
     in(col: string, vals: any[]) { 
+       this.params.set('in_col', col);
        this.params.set('in', vals.join(',')); 
        return this; 
     }
@@ -69,14 +70,9 @@ class ApiQueryBuilder {
         reject?: ((reason: any) => TResult2 | PromiseLike<TResult2>) | undefined | null
     ): Promise<TResult1 | TResult2> {
         return new Promise<any>(async (res) => {
-            // Note: Use absolute URL for dev testing, or relative for prod
-            let url = `/api/data/${this.table}`;
-            if (process.env.NODE_ENV === 'development') {
-                url = `http://localhost:3000${url}`;
-            }
-            
+            const url_base = `/api/data/${this.table}`;
             const qs = this.params.toString();
-            if (qs) url += `?${qs}`;
+            const url = qs ? `${url_base}?${qs}` : url_base;
 
             try {
                 const response = await fetch(url, {
@@ -84,8 +80,26 @@ class ApiQueryBuilder {
                     headers: getHeaders(),
                     body: this.queryData ? JSON.stringify(this.queryData) : undefined
                 });
-                const result = await response.json();
-                res({ data: result.data || null, error: result.error ? { message: result.error } : null });
+
+                const text = await response.text();
+                let result: any = {};
+                try {
+                    result = text ? JSON.parse(text) : {};
+                } catch (parseErr) {
+                    // Not JSON
+                    if (!response.ok) {
+                        res({ data: null, error: { message: `Server error (${response.status}): ${text || 'Unknown error'}` } });
+                        return;
+                    }
+                    result = {};
+                }
+
+                if (!response.ok) {
+                    res({ data: null, error: { message: result.error || `Server error (${response.status})` } });
+                    return;
+                }
+
+                res({ data: result.data || null, error: null });
             } catch (e: any) {
                 res({ data: null, error: { message: e.message }});
             }
@@ -98,10 +112,7 @@ export const api = {
     auth: {
         getSession: async () => {
             try {
-                let url = `/api/auth/session`;
-                if (process.env.NODE_ENV === 'development') url = `http://localhost:3000${url}`;
-                
-                const res = await fetch(url, { headers: getHeaders() });
+                const res = await fetch(`/api/auth/session`, { headers: getHeaders() });
                 const data = await res.json();
                 return { data: { session: data.session }, error: null };
             } catch(e: any) {
@@ -109,11 +120,8 @@ export const api = {
             }
         },
         signInWithPassword: async ({ email, password }: any) => {
-             let url = `/api/auth/login`;
-             if (process.env.NODE_ENV === 'development') url = `http://localhost:3000${url}`;
-             
              try {
-                const res = await fetch(url, {
+                const res = await fetch(`/api/auth/login`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ email, password })

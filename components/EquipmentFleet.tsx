@@ -28,6 +28,7 @@ export default function EquipmentFleet() {
   const [searchTerm, setSearchTerm] = useState('');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
+  const [isClearAllModalOpen, setIsClearAllModalOpen] = useState(false);
   const [isImportTextModalOpen, setIsImportTextModalOpen] = useState(false);
   const [importText, setImportText] = useState('');
   const [itemToDelete, setItemToDelete] = useState<string | string[] | null>(null);
@@ -190,11 +191,32 @@ export default function EquipmentFleet() {
     if (itemToDelete) {
       const idsToDelete = Array.isArray(itemToDelete) ? itemToDelete : [itemToDelete];
       
-      const { error } = await api.from('equipment').delete().in('id', idsToDelete);
+      console.log(`Starting bulk delete for ${idsToDelete.length} items. Samples:`, idsToDelete.slice(0, 5));
       
-      if (error) {
-        console.error('Error deleting from Supabase:', error.message);
-        alert('Error deleting: ' + error.message);
+      setIsSaving(true); 
+      let hasError = false;
+      let lastErrorMessage = '';
+      let totalDeleted = 0;
+
+      const chunkSize = 50;
+      for (let i = 0; i < idsToDelete.length; i += chunkSize) {
+        const chunk = idsToDelete.slice(i, i + chunkSize);
+        const { data, error } = await api.from('equipment').delete().in('id', chunk);
+        
+        if (error) {
+          hasError = true;
+          lastErrorMessage = error.message;
+          break;
+        }
+        if (data && data.count) totalDeleted += data.count;
+      }
+      
+      setIsSaving(false);
+      console.log(`Bulk delete finished. Total rows reported deleted: ${totalDeleted}`);
+
+      if (hasError) {
+        console.error('Error deleting:', lastErrorMessage);
+        alert('Error deleting: ' + lastErrorMessage);
       } else {
         setSelectedIds(new Set(Array.from(selectedIds).filter(id => !idsToDelete.includes(id))));
         setIsDeleteModalOpen(false);
@@ -281,6 +303,26 @@ export default function EquipmentFleet() {
     }
   };
 
+  const confirmClearAll = async () => {
+    setIsSaving(true);
+    try {
+      const { data, error } = await api.from('equipment').delete().eq('id', 'all');
+      if (error) throw error;
+      
+      const count = data?.count || 0;
+      setSelectedIds(new Set());
+      if (typeof fetchData === 'function') {
+         await fetchData();
+      }
+      setIsClearAllModalOpen(false);
+      alert(`Success! ${count} items have been cleared from the database.`);
+    } catch (err: any) {
+      alert('Error clearing data: ' + err.message);
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
   return (
     <div className="p-8 space-y-6">
       <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
@@ -289,25 +331,26 @@ export default function EquipmentFleet() {
           <p className="text-sm text-slate-500 mt-1">Manage and track all shipyard assets and master equipment.</p>
         </div>
         <div className="flex flex-wrap items-center gap-2 sm:gap-3">
-          <div className="group relative">
-            <button className="p-2 text-slate-400 hover:text-[#FDB913] transition-colors">
-              <Info className="w-5 h-5" />
-            </button>
-            <div className="absolute bottom-full right-0 mb-2 w-64 p-4 bg-slate-900 text-white text-[10px] rounded-xl opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity z-50 shadow-xl">
-              <p className="font-bold mb-2 border-b border-slate-700 pb-1 uppercase tracking-wider">Import Structure (Headers):</p>
-              <ul className="space-y-1 list-disc pl-3 text-slate-300">
-                <li>no_asset (Required)</li>
-                <li>name</li>
-                <li>item</li>
-                <li>brand</li>
-                <li>type_capacity</li>
-                <li>location</li>
-                <li>year</li>
-                <li>alias</li>
-                <li>category</li>
-              </ul>
-            </div>
-          </div>
+          <button 
+            onClick={() => {
+              const headers = ['no_asset', 'name', 'type', 'brand', 'capacity', 'source', 'year_invest', 'alias', 'price', 'available'];
+              const csvContent = headers.join(',') + '\n';
+              const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+              const link = document.createElement('a');
+              const url = URL.createObjectURL(blob);
+              link.setAttribute('href', url);
+              link.setAttribute('download', 'equipment_import_template.csv');
+              link.style.visibility = 'hidden';
+              document.body.appendChild(link);
+              link.click();
+              document.body.removeChild(link);
+            }}
+            className="flex items-center gap-2 px-3 sm:px-4 py-2 bg-slate-100 border border-slate-200 rounded-xl text-xs sm:text-sm font-medium text-slate-600 hover:bg-slate-200 transition-colors shadow-sm"
+            title="Download CSV Import Template"
+          >
+            <FileText className="w-4 h-4 text-slate-500" />
+            <span className="hidden sm:inline">Template</span>
+          </button>
           <input 
             type="file" 
             ref={fileInputRef} 
@@ -319,7 +362,7 @@ export default function EquipmentFleet() {
             onClick={() => handleExport()}
             className="flex items-center gap-2 px-3 sm:px-4 py-2 bg-white border border-slate-200 rounded-xl text-xs sm:text-sm font-medium text-slate-600 hover:bg-slate-50 transition-colors shadow-sm"
           >
-            <Download className="w-4 h-4" />
+            <Upload className="w-4 h-4" />
             <span className="hidden sm:inline">Export</span>
           </button>
           <button 
@@ -332,8 +375,16 @@ export default function EquipmentFleet() {
             }}
             className="flex items-center gap-2 px-3 sm:px-4 py-2 bg-white border border-slate-200 rounded-xl text-xs sm:text-sm font-medium text-slate-600 hover:bg-slate-50 transition-colors shadow-sm"
           >
-            <Upload className="w-4 h-4" />
+            <Download className="w-4 h-4" />
             <span className="hidden sm:inline">Import</span>
+          </button>
+          <button 
+            onClick={() => setIsClearAllModalOpen(true)}
+            disabled={totalItems === 0 || isSaving}
+            className="flex items-center gap-2 px-3 sm:px-4 py-2 bg-red-50 text-red-600 border border-red-100 rounded-xl text-xs sm:text-sm font-bold hover:bg-red-100 transition-colors shadow-sm disabled:opacity-50"
+          >
+            <Trash2 className="w-4 h-4" />
+            <span className="hidden md:inline">Clear All</span>
           </button>
           <button 
             onClick={() => {
@@ -427,6 +478,22 @@ export default function EquipmentFleet() {
               </select>
             </div>
             <button 
+              onClick={async () => {
+                setIsSaving(true);
+                if (typeof fetchData === 'function') await fetchData();
+                setIsSaving(false);
+              }}
+              disabled={isSaving}
+              className="p-2 bg-white border border-slate-200 rounded-lg text-slate-500 hover:text-[#FDB913] hover:border-[#FDB913]/30 transition-colors"
+              title="Refresh Data"
+            >
+              <motion.div animate={isSaving ? { rotate: 360 } : {}} transition={isSaving ? { repeat: Infinity, duration: 1, ease: "linear" } : {}}>
+                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                </svg>
+              </motion.div>
+            </button>
+            <button 
               onClick={() => setIsImportTextModalOpen(true)}
               className="p-2 bg-white border border-slate-200 rounded-lg text-slate-500 hover:text-[#FDB913] hover:border-[#FDB913]/30 transition-colors"
               title="Paste CSV Data"
@@ -513,7 +580,7 @@ export default function EquipmentFleet() {
                     <span className="text-sm text-slate-600 font-medium">{item.price}</span>
                   </td>
                   <td className="px-6 py-4 text-right">
-                    <div className="flex items-center justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <div className="flex items-center justify-end gap-1">
                       <button 
                         onClick={() => openDetailModal(item)}
                         className="p-2 text-slate-400 hover:text-[#FDB913] rounded-lg hover:bg-[#FDB913]/10 transition-colors"
@@ -535,9 +602,6 @@ export default function EquipmentFleet() {
                       >
                         <Trash2 className="w-4 h-4" />
                       </button>
-                    </div>
-                    <div className="group-hover:hidden">
-                      <MoreHorizontal className="w-4 h-4 text-slate-300 ml-auto" />
                     </div>
                   </td>
                 </motion.tr>
@@ -722,7 +786,49 @@ export default function EquipmentFleet() {
           </div>
         )}
       </AnimatePresence>
-      {/* Delete Confirmation Modal */}
+      {/* Clear All Confirmation Modal */}
+      <AnimatePresence>
+        {isClearAllModalOpen && (
+          <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
+            <motion.div 
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setIsClearAllModalOpen(false)}
+              className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm"
+            />
+            <motion.div 
+              initial={{ scale: 0.95, opacity: 0, y: 20 }}
+              animate={{ scale: 1, opacity: 1, y: 0 }}
+              exit={{ scale: 0.95, opacity: 0, y: 20 }}
+              className="relative w-full max-w-md bg-white rounded-3xl shadow-2xl p-8 text-center"
+            >
+              <div className="w-16 h-16 bg-red-100 text-red-600 rounded-full flex items-center justify-center mx-auto mb-4">
+                <Trash2 className="w-8 h-8" />
+              </div>
+              <h3 className="font-display font-bold text-xl text-slate-800 mb-2">Clear All Data</h3>
+              <p className="text-sm text-slate-500 mb-8">
+                Are you absolutely sure? This will permanently delete <strong>{totalItems} items</strong> from the database. This action cannot be undone.
+              </p>
+              <div className="flex gap-3">
+                <button 
+                  onClick={() => setIsClearAllModalOpen(false)}
+                  className="flex-1 px-6 py-3 bg-slate-100 text-slate-600 rounded-xl text-sm font-bold hover:bg-slate-200 transition-colors"
+                >
+                  Cancel
+                </button>
+                <button 
+                  onClick={confirmClearAll}
+                  disabled={isSaving}
+                  className="flex-1 px-6 py-3 bg-red-600 text-white rounded-xl text-sm font-bold hover:bg-red-700 transition-colors shadow-lg shadow-red-600/20 disabled:opacity-50"
+                >
+                  {isSaving ? 'Clearing...' : 'Yes, Delete All'}
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
       <AnimatePresence>
         {isDeleteModalOpen && (
           <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">

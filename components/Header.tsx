@@ -5,11 +5,14 @@ import { Bell, User as UserIcon, LogOut, UserCircle, X, Ship } from 'lucide-reac
 import { useData } from '@/context/DataContext';
 import { motion, AnimatePresence } from 'motion/react';
 import { api } from '@/lib/api-client';
+import { useNavigate } from 'react-router-dom';
 import ProfileModal from './ProfileModal';
 
 export default function Header({ onMenuClick }: { onMenuClick?: () => void }) {
-  const { currentUser, setCurrentUser } = useData();
+  const { currentUser, setCurrentUser, notifications, markNotificationRead } = useData();
+  const navigate = useNavigate();
   const [isUserSwitcherOpen, setIsUserSwitcherOpen] = React.useState(false);
+  const [isNotificationsOpen, setIsNotificationsOpen] = React.useState(false);
   const [isLoginModalOpen, setIsLoginModalOpen] = React.useState(false);
   const [isProfileModalOpen, setIsProfileModalOpen] = React.useState(false);
   const [authMode, setAuthMode] = React.useState<'login' | 'signup'>('login');
@@ -20,12 +23,36 @@ export default function Header({ onMenuClick }: { onMenuClick?: () => void }) {
   const [isAuthLoading, setIsAuthLoading] = React.useState(false);
   const loadingRef = React.useRef(false);
 
+  const handleNotificationClick = (notification: any) => {
+    // Mark as read
+    if (!notification.is_read) {
+      markNotificationRead(notification.id);
+    }
+    setIsNotificationsOpen(false);
+
+    // Navigate to the right page
+    const link = notification.link || '/dashboard';
+
+    // For approval notifications, extract loan request ID from message
+    // e.g. "Loan request ERQ/2024/05/001/YWTS requires your approval..."
+    if (notification.type === 'approval') {
+      const match = notification.message?.match(/Loan request (\S+) requires/);
+      const requestId = match?.[1];
+      if (requestId) {
+        navigate(`${link}?approve=${encodeURIComponent(requestId)}`);
+        return;
+      }
+    }
+
+    navigate(link);
+  };
+
   const handleEmailAuth = async (e: React.FormEvent) => {
     e.preventDefault();
     
     // Check if Supabase is configured
-    const isPlaceholder = process.env.NEXT_PUBLIC_SUPABASE_URL?.includes('placeholder');
-    if (isPlaceholder || !process.env.NEXT_PUBLIC_SUPABASE_URL) {
+    const isPlaceholder = import.meta.env.VITE_SUPABASE_URL?.includes('placeholder');
+    if (isPlaceholder || !import.meta.env.VITE_SUPABASE_URL) {
       setAuthError('Supabase is not configured. Please set your API keys in the Settings menu.');
       return;
     }
@@ -44,8 +71,8 @@ export default function Header({ onMenuClick }: { onMenuClick?: () => void }) {
     }, 30000);
 
     try {
-      const defaultAdminUsername = process.env.NEXT_PUBLIC_DEFAULT_ADMIN_USERNAME || 'superadmin';
-      const defaultAdminPassword = process.env.NEXT_PUBLIC_DEFAULT_ADMIN_PASSWORD || 'admin123';
+      const defaultAdminUsername = import.meta.env.VITE_DEFAULT_ADMIN_USERNAME || 'superadmin';
+      const defaultAdminPassword = import.meta.env.VITE_DEFAULT_ADMIN_PASSWORD || 'admin123';
       const isDefaultAdminLogin = identifier === defaultAdminUsername && password === defaultAdminPassword;
 
       // If it's a username (no @), append dummy domain
@@ -133,7 +160,7 @@ export default function Header({ onMenuClick }: { onMenuClick?: () => void }) {
   };
 
   return (
-    <header className="h-16 bg-[#FDB913] text-slate-900 flex items-center justify-between px-4 md:px-8 sticky top-0 z-30 shadow-sm">
+    <header className="h-16 shrink-0 bg-[#FDB913] text-slate-900 flex items-center justify-between px-4 md:px-8 z-30 shadow-sm">
       <div className="flex items-center gap-4 md:gap-8">
         {currentUser && (
           <button 
@@ -145,19 +172,79 @@ export default function Header({ onMenuClick }: { onMenuClick?: () => void }) {
             <div className="w-6 h-0.5 bg-white rounded-full"></div>
           </button>
         )}
-        <div className="flex lg:hidden items-center gap-2">
-          <div className="w-8 h-8 bg-slate-900 rounded-lg flex items-center justify-center">
-            <Ship className="w-5 h-5 text-[#FDB913]" />
-          </div>
-        </div>
       </div>
 
       <div className="flex items-center gap-4 md:gap-6">
         {currentUser && (
-          <button className="relative p-2 hover:bg-[#FDB913] rounded-full transition-colors hidden sm:block">
-            <Bell className="w-5 h-5" />
-            <span className="absolute top-1 right-1 w-2 h-2 bg-red-500 rounded-full border-2 border-[#FDB913]"></span>
-          </button>
+          <div className="relative">
+            <button 
+              onClick={() => {
+                setIsNotificationsOpen(!isNotificationsOpen);
+                setIsUserSwitcherOpen(false);
+              }}
+              className="relative p-2 hover:bg-slate-900/10 rounded-full transition-colors hidden sm:block"
+            >
+              <Bell className="w-5 h-5" />
+              {notifications.filter(n => !n.is_read).length > 0 && (
+                <span className="absolute top-1 right-1 w-4 h-4 bg-red-500 text-white text-[10px] font-bold rounded-full border-2 border-[#FDB913] flex items-center justify-center">
+                  {notifications.filter(n => !n.is_read).length}
+                </span>
+              )}
+            </button>
+
+            <AnimatePresence>
+              {isNotificationsOpen && (
+                <motion.div 
+                  initial={{ opacity: 0, y: 10, scale: 0.95 }}
+                  animate={{ opacity: 1, y: 0, scale: 1 }}
+                  exit={{ opacity: 0, y: 10, scale: 0.95 }}
+                  className="absolute top-full right-0 mt-2 w-80 bg-white rounded-2xl shadow-2xl border border-slate-200 overflow-hidden z-50 text-slate-800"
+                >
+                  <div className="p-4 bg-slate-50 border-b border-slate-100 flex items-center justify-between">
+                    <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">
+                      Notifications
+                    </p>
+                    <span className="px-2 py-0.5 bg-slate-200 rounded-full text-[10px] font-bold text-slate-500">
+                      {notifications.length} Total
+                    </span>
+                  </div>
+                  
+                  <div className="max-h-96 overflow-y-auto">
+                    {notifications.length === 0 ? (
+                      <div className="p-8 text-center">
+                        <p className="text-sm text-slate-400">No notifications yet</p>
+                      </div>
+                    ) : (
+                      <div className="divide-y divide-slate-100">
+                        {notifications.map(notification => (
+                          <div 
+                            key={notification.id}
+                            className={`p-4 hover:bg-slate-50 transition-colors cursor-pointer relative ${!notification.is_read ? 'bg-blue-50/30' : ''}`}
+                            onClick={() => handleNotificationClick(notification)}
+                          >
+                            {!notification.is_read && (
+                              <div className="absolute left-0 top-0 bottom-0 w-1 bg-[#FDB913]"></div>
+                            )}
+                            <div className="flex justify-between items-start mb-1">
+                              <h4 className="text-sm font-bold text-slate-800">{notification.title}</h4>
+                              <span className="text-[10px] text-slate-400">{new Date(notification.created_at).toLocaleDateString()}</span>
+                            </div>
+                            <p className="text-xs text-slate-500 line-clamp-2">{notification.message}</p>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                  
+                  <div className="p-3 bg-slate-50 border-t border-slate-100 text-center">
+                    <button className="text-[10px] font-bold text-[#FDB913] hover:underline uppercase tracking-wider">
+                      View All Notifications
+                    </button>
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </div>
         )}
         
         {!currentUser ? (
@@ -176,7 +263,7 @@ export default function Header({ onMenuClick }: { onMenuClick?: () => void }) {
             >
               <div className="text-right hidden sm:block">
                 <p className="text-sm font-medium leading-none">{currentUser.name}</p>
-                <p className="text-[10px] text-slate-700 uppercase tracking-wider font-bold mt-1">{currentUser.role}</p>
+                <p className="text-[10px] text-slate-700 uppercase tracking-wider font-bold mt-1">{currentUser.jabatan || currentUser.role}</p>
               </div>
               <div className="w-10 h-10 bg-white rounded-full flex items-center justify-center border-2 border-white shadow-sm overflow-hidden shrink-0 relative">
                 {currentUser.avatar ? (
@@ -201,9 +288,10 @@ export default function Header({ onMenuClick }: { onMenuClick?: () => void }) {
                   className="absolute top-full right-0 mt-2 w-48 bg-white rounded-2xl shadow-2xl border border-slate-200 overflow-hidden z-50 text-slate-800"
                 >
                   <div className="p-3 bg-slate-50 border-b border-slate-100">
-                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
+                    <p className="text-xs font-bold text-slate-800 truncate">
                       {currentUser.name}
                     </p>
+                    <p className="text-[10px] text-slate-500 truncate">{currentUser.jabatan || currentUser.role}</p>
                   </div>
                   
                   <div className="p-2 space-y-1">

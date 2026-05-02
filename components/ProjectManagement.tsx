@@ -17,7 +17,8 @@ import {
   FileText,
   Filter,
   Upload,
-  FileSpreadsheet
+  FileSpreadsheet,
+  Download
 } from 'lucide-react';
 import { useData, Project } from '@/context/DataContext';
 import { motion, AnimatePresence } from 'motion/react';
@@ -199,7 +200,6 @@ export default function ProjectManagement() {
           company: getValue(['company']),
           docking_id: getValue(['docking_id', 'dockingid']),
           docking_type: getValue(['docking_type', 'dockingtype']),
-          number_project: getValue(['number_project', 'numberproject', 'number project']),
           type: getValue(['type']),
           width: parseNum(getValue(['width', 'lebar'])),
           length: parseNum(getValue(['length', 'panjang'])),
@@ -243,12 +243,53 @@ export default function ProjectManagement() {
     }
   };
 
+  const downloadTemplate = () => {
+    const headers = [
+      'id_siaga', 'create_date', 'updated_at', 'idproject', 'shipname', 'cust_company', 
+      'approval_status', 'm_employee_id', 'est_start', 'est_finish', 'est_docking_date', 
+      'est_undocking_date', 'est_trial_date', 'est_arrival_date', 'est_departure_date', 
+      'docking', 'undocking', 'act_arrival_date', 'actual_start', 'actual_finish', 
+      'act_trial_date', 'act_departure_date', 'id', 'no', 'year', 'company', 'docking_id', 
+      'docking_type', 'type', 'width', 'length', 'location', 'x_coordinate', 'y_coordinate', 
+      'status_dock', 'ship_visibility', 'ship_condition', 'status', 'status_comercial', 
+      'duration_dock', 'duration_project', 'project_lead', 'price_contract', 'cost_actual', 
+      'gross_profit', 'safetyman', 'project_team', 'vendor_team', 'manpower_all', 
+      'manpower_in', 'manpower_ven', 'update_pdf', 'print'
+    ];
+    
+    const sampleRow = [
+      '101', '2024-05-01 08:00:00', '2024-05-01 08:00:00', 'JO-2024-001', 'MV SAMUDRA JAYA', 'PT GLOBAL MARITIM', 
+      'Approved', 'EMP-001', '2024-05-01', '2024-06-15', '2024-05-05', 
+      '2024-06-10', '2024-06-12', '2024-04-28', '2024-06-16', 
+      'Slipway 1', 'Slipway 1', '', '', '', 
+      '', '', '', '1', '2024', 'PT SHIPYARD HUB', 'DOCK-01', 
+      'Slipway', 'Repair', '25.5', '120.0', 'Area A', '0', '0', 
+      'Scheduled', 'Visible', 'Good', 'Active', 'DP Paid', 
+      '36', '45', 'AHMAD SUBARJO', '1500000000', '0', 
+      '0', 'BUDI K', 'Tim Alfa', 'Vendor A', '50', 
+      '20', '30', '-', '-'
+    ];
+
+    const csvContent = headers.join(',') + '\n' + sampleRow.map(v => `"${v}"`).join(',');
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(blob);
+    link.setAttribute('download', 'template_job_order.csv');
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
   const filteredProjects = projects.filter(p => 
     p.idproject.toLowerCase().includes(searchTerm.toLowerCase()) ||
     p.shipname?.toLowerCase().includes(searchTerm.toLowerCase()) ||
     p.cust_company?.toLowerCase().includes(searchTerm.toLowerCase()) ||
     p.project_lead?.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  ).sort((a, b) => {
+    const dateA = new Date(a.create_date || 0).getTime();
+    const dateB = new Date(b.create_date || 0).getTime();
+    return dateB - dateA; // Descending order (newest first)
+  });
 
   // Pagination Logic
   const totalItems = filteredProjects.length;
@@ -286,6 +327,55 @@ export default function ProjectManagement() {
     }
   };
 
+  const renderPaginationButtons = () => {
+    const buttons = [];
+    let startPage = Math.max(1, currentPage - 2);
+    let endPage = Math.min(totalPages, currentPage + 2);
+
+    if (currentPage <= 3) {
+      endPage = Math.min(totalPages, 5);
+    }
+    if (currentPage >= totalPages - 2) {
+      startPage = Math.max(1, totalPages - 4);
+    }
+
+    if (startPage > 1) {
+      buttons.push(
+        <button key={1} onClick={() => setCurrentPage(1)} className="w-8 h-8 rounded-lg text-xs font-bold transition-all hover:bg-white text-slate-500 border border-transparent hover:border-slate-200">1</button>
+      );
+      if (startPage > 2) {
+        buttons.push(<span key="dots-1" className="text-slate-400 px-1">...</span>);
+      }
+    }
+
+    for (let i = startPage; i <= endPage; i++) {
+      buttons.push(
+        <button
+          key={i}
+          onClick={() => setCurrentPage(i)}
+          className={`w-8 h-8 rounded-lg text-xs font-bold transition-all ${
+            currentPage === i 
+              ? 'bg-[#FDB913] text-slate-900 shadow-lg shadow-[#FDB913]/20' 
+              : 'hover:bg-white text-slate-500 border border-transparent hover:border-slate-200'
+          }`}
+        >
+          {i}
+        </button>
+      );
+    }
+
+    if (endPage < totalPages) {
+      if (endPage < totalPages - 1) {
+        buttons.push(<span key="dots-2" className="text-slate-400 px-1">...</span>);
+      }
+      buttons.push(
+        <button key={totalPages} onClick={() => setCurrentPage(totalPages)} className="w-8 h-8 rounded-lg text-xs font-bold transition-all hover:bg-white text-slate-500 border border-transparent hover:border-slate-200">{totalPages}</button>
+      );
+    }
+
+    return buttons;
+  };
+
   return (
     <div className="p-8 space-y-6">
       {/* Header Section */}
@@ -294,7 +384,15 @@ export default function ProjectManagement() {
           <h1 className="font-display font-bold text-2xl text-slate-800 tracking-tight">Job Order</h1>
           <p className="text-slate-500 text-sm mt-1">Manage project IDs and vessel assignments.</p>
         </div>
-        <div className="flex gap-3">
+        <div className="flex flex-wrap gap-3">
+          <button 
+            onClick={downloadTemplate}
+            className="flex items-center justify-center gap-2 px-6 py-2.5 bg-white border border-slate-200 text-slate-600 rounded-xl text-sm font-bold hover:bg-slate-50 transition-all shadow-sm"
+          >
+            <Download className="w-4 h-4 text-slate-500" />
+            <span className="hidden sm:inline">Download Template</span>
+            <span className="sm:hidden">Template</span>
+          </button>
           <label 
             htmlFor="project-import"
             className="flex items-center justify-center gap-2 px-6 py-2.5 bg-white border border-slate-200 text-slate-600 rounded-xl text-sm font-bold hover:bg-slate-50 transition-all cursor-pointer shadow-sm"
@@ -500,19 +598,7 @@ export default function ProjectManagement() {
                 <ChevronLeft className="w-4 h-4" />
               </button>
               <div className="flex items-center gap-1">
-                {Array.from({ length: totalPages }, (_, i) => i + 1).map(page => (
-                  <button
-                    key={page}
-                    onClick={() => setCurrentPage(page)}
-                    className={`w-8 h-8 rounded-lg text-xs font-bold transition-all ${
-                      currentPage === page 
-                        ? 'bg-[#FDB913] text-slate-900 shadow-lg shadow-[#FDB913]/20' 
-                        : 'hover:bg-white text-slate-500 border border-transparent hover:border-slate-200'
-                    }`}
-                  >
-                    {page}
-                  </button>
-                ))}
+                {renderPaginationButtons()}
               </div>
               <button 
                 onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}

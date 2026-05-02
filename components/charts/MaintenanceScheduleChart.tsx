@@ -30,7 +30,7 @@ export default function MaintenanceScheduleChart() {
       <h3 className="font-display font-bold text-slate-800 mb-4">Maintenance Schedule by Equipment Type</h3>
       <div className="h-[300px] w-full">
         {mounted && (
-          <ResponsiveContainer width="100%" height="100%">
+          <ResponsiveContainer width="99%" height="100%">
             <BarChart data={data} layout="vertical" margin={{ left: 40, right: 20 }}>
               <CartesianGrid strokeDasharray="3 3" horizontal={true} vertical={false} stroke="#f1f5f9" />
               <XAxis type="number" hide />

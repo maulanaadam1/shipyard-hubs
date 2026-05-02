@@ -27,7 +27,7 @@ import Papa from 'papaparse';
 import * as XLSX from 'xlsx';
 
 export default function ShipManagement() {
-  const { ships, setShips, companies } = useData();
+  const { ships, setShips, companies, dropdownConfigs } = useData();
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [showSuccessModal, setShowSuccessModal] = useState(false);
   const [editingShip, setEditingShip] = useState<Ship | null>(null);
@@ -346,9 +346,11 @@ export default function ShipManagement() {
                 <th className="px-6 py-4 border-b border-slate-100">Ship Name</th>
                 <th className="px-6 py-4 border-b border-slate-100">Type</th>
                 <th className="px-6 py-4 border-b border-slate-100">Owner</th>
-                <th className="px-6 py-4 border-b border-slate-100 text-center">GT</th>
                 <th className="px-6 py-4 border-b border-slate-100 text-center">LOA</th>
+                <th className="px-6 py-4 border-b border-slate-100 text-center">Breadth</th>
+                <th className="px-6 py-4 border-b border-slate-100 text-center">Depth</th>
                 <th className="px-6 py-4 border-b border-slate-100 text-center">Draft</th>
+                <th className="px-6 py-4 border-b border-slate-100 text-center">GT</th>
                 <th className="px-6 py-4 border-b border-slate-100 text-right">Actions</th>
               </tr>
             </thead>
@@ -393,16 +395,22 @@ export default function ShipManagement() {
                     </div>
                   </td>
                   <td className="px-6 py-4 text-center">
-                    <span className="text-xs font-bold text-slate-600">{ship.gt || 0}</span>
+                    <span className="text-xs font-bold text-slate-600">{ship.loa || 0}</span>
                   </td>
                   <td className="px-6 py-4 text-center">
-                    <span className="text-xs font-bold text-slate-600">{ship.loa || 0}</span>
+                    <span className="text-xs font-bold text-slate-600">{ship.breadth || 0}</span>
+                  </td>
+                  <td className="px-6 py-4 text-center">
+                    <span className="text-xs font-bold text-slate-600">{ship.depth || 0}</span>
                   </td>
                   <td className="px-6 py-4 text-center">
                     <span className="text-xs font-bold text-slate-600">{ship.draft || 0}</span>
                   </td>
+                  <td className="px-6 py-4 text-center">
+                    <span className="text-xs font-bold text-slate-600">{ship.gt || 0}</span>
+                  </td>
                   <td className="px-6 py-4 text-right">
-                    <div className="flex items-center justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <div className="flex items-center justify-end gap-1">
                       <button 
                         onClick={() => handleOpenModal(ship)}
                         className="p-2 text-slate-400 hover:text-[#FDB913] rounded-lg hover:bg-[#FDB913]/10 transition-colors"
@@ -415,9 +423,6 @@ export default function ShipManagement() {
                       >
                         <Trash2 className="w-4 h-4" />
                       </button>
-                    </div>
-                    <div className="group-hover:hidden">
-                      <MoreVertical className="w-4 h-4 text-slate-300 ml-auto" />
                     </div>
                   </td>
                 </motion.tr>
@@ -511,8 +516,8 @@ export default function ShipManagement() {
                   </div>
                   <div className="space-y-1">
                     <label className="text-xs font-bold text-slate-500 uppercase">Ship Type</label>
-                    <input 
-                      type="text"
+                    <select 
+                      required
                       value={formData.type}
                       onChange={(e) => setFormData({ ...formData, type: e.target.value })}
                       className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-[#FDB913]/30 focus:border-[#FDB913] transition-all"
