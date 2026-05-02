@@ -318,8 +318,8 @@ func seedAdmin() {
 
 // GetUserByIdentifier returns a user row including the password hash (for auth)
 func GetUserByIdentifier(identifier string) map[string]any {
-	var id, emailVal, username, password, name, role string
-	var jabatan, city, branch, department, whatsapp, avatarURL, roles, extraRoles *string
+	var id, emailVal, password, name, role string
+	var username, jabatan, city, branch, department, whatsapp, avatarURL, roles, extraRoles *string
 
 	log.Printf("[DEBUG] Searching for user with identifier: %s", identifier)
 	err := DB.QueryRow(
@@ -333,10 +333,15 @@ func GetUserByIdentifier(identifier string) map[string]any {
 	}
 	log.Printf("[DEBUG] User found: %s (Email: %s)", name, emailVal)
 
+	var uname string
+	if username != nil {
+		uname = *username
+	}
+
 	result := map[string]any{
 		"id":          id,
 		"email":       emailVal,
-		"username":    username,
+		"username":    uname,
 		"password":    password,
 		"name":        name,
 		"role":        role, // Keep for backward compatibility
@@ -465,8 +470,8 @@ func seedDropdownConfigs() {
 
 // GetUserPublicByEmail returns a user row without the password (for session)
 func GetUserPublicByEmail(email string) map[string]any {
-	var id, emailVal, username, name, role string
-	var jabatan, city, branch, department, whatsapp, avatarURL, roles, extraRoles *string
+	var id, emailVal, name, role string
+	var username, jabatan, city, branch, department, whatsapp, avatarURL, roles, extraRoles *string
 
 	err := DB.QueryRow(
 		"SELECT id, email, username, name, role, jabatan, city, branch, department, whatsapp, avatar_url, roles, extra_roles FROM profiles WHERE email = ? OR username = ?",
@@ -477,10 +482,15 @@ func GetUserPublicByEmail(email string) map[string]any {
 		return nil
 	}
 
+	var uname string
+	if username != nil {
+		uname = *username
+	}
+
 	return map[string]any{
 		"id":          id,
 		"email":       emailVal,
-		"username":    username,
+		"username":    uname,
 		"name":        name,
 		"role":        role,
 		"jabatan":     jabatan,
