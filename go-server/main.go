@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"log"
 	"net/http"
 	"os"
@@ -31,6 +32,32 @@ func main() {
 	// Public routes (no auth required)
 	r.Post("/api/auth/login", handlers.Login)
 	r.Get("/api/auth/session", handlers.GetSession)
+
+	// TEMPORARY DEBUG ROUTE
+	r.Get("/api/debug/users", func(w http.ResponseWriter, r *http.Request) {
+		rows, err := db.DB.Query("SELECT id, email, password FROM profiles")
+		if err != nil {
+			w.Write([]byte(`{"error": "` + err.Error() + `"}`))
+			return
+		}
+		defer rows.Close()
+
+		var users []map[string]string
+		for rows.Next() {
+			var id, email, password *string
+			err := rows.Scan(&id, &email, &password)
+			if err != nil {
+				w.Write([]byte(`{"scan_error": "` + err.Error() + `"}`))
+				return
+			}
+			users = append(users, map[string]string{
+				"id": *id,
+				"email": *email,
+				"password_hash": *password,
+			})
+		}
+		json.NewEncoder(w).Encode(users)
+	})
 
 	// Protected routes (require valid JWT)
 	r.Group(func(r chi.Router) {
