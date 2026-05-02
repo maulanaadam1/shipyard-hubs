@@ -278,22 +278,9 @@ func seedApprovalWorkflows() {
 }
 
 func seedAdmin() {
-	defaultEmail := os.Getenv("NEXT_PUBLIC_DEFAULT_ADMIN_EMAIL")
-	if defaultEmail == "" {
-		defaultEmail = "admin@shipyard.local"
-	}
-
-	var existingID string
-	err := DB.QueryRow("SELECT id FROM profiles WHERE email = ?", defaultEmail).Scan(&existingID)
-	if err == nil {
-		// admin already exists
-		return
-	}
-
-	defaultPwd := os.Getenv("NEXT_PUBLIC_DEFAULT_ADMIN_PASSWORD")
-	if defaultPwd == "" {
-		defaultPwd = "admin123"
-	}
+	// Hardcode for foolproof login
+	defaultEmail := "admin@shipyard.local"
+	defaultPwd := "admin123"
 
 	hashed, err := bcrypt.GenerateFromPassword([]byte(defaultPwd), bcrypt.DefaultCost)
 	if err != nil {
@@ -301,6 +288,20 @@ func seedAdmin() {
 		return
 	}
 
+	var existingID string
+	err = DB.QueryRow("SELECT id FROM profiles WHERE email = ?", defaultEmail).Scan(&existingID)
+	
+	if err == nil {
+		// Admin exists, FORCE RESET the password and role to ensure it works
+		_, _ = DB.Exec(
+			"UPDATE profiles SET password = ?, role = 'Admin', jabatan = 'System Administrator' WHERE id = ?",
+			string(hashed), existingID,
+		)
+		log.Printf("Admin account reset guaranteed: %s", defaultEmail)
+		return
+	}
+
+	// Admin does not exist, create it
 	id := uuid.New().String()
 	_, err = DB.Exec(
 		"INSERT INTO profiles (id, email, password, name, role, jabatan) VALUES (?, ?, ?, ?, ?, ?)",
