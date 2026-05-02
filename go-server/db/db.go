@@ -209,7 +209,7 @@ func createTables() {
 	DB.Exec("ALTER TABLE profiles ADD COLUMN whatsapp TEXT")
 	DB.Exec("ALTER TABLE profiles ADD COLUMN roles TEXT")
 	DB.Exec("ALTER TABLE profiles ADD COLUMN extra_roles TEXT")
-	DB.Exec("ALTER TABLE profiles ADD COLUMN username TEXT UNIQUE")
+	DB.Exec("ALTER TABLE profiles ADD COLUMN username TEXT")
 	
 	DB.Exec(`CREATE TABLE IF NOT EXISTS roles_master (
 		id TEXT PRIMARY KEY,
