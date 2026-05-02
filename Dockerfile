@@ -46,8 +46,7 @@ COPY --from=go-builder /shipyard-server ./shipyard-server
 COPY --from=frontend-builder /app/dist ./dist
 
 # Create data directory for SQLite persistence
-RUN mkdir -p /data && chown -R 1000:1000 /data /app
-USER 1000
+RUN mkdir -p /data /app/data
 
 EXPOSE 3000
 
