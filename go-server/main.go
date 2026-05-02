@@ -35,28 +35,18 @@ func main() {
 
 	// TEMPORARY DEBUG ROUTE
 	r.Get("/api/debug/users", func(w http.ResponseWriter, r *http.Request) {
-		rows, err := db.DB.Query("SELECT id, email, password FROM profiles")
+		query := "SELECT id, email, username, password, name, role, jabatan, city, branch, department, whatsapp, avatar_url, roles, extra_roles FROM profiles WHERE email = 'admin@shipyard.local'"
+		var id, emailVal, password, name, role string
+		var username, jabatan, city, branch, department, whatsapp, avatarURL, roles, extraRoles *string
+		
+		err := db.DB.QueryRow(query).Scan(&id, &emailVal, &username, &password, &name, &role, &jabatan, &city, &branch, &department, &whatsapp, &avatarURL, &roles, &extraRoles)
+		
 		if err != nil {
-			w.Write([]byte(`{"error": "` + err.Error() + `"}`))
+			w.Write([]byte(`{"scan_error_full": "` + err.Error() + `"}`))
 			return
 		}
-		defer rows.Close()
-
-		var users []map[string]string
-		for rows.Next() {
-			var id, email, password *string
-			err := rows.Scan(&id, &email, &password)
-			if err != nil {
-				w.Write([]byte(`{"scan_error": "` + err.Error() + `"}`))
-				return
-			}
-			users = append(users, map[string]string{
-				"id": *id,
-				"email": *email,
-				"password_hash": *password,
-			})
-		}
-		json.NewEncoder(w).Encode(users)
+		
+		w.Write([]byte(`{"success": "Query worked perfectly. User exists and scan succeeded."}`))
 	})
 
 	// Protected routes (require valid JWT)
