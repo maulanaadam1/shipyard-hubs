@@ -30,19 +30,23 @@ export default function ShipProjectGanttChart() {
 
     // Filter active projects that have valid dates
     const activeProjects = projects.filter(p => {
-      // Assuming 'Active' or similar status. If status is undefined, you might need to adjust this.
-      const isActive = p.status?.toLowerCase() === 'active' || p.status?.toLowerCase() === 'in progress';
+      const s = p.status?.toLowerCase() || 'active'; // Default to active if null
+      const isActive = s === 'active' || s === 'in progress' || s === 'on going' || s === 'ongoing';
       if (!isActive) return false;
-      if (!p.est_start || !p.est_finish) return false;
+      const startDateStr = p.est_start || p.actual_start;
+      const endDateStr = p.est_finish || p.actual_finish;
+      if (!startDateStr || !endDateStr) return false;
       
-      const start = new Date(p.est_start).getTime();
-      const end = new Date(p.est_finish).getTime();
+      const start = new Date(startDateStr).getTime();
+      const end = new Date(endDateStr).getTime();
       
       // Check if it overlaps with our 6-month window
       return start <= windowEnd && end >= windowStart;
     }).map(p => {
-      const start = new Date(p.est_start!).getTime();
-      const end = new Date(p.est_finish!).getTime();
+      const startDateStr = p.est_start || p.actual_start;
+      const endDateStr = p.est_finish || p.actual_finish;
+      const start = new Date(startDateStr!).getTime();
+      const end = new Date(endDateStr!).getTime();
       
       // Calculate position percentages
       const clampedStart = Math.max(start, windowStart);
@@ -58,8 +62,8 @@ export default function ShipProjectGanttChart() {
         id: p.id,
         name: p.shipname || p.idproject,
         code: p.idproject,
-        startStr: p.est_start,
-        endStr: p.est_finish,
+        startStr: startDateStr,
+        endStr: endDateStr,
         left: Math.max(0, leftPercent),
         width: Math.max(2, widthPercent), // Minimum width for visibility
         color: isDelayed ? '#ef4444' : '#0ea5e9', // red if delayed, blue otherwise
