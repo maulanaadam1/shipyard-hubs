@@ -528,6 +528,8 @@ export default function ProjectManagement() {
                 <th className="px-6 py-4 text-[10px] font-bold text-slate-400 uppercase tracking-widest text-center">Year</th>
                 <th className="px-6 py-4 text-[10px] font-bold text-slate-400 uppercase tracking-widest">Status</th>
                 <th className="px-6 py-4 text-[10px] font-bold text-slate-400 uppercase tracking-widest">Lead</th>
+                <th className="px-6 py-4 text-[10px] font-bold text-slate-400 uppercase tracking-widest">Docking Type</th>
+                <th className="px-6 py-4 text-[10px] font-bold text-slate-400 uppercase tracking-widest">Location</th>
                 <th className="px-6 py-4 text-[10px] font-bold text-slate-400 uppercase tracking-widest text-right">Actions</th>
               </tr>
             </thead>
@@ -579,6 +581,20 @@ export default function ProjectManagement() {
                     <div className="flex items-center gap-2">
                       <UserIcon className="w-3.5 h-3.5 text-slate-400" />
                       <span className="text-sm text-slate-500">{project.project_lead || '-'}</span>
+                    </div>
+                  </td>
+                  <td className="px-6 py-4">
+                    {project.docking_type ? (
+                      <span className="px-2.5 py-1 rounded-full text-[10px] font-bold bg-amber-50 text-amber-700 border border-amber-100 whitespace-nowrap">
+                        {project.docking_type}
+                      </span>
+                    ) : (
+                      <span className="text-slate-300 text-xs">-</span>
+                    )}
+                  </td>
+                  <td className="px-6 py-4">
+                    <div className="flex items-center gap-1.5 text-slate-500">
+                      <span className="text-sm">{project.location || '-'}</span>
                     </div>
                   </td>
                   <td className="px-6 py-4 text-right">
