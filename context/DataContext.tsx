@@ -518,14 +518,6 @@ export function DataProvider({ children }: { children: ReactNode }) {
 
     fetchSession();
 
-    // --- Auto-Polling for Data Sync (SQLite Real-time Workaround) ---
-    // Since we use local SQLite, we pull fresh data every 3 seconds
-    const pollInterval = setInterval(() => {
-      if (currentUserIdRef.current) {
-        fetchData(false);
-      }
-    }, 3000);
-
     return () => {
       if (typeof window !== 'undefined') {
         window.removeEventListener('mousemove', throttledUpdateActivity);
@@ -533,7 +525,6 @@ export function DataProvider({ children }: { children: ReactNode }) {
         window.removeEventListener('click', throttledUpdateActivity);
         window.removeEventListener('scroll', throttledUpdateActivity);
       }
-      clearInterval(pollInterval);
     };
   }, [fetchData, currentUser?.id]);
 
