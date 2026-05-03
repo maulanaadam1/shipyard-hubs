@@ -31,6 +31,7 @@ var allowedTables = map[string]bool{
 	"equipment_release":  true,
 	"approval_workflow":  true,
 	"notifications":      true,
+	"master_locations":   true,
 }
 
 // getPKCol returns the primary key column name for a given table
@@ -57,6 +58,7 @@ var tableToResource = map[string]string{
 	"equipment_release":  "Release",
 	"approval_workflow":  "Master Workflow",
 	"notifications":      "Dashboard",
+	"master_locations":   "Master Location",
 }
 
 // CheckTablePermission verifies if the user from context has permission for table and action
