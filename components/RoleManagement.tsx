@@ -14,7 +14,8 @@ import {
   MousePointer2,
   Trash2,
   ShieldAlert,
-  Info
+  Info,
+  Edit2
 } from 'lucide-react';
 import { useData, RoleMaster, RolePermission } from '@/context/DataContext';
 import { api } from '@/lib/api-client';
@@ -47,6 +48,7 @@ export default function RoleManagement() {
   const { rolesMaster, rolePermissions, fetchData, currentUser } = useData();
   const [selectedRole, setSelectedRole] = useState<RoleMaster | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isEditingRole, setIsEditingRole] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [localPermissions, setLocalPermissions] = useState<RolePermission[]>([]);
 
@@ -65,35 +67,72 @@ export default function RoleManagement() {
 
   const handleAddRole = () => {
     setFormData({ name: '', description: '' });
+    setIsEditingRole(false);
     setIsModalOpen(true);
+  };
+
+  const handleEditRoleHeader = (role: RoleMaster) => {
+    setFormData({ name: role.name, description: role.description || '' });
+    setSelectedRole(role);
+    setIsEditingRole(true);
+    setIsModalOpen(true);
+  };
+
+  const handleDeleteRole = async (roleId: string, roleName: string) => {
+    if (!confirm(`Hapus role "${roleName}"? Semua izin terkait juga akan dihapus.`)) return;
+    setIsLoading(true);
+    try {
+      // Delete permissions first
+      await api.from('role_permissions').delete().eq('role_id', roleId);
+      // Delete role master
+      const { error } = await api.from('roles_master').delete().eq('id', roleId);
+      if (error) throw error;
+      
+      if (selectedRole?.id === roleId) setSelectedRole(null);
+      await fetchData();
+    } catch (err: any) {
+      alert('Error: ' + err.message);
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   const handleSubmitRole = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
     try {
-      const roleID = Math.random().toString(36).substring(2, 11);
-      const { error } = await api.from('roles_master').insert([{
-        id: roleID,
-        name: formData.name,
-        description: formData.description
-      }]);
+      if (isEditingRole && selectedRole) {
+        const { error } = await api.from('roles_master')
+          .update({
+            name: formData.name,
+            description: formData.description
+          })
+          .eq('id', selectedRole.id);
+        if (error) throw error;
+      } else {
+        const roleID = Math.random().toString(36).substring(2, 11);
+        const { error } = await api.from('roles_master').insert([{
+          id: roleID,
+          name: formData.name,
+          description: formData.description
+        }]);
 
-      if (error) throw error;
+        if (error) throw error;
 
-      // Seed default permissions for new role (all false)
-      const initialPerms = [];
-      for (const res of RESOURCES) {
-        for (const act of ACTIONS) {
-          initialPerms.push({
-            role_id: roleID,
-            resource: res.id,
-            action: act,
-            is_allowed: false
-          });
+        // Seed default permissions for new role (all false)
+        const initialPerms = [];
+        for (const res of RESOURCES) {
+          for (const act of ACTIONS) {
+            initialPerms.push({
+              role_id: roleID,
+              resource: res.id,
+              action: act,
+              is_allowed: false
+            });
+          }
         }
+        await api.from('role_permissions').insert(initialPerms);
       }
-      await api.from('role_permissions').insert(initialPerms);
 
       setIsModalOpen(false);
       await fetchData();
@@ -114,7 +153,6 @@ export default function RoleManagement() {
             : p
         );
       } else {
-        // Should not happen if seeded, but for safety:
         return [...prev, { id: '', role_id: selectedRole!.id, resource, action, is_allowed: true }];
       }
     });
@@ -124,8 +162,6 @@ export default function RoleManagement() {
     if (!selectedRole) return;
     setIsLoading(true);
     try {
-      // Delete old and insert new (or upsert if your API supports it)
-      // For simplicity in this generic handler, we delete and re-insert
       await api.from('role_permissions').delete().eq('role_id', selectedRole.id);
       
       const { error } = await api.from('role_permissions').insert(
@@ -178,21 +214,43 @@ export default function RoleManagement() {
             <h3 className="text-[10px] font-bold text-slate-400 uppercase tracking-widest px-3 mb-4">Available Roles</h3>
             <div className="space-y-1">
               {rolesMaster.map(role => (
-                <button
+                <div 
                   key={role.id}
-                  onClick={() => setSelectedRole(role)}
-                  className={`w-full flex flex-col items-start px-4 py-3 rounded-xl transition-all border ${
+                  className={`group relative w-full flex flex-col items-start px-4 py-3 rounded-xl transition-all border ${
                     selectedRole?.id === role.id 
                       ? 'bg-[#FDB913]/10 text-[#e5a611] border-[#FDB913]/20' 
                       : 'text-slate-600 hover:bg-slate-50 border-transparent'
                   }`}
                 >
                   <div className="flex items-center justify-between w-full">
-                    <span className="text-sm font-bold">{role.name}</span>
-                    <ChevronRight className={`w-4 h-4 ${selectedRole?.id === role.id ? 'opacity-100' : 'opacity-0'}`} />
+                    <button 
+                      onClick={() => setSelectedRole(role)}
+                      className="text-sm font-bold text-left flex-1"
+                    >
+                      {role.name}
+                    </button>
+                    <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                      <button 
+                        onClick={() => handleEditRoleHeader(role)}
+                        className="p-1 hover:bg-[#FDB913]/20 rounded-md text-[#e5a611]"
+                        title="Edit Role Name"
+                      >
+                        <Edit2 className="w-3.5 h-3.5" />
+                      </button>
+                      {role.name !== 'Admin' && (
+                        <button 
+                          onClick={() => handleDeleteRole(role.id, role.name)}
+                          className="p-1 hover:bg-red-50 rounded-md text-red-400 hover:text-red-600"
+                          title="Delete Role"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      )}
+                      <ChevronRight className={`w-4 h-4 ml-1 ${selectedRole?.id === role.id ? 'opacity-100' : 'opacity-0'}`} />
+                    </div>
                   </div>
-                  <span className="text-[10px] text-slate-400 text-left mt-0.5 line-clamp-1">{role.description}</span>
-                </button>
+                  <span className="text-[10px] text-slate-400 text-left mt-0.5 line-clamp-1 pr-12">{role.description}</span>
+                </div>
               ))}
             </div>
           </div>
@@ -232,7 +290,7 @@ export default function RoleManagement() {
                       RESOURCES.forEach(res => {
                         ACTIONS.forEach(act => {
                           allPerms.push({
-                            id: '', // Will be handled on save
+                            id: '', 
                             role_id: selectedRole.id,
                             resource: res.id,
                             action: act,
@@ -311,7 +369,7 @@ export default function RoleManagement() {
         </div>
       </div>
 
-      {/* Add Role Modal */}
+      {/* Add/Edit Role Modal */}
       <AnimatePresence>
         {isModalOpen && (
           <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
@@ -334,7 +392,9 @@ export default function RoleManagement() {
                     <div className="w-10 h-10 bg-[#FDB913]/20 rounded-xl flex items-center justify-center text-[#FDB913]">
                       <Shield className="w-5 h-5" />
                     </div>
-                    <h3 className="font-display font-bold text-xl text-slate-800">Create New Role</h3>
+                    <h3 className="font-display font-bold text-xl text-slate-800">
+                      {isEditingRole ? 'Edit Role' : 'Create New Role'}
+                    </h3>
                   </div>
                   <button type="button" onClick={() => setIsModalOpen(false)} className="p-2 hover:bg-slate-200 rounded-full">
                     <X className="w-5 h-5 text-slate-500" />
@@ -377,7 +437,7 @@ export default function RoleManagement() {
                     disabled={isLoading}
                     className="px-8 py-2.5 bg-[#FDB913] text-slate-900 rounded-xl text-sm font-bold hover:bg-[#e5a611] transition-all shadow-lg shadow-[#FDB913]/20"
                   >
-                    {isLoading ? 'Creating...' : 'Create Role'}
+                    {isLoading ? (isEditingRole ? 'Updating...' : 'Creating...') : (isEditingRole ? 'Update Role' : 'Create Role')}
                   </button>
                 </div>
               </form>
