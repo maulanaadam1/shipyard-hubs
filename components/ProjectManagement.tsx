@@ -56,6 +56,17 @@ export default function ProjectManagement() {
     est_departure_date: ''
   });
 
+  const formatDateForInput = (dateStr?: string) => {
+    if (!dateStr) return '';
+    if (/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) return dateStr;
+    const d = new Date(dateStr);
+    if (isNaN(d.getTime())) return '';
+    const year = d.getFullYear();
+    const month = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  };
+
   const handleOpenModal = (project: Project | null = null) => {
     if (project) {
       setEditingProject(project);
@@ -66,13 +77,13 @@ export default function ProjectManagement() {
         year: project.year || new Date().getFullYear(), 
         status: project.status || 'Active',
         project_lead: project.project_lead || '',
-        est_start: project.est_start || '',
-        est_finish: project.est_finish || '',
-        est_docking_date: project.est_docking_date || '',
-        est_undocking_date: project.est_undocking_date || '',
-        est_trial_date: project.est_trial_date || '',
-        est_arrival_date: project.est_arrival_date || '',
-        est_departure_date: project.est_departure_date || ''
+        est_start: formatDateForInput(project.est_start),
+        est_finish: formatDateForInput(project.est_finish),
+        est_docking_date: formatDateForInput(project.est_docking_date),
+        est_undocking_date: formatDateForInput(project.est_undocking_date),
+        est_trial_date: formatDateForInput(project.est_trial_date),
+        est_arrival_date: formatDateForInput(project.est_arrival_date),
+        est_departure_date: formatDateForInput(project.est_departure_date)
       });
     } else {
       setEditingProject(null);
