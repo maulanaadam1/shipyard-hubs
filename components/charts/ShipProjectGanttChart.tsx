@@ -6,6 +6,8 @@ import { useData } from '@/context/DataContext';
 export default function ShipProjectGanttChart() {
   const { projects } = useData();
   const [viewMode, setViewMode] = useState<'daily' | 'weekly' | 'monthly'>('monthly');
+  const [hoveredProject, setHoveredProject] = useState<any>(null);
+  const [mousePos, setMousePos] = useState({ x: 0, y: 0 });
 
   const chartData = useMemo(() => {
     const headers = [];
@@ -196,13 +198,20 @@ export default function ShipProjectGanttChart() {
                   
                   <div className="flex-1 relative h-6 bg-slate-50 rounded-full">
                     <div 
-                      className="absolute top-0 bottom-0 rounded-full shadow-sm flex items-center justify-center overflow-hidden transition-all duration-300 group-hover:brightness-110"
+                      className="absolute top-0 bottom-0 rounded-full shadow-sm flex items-center justify-center overflow-hidden transition-all duration-300 group-hover:brightness-110 cursor-pointer"
                       style={{ 
                         left: `${project.left}%`, 
                         width: `${project.width}%`,
                         backgroundColor: project.color
                       }}
-                      title={`${project.name} (${project.startStr} to ${project.endStr})`}
+                      onMouseEnter={(e) => {
+                        setHoveredProject(project);
+                        setMousePos({ x: e.clientX, y: e.clientY });
+                      }}
+                      onMouseMove={(e) => {
+                        setMousePos({ x: e.clientX, y: e.clientY });
+                      }}
+                      onMouseLeave={() => setHoveredProject(null)}
                     >
                     </div>
                   </div>
@@ -212,6 +221,34 @@ export default function ShipProjectGanttChart() {
           </div>
         </div>
       </div>
+
+      {/* Floating Tooltip */}
+      {hoveredProject && (
+        <div 
+          className="fixed z-[100] bg-slate-900 text-white p-4 rounded-2xl shadow-2xl pointer-events-none transform -translate-x-1/2 -translate-y-[calc(100%+16px)] min-w-[250px]"
+          style={{ left: mousePos.x, top: mousePos.y }}
+        >
+          <div className="absolute -bottom-2 left-1/2 -translate-x-1/2 w-4 h-4 bg-slate-900 rotate-45"></div>
+          <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-1">{hoveredProject.code}</p>
+          <p className="font-display font-bold text-lg leading-tight mb-3">{hoveredProject.name}</p>
+          
+          <div className="space-y-2 bg-white/10 rounded-xl p-3">
+            <div className="flex justify-between items-center text-sm">
+              <span className="text-slate-400">Start Date:</span>
+              <span className="font-medium text-[#FDB913]">{hoveredProject.startStr}</span>
+            </div>
+            <div className="flex justify-between items-center text-sm">
+              <span className="text-slate-400">Finish Date:</span>
+              <span className="font-medium text-[#FDB913]">{hoveredProject.endStr}</span>
+            </div>
+          </div>
+          
+          <div className="mt-3 flex items-center gap-2">
+            <div className="w-2 h-2 rounded-full" style={{ backgroundColor: hoveredProject.color }}></div>
+            <span className="text-xs font-medium">{hoveredProject.color === '#ef4444' ? 'Delayed/Overdue' : 'On Track'}</span>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
