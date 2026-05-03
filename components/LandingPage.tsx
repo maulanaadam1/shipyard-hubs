@@ -47,7 +47,14 @@ export default function LandingPage() {
   };
 
   const handleGoogleLogin = async () => {
-    alert("Login with Google is currently disabled in local SQLite mode.");
+    setIsLoading(true);
+    setError('');
+    const { error: authError } = await api.auth.signInWithOAuth({ provider: 'google' });
+    if (authError) {
+      setError(authError.message);
+      setIsLoading(false);
+    }
+    // Redirect happens automatically with OAuth
   };
 
   return (

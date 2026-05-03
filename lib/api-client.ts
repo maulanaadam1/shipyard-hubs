@@ -198,6 +198,18 @@ export const api = {
             }
             return { data: null, error: { message: 'Signup requires Supabase configuration.' } };
         },
+        signInWithOAuth: async ({ provider }: { provider: 'google' | 'github' }) => {
+            if (supabase) {
+                const { error } = await supabase.auth.signInWithOAuth({
+                    provider,
+                    options: {
+                        redirectTo: window.location.origin
+                    }
+                });
+                return { error: error ? { message: error.message } : null };
+            }
+            return { error: { message: 'OAuth requires Supabase configuration.' } };
+        },
         onAuthStateChange: (callback: any) => {
             if (supabase) {
                 const { data: { subscription } } = supabase.auth.onAuthStateChange(callback);
