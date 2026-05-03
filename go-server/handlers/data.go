@@ -32,6 +32,7 @@ var allowedTables = map[string]bool{
 	"approval_workflow":  true,
 	"notifications":      true,
 	"master_locations":   true,
+	"ship_movements":     true,
 }
 
 // getPKCol returns the primary key column name for a given table
@@ -59,6 +60,7 @@ var tableToResource = map[string]string{
 	"approval_workflow":  "Master Workflow",
 	"notifications":      "Dashboard",
 	"master_locations":   "Master Location",
+	"ship_movements":     "Job Order",
 }
 
 // CheckTablePermission verifies if the user from context has permission for table and action
@@ -129,7 +131,7 @@ func defaultOrderCol(table string) string {
 		return "created_at"
 	case "loan_requests":
 		return "date_created"
-	case "deployment_records", "projects":
+	case "deployment_records", "projects", "ship_movements":
 		return "create_date"
 	case "notifications":
 		return "created_at"

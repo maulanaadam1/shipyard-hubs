@@ -1,11 +1,11 @@
 'use client';
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import {
   Anchor, Search, Edit2, X, Save,
   Calendar, Clock, ChevronLeft, ChevronRight,
-  Filter, Ship, ChevronDown
+  Filter, Ship, ChevronDown, Plus, Trash2, History
 } from 'lucide-react';
 import { useData } from '@/context/DataContext';
 import { api } from '@/lib/api-client';
@@ -19,6 +19,19 @@ function toInputDate(dateStr?: string) {
   return d.toISOString().split('T')[0];
 }
 
+function formatDateTime(dateTimeStr?: string) {
+  if (!dateTimeStr) return '-';
+  const d = new Date(dateTimeStr);
+  if (isNaN(d.getTime())) return dateTimeStr;
+  return d.toLocaleString('id-ID', {
+    day: '2-digit',
+    month: 'short',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit'
+  });
+}
+
 type DockingForm = {
   actual_start: string;
   actual_finish: string;
@@ -28,6 +41,15 @@ type DockingForm = {
   docking: string;
   undocking: string;
   status_dock: string;
+};
+
+type MovementActivity = {
+  id: string;
+  project_id: string;
+  activity_name: string;
+  start_time: string;
+  end_time: string;
+  create_date: string;
 };
 
 export default function ShipDocking() {
@@ -45,6 +67,17 @@ export default function ShipDocking() {
     docking: '', undocking: '', status_dock: ''
   });
   const [saving, setSaving] = useState(false);
+
+  // Movement Activities state
+  const [expandedProjectId, setExpandedProjectId] = useState<string | null>(null);
+  const [movementLogs, setMovementLogs] = useState<MovementActivity[]>([]);
+  const [loadingLogs, setLoadingLogs] = useState(false);
+  const [newLog, setNewLog] = useState({
+    activity_name: '',
+    start_time: '',
+    end_time: ''
+  });
+  const [addingLog, setAddingLog] = useState(false);
 
   const filtered = useMemo(() => {
     return projects
@@ -122,13 +155,71 @@ export default function ShipDocking() {
     return 'bg-slate-100 text-slate-500';
   };
 
+  // --- Movement Log Functions ---
+  const fetchMovementLogs = async (projectId: string) => {
+    setLoadingLogs(true);
+    try {
+      const { data, error } = await api.from('ship_movements')
+        .select('*')
+        .eq('project_id', projectId);
+      if (error) throw error;
+      setMovementLogs(data || []);
+    } catch (err) {
+      console.error('Error fetching logs:', err);
+    } finally {
+      setLoadingLogs(false);
+    }
+  };
+
+  const toggleExpand = (projectId: string) => {
+    if (expandedProjectId === projectId) {
+      setExpandedProjectId(null);
+      setMovementLogs([]);
+    } else {
+      setExpandedProjectId(projectId);
+      fetchMovementLogs(projectId);
+      setNewLog({ activity_name: '', start_time: '', end_time: '' });
+    }
+  };
+
+  const handleAddLog = async () => {
+    if (!expandedProjectId || !newLog.activity_name) return;
+    setAddingLog(true);
+    try {
+      const { error } = await api.from('ship_movements').insert([
+        {
+          project_id: expandedProjectId,
+          ...newLog
+        }
+      ]);
+      if (error) throw error;
+      setNewLog({ activity_name: '', start_time: '', end_time: '' });
+      fetchMovementLogs(expandedProjectId);
+    } catch (err: any) {
+      alert('Gagal menambah aktivitas: ' + err.message);
+    } finally {
+      setAddingLog(false);
+    }
+  };
+
+  const handleDeleteLog = async (id: string) => {
+    if (!confirm('Hapus log aktivitas ini?')) return;
+    try {
+      const { error } = await api.from('ship_movements').delete().eq('id', id);
+      if (error) throw error;
+      if (expandedProjectId) fetchMovementLogs(expandedProjectId);
+    } catch (err: any) {
+      alert('Gagal menghapus: ' + err.message);
+    }
+  };
+
   return (
     <div className="p-8 space-y-6">
       {/* Header */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
           <h1 className="font-display font-bold text-2xl text-slate-800 tracking-tight">Ship Docking</h1>
-          <p className="text-slate-500 text-sm mt-1">Update tanggal aktual dan status dok kapal.</p>
+          <p className="text-slate-500 text-sm mt-1">Update tanggal aktual, status dok, dan log pergerakan kapal.</p>
         </div>
       </div>
 
@@ -179,9 +270,6 @@ export default function ShipDocking() {
                 <option value="all">All</option>
               </select>
             </div>
-            <button className="p-2 bg-white border border-slate-200 rounded-lg text-slate-500 hover:text-[#FDB913] hover:border-[#FDB913]/30 transition-colors">
-              <Filter className="w-4 h-4" />
-            </button>
           </div>
         </div>
 
@@ -207,40 +295,156 @@ export default function ShipDocking() {
                 paginated.map((project, idx) => {
                   const globalNo = itemsPerPage === 'all' ? idx + 1 : (currentPage - 1) * (itemsPerPage as number) + idx + 1;
                   const dockClass = getDockBadge(project);
+                  const isExpanded = expandedProjectId === project.id;
+                  
                   return (
-                    <motion.tr
-                      layout
-                      key={project.id}
-                      className="hover:bg-slate-50/80 transition-colors"
-                    >
-                      <td className="px-6 py-4">
-                        <span className="text-xs font-mono font-bold text-slate-400">#{globalNo}</span>
-                      </td>
-                      <td className="px-6 py-4">
-                        <div className="flex items-center gap-3">
-                          <div className="w-8 h-8 bg-[#FDB913]/10 rounded-lg flex items-center justify-center shrink-0">
-                            <Ship className="w-4 h-4 text-[#FDB913]" />
+                    <React.Fragment key={project.id}>
+                      <motion.tr
+                        layout
+                        className={`hover:bg-slate-50/80 transition-colors cursor-pointer ${isExpanded ? 'bg-slate-50/80' : ''}`}
+                        onClick={() => toggleExpand(project.id)}
+                      >
+                        <td className="px-6 py-4">
+                          <span className="text-xs font-mono font-bold text-slate-400">#{globalNo}</span>
+                        </td>
+                        <td className="px-6 py-4">
+                          <div className="flex items-center gap-3">
+                            <div className="w-8 h-8 bg-[#FDB913]/10 rounded-lg flex items-center justify-center shrink-0">
+                              <Ship className="w-4 h-4 text-[#FDB913]" />
+                            </div>
+                            <div>
+                              <p className="text-sm font-bold text-slate-700">{project.shipname || '-'}</p>
+                              <p className="text-[10px] text-slate-400">{project.idproject} · {project.location || 'No Location'}</p>
+                            </div>
                           </div>
-                          <div>
-                            <p className="text-sm font-bold text-slate-700">{project.shipname || '-'}</p>
-                            <p className="text-[10px] text-slate-400">{project.idproject} · {project.location || 'No Location'}</p>
+                        </td>
+                        <td className="px-6 py-4">
+                          <span className={'px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider ' + dockClass}>
+                            {project.status_dock || 'Belum Dok'}
+                          </span>
+                        </td>
+                        <td className="px-6 py-4 text-right">
+                          <div className="flex items-center justify-end gap-2">
+                            <button
+                              onClick={(e) => { e.stopPropagation(); toggleExpand(project.id); }}
+                              className={`p-2 rounded-lg transition-all ${isExpanded ? 'bg-[#FDB913] text-slate-900' : 'text-slate-400 hover:text-[#FDB913] hover:bg-white hover:shadow-sm'}`}
+                              title="Log Pergerakan"
+                            >
+                              <History className="w-4 h-4" />
+                            </button>
+                            <button
+                              onClick={(e) => { e.stopPropagation(); openEdit(project); }}
+                              className="p-2 hover:bg-white hover:shadow-sm rounded-lg transition-all text-slate-400 hover:text-[#FDB913]"
+                              title="Update Status"
+                            >
+                              <Edit2 className="w-4 h-4" />
+                            </button>
                           </div>
-                        </div>
-                      </td>
-                      <td className="px-6 py-4">
-                        <span className={'px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider ' + dockClass}>
-                          {project.status_dock || 'Belum Dok'}
-                        </span>
-                      </td>
-                      <td className="px-6 py-4 text-right">
-                        <button
-                          onClick={() => openEdit(project)}
-                          className="p-2 hover:bg-white hover:shadow-sm rounded-lg transition-all text-slate-400 hover:text-[#FDB913]"
-                        >
-                          <Edit2 className="w-4 h-4" />
-                        </button>
-                      </td>
-                    </motion.tr>
+                        </td>
+                      </motion.tr>
+
+                      {/* Expanded Section for Movement Logs */}
+                      <AnimatePresence>
+                        {isExpanded && (
+                          <motion.tr
+                            initial={{ opacity: 0, height: 0 }}
+                            animate={{ opacity: 1, height: 'auto' }}
+                            exit={{ opacity: 0, height: 0 }}
+                            className="bg-slate-50/30"
+                          >
+                            <td colSpan={4} className="p-0">
+                              <div className="px-20 py-6 space-y-6">
+                                <div className="flex items-center justify-between border-b border-slate-200 pb-3">
+                                  <div className="flex items-center gap-2">
+                                    <History className="w-4 h-4 text-slate-400" />
+                                    <h4 className="text-sm font-bold text-slate-700">Log Pergerakan Kapal</h4>
+                                  </div>
+                                </div>
+
+                                {/* Form Add Log */}
+                                <div className="grid grid-cols-1 md:grid-cols-4 gap-4 bg-white p-4 rounded-xl border border-slate-100 shadow-sm">
+                                  <div className="space-y-1">
+                                    <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Aktivitas</label>
+                                    <input
+                                      type="text"
+                                      placeholder="Contoh: Pindah ke Dock 1"
+                                      value={newLog.activity_name}
+                                      onChange={(e) => setNewLog({ ...newLog, activity_name: e.target.value })}
+                                      className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm outline-none focus:ring-2 focus:ring-[#FDB913]/30"
+                                    />
+                                  </div>
+                                  <div className="space-y-1">
+                                    <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Mulai</label>
+                                    <input
+                                      type="datetime-local"
+                                      value={newLog.start_time}
+                                      onChange={(e) => setNewLog({ ...newLog, start_time: e.target.value })}
+                                      className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm outline-none focus:ring-2 focus:ring-[#FDB913]/30"
+                                    />
+                                  </div>
+                                  <div className="space-y-1">
+                                    <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Selesai</label>
+                                    <input
+                                      type="datetime-local"
+                                      value={newLog.end_time}
+                                      onChange={(e) => setNewLog({ ...newLog, end_time: e.target.value })}
+                                      className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm outline-none focus:ring-2 focus:ring-[#FDB913]/30"
+                                    />
+                                  </div>
+                                  <div className="flex items-end">
+                                    <button
+                                      onClick={handleAddLog}
+                                      disabled={addingLog || !newLog.activity_name}
+                                      className="w-full flex items-center justify-center gap-2 py-2 bg-[#FDB913] text-slate-900 rounded-lg text-xs font-bold hover:bg-[#e5a611] transition-all disabled:opacity-50"
+                                    >
+                                      <Plus className="w-3.5 h-3.5" />
+                                      {addingLog ? 'Menambah...' : 'Tambah Log'}
+                                    </button>
+                                  </div>
+                                </div>
+
+                                {/* Log Table */}
+                                <div className="bg-white rounded-xl border border-slate-100 shadow-sm overflow-hidden">
+                                  <table className="w-full text-left text-xs">
+                                    <thead className="bg-slate-50 border-b border-slate-100">
+                                      <tr>
+                                        <th className="px-4 py-2 font-bold text-slate-500">Aktivitas</th>
+                                        <th className="px-4 py-2 font-bold text-slate-500">Mulai</th>
+                                        <th className="px-4 py-2 font-bold text-slate-500">Selesai</th>
+                                        <th className="px-4 py-2 font-bold text-slate-500 text-right">Hapus</th>
+                                      </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-slate-50">
+                                      {loadingLogs ? (
+                                        <tr><td colSpan={4} className="p-4 text-center text-slate-400">Loading logs...</td></tr>
+                                      ) : movementLogs.length === 0 ? (
+                                        <tr><td colSpan={4} className="p-4 text-center text-slate-400 italic">Belum ada log pergerakan.</td></tr>
+                                      ) : (
+                                        movementLogs.map(log => (
+                                          <tr key={log.id} className="hover:bg-slate-50 transition-colors">
+                                            <td className="px-4 py-3 font-medium text-slate-700">{log.activity_name}</td>
+                                            <td className="px-4 py-3 text-slate-500">{formatDateTime(log.start_time)}</td>
+                                            <td className="px-4 py-3 text-slate-500">{formatDateTime(log.end_time)}</td>
+                                            <td className="px-4 py-3 text-right">
+                                              <button
+                                                onClick={() => handleDeleteLog(log.id)}
+                                                className="p-1.5 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-lg transition-all"
+                                              >
+                                                <Trash2 className="w-3.5 h-3.5" />
+                                              </button>
+                                            </td>
+                                          </tr>
+                                        ))
+                                      )}
+                                    </tbody>
+                                  </table>
+                                </div>
+                              </div>
+                            </td>
+                          </motion.tr>
+                        )}
+                      </AnimatePresence>
+                    </React.Fragment>
                   );
                 })
               )}
