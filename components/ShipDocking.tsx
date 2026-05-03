@@ -19,6 +19,13 @@ function toInputDate(dateStr?: string) {
   return d.toISOString().split('T')[0];
 }
 
+function formatDate(dateStr?: string) {
+  if (!dateStr) return '-';
+  const d = new Date(dateStr);
+  if (isNaN(d.getTime())) return dateStr;
+  return d.toLocaleDateString('id-ID', { day: '2-digit', month: 'short', year: 'numeric' });
+}
+
 function formatDateTime(dateTimeStr?: string) {
   if (!dateTimeStr) return '-';
   const d = new Date(dateTimeStr);
@@ -281,13 +288,17 @@ export default function ShipDocking() {
                 <th className="px-6 py-4 text-[10px] font-bold text-slate-400 uppercase tracking-widest">No</th>
                 <th className="px-6 py-4 text-[10px] font-bold text-slate-400 uppercase tracking-widest">Nama Kapal</th>
                 <th className="px-6 py-4 text-[10px] font-bold text-slate-400 uppercase tracking-widest">Status Dok</th>
+                <th className="px-6 py-4 text-[10px] font-bold text-slate-400 uppercase tracking-widest">Mulai Aktual</th>
+                <th className="px-6 py-4 text-[10px] font-bold text-slate-400 uppercase tracking-widest">Selesai Aktual</th>
+                <th className="px-6 py-4 text-[10px] font-bold text-slate-400 uppercase tracking-widest">Tgl Docking</th>
+                <th className="px-6 py-4 text-[10px] font-bold text-slate-400 uppercase tracking-widest">Tgl Undocking</th>
                 <th className="px-6 py-4 text-[10px] font-bold text-slate-400 uppercase tracking-widest text-right">Aksi</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-50">
               {paginated.length === 0 ? (
                 <tr>
-                  <td colSpan={4} className="px-6 py-12 text-center text-sm text-slate-400 italic">
+                  <td colSpan={8} className="px-6 py-12 text-center text-sm text-slate-400 italic">
                     Tidak ada data ditemukan.
                   </td>
                 </tr>
@@ -323,6 +334,10 @@ export default function ShipDocking() {
                             {project.status_dock || 'Belum Dok'}
                           </span>
                         </td>
+                        <td className="px-6 py-4 text-xs text-slate-600">{formatDate(project.actual_start)}</td>
+                        <td className="px-6 py-4 text-xs text-slate-600">{formatDate(project.actual_finish)}</td>
+                        <td className="px-6 py-4 text-xs text-slate-600">{formatDate(project.docking)}</td>
+                        <td className="px-6 py-4 text-xs text-slate-600">{formatDate(project.undocking)}</td>
                         <td className="px-6 py-4 text-right">
                           <div className="flex items-center justify-end gap-2">
                             <button
@@ -352,7 +367,7 @@ export default function ShipDocking() {
                             exit={{ opacity: 0, height: 0 }}
                             className="bg-slate-50/30"
                           >
-                            <td colSpan={4} className="p-0">
+                            <td colSpan={8} className="p-0">
                               <div className="px-20 py-6 space-y-6">
                                 <div className="flex items-center justify-between border-b border-slate-200 pb-3">
                                   <div className="flex items-center gap-2">
