@@ -53,7 +53,9 @@ export default function ProjectManagement() {
     est_undocking_date: '',
     est_trial_date: '',
     est_arrival_date: '',
-    est_departure_date: ''
+    est_departure_date: '',
+    docking_type: '',
+    location: ''
   });
 
   const formatDateForInput = (dateStr?: string) => {
@@ -83,7 +85,9 @@ export default function ProjectManagement() {
         est_undocking_date: formatDateForInput(project.est_undocking_date),
         est_trial_date: formatDateForInput(project.est_trial_date),
         est_arrival_date: formatDateForInput(project.est_arrival_date),
-        est_departure_date: formatDateForInput(project.est_departure_date)
+        est_departure_date: formatDateForInput(project.est_departure_date),
+        docking_type: project.docking_type || '',
+        location: project.location || ''
       });
     } else {
       setEditingProject(null);
@@ -100,7 +104,9 @@ export default function ProjectManagement() {
         est_undocking_date: '',
         est_trial_date: '',
         est_arrival_date: '',
-        est_departure_date: ''
+        est_departure_date: '',
+        docking_type: '',
+        location: ''
       });
     }
     setIsModalOpen(true);
@@ -794,6 +800,45 @@ export default function ProjectManagement() {
                       onChange={(e) => setFormData({ ...formData, est_departure_date: e.target.value })}
                       className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-[#FDB913]/30 focus:border-[#FDB913] transition-all"
                     />
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Docking Type</label>
+                    <input 
+                      type="text"
+                      value={formData.docking_type}
+                      onChange={(e) => setFormData({ ...formData, docking_type: e.target.value })}
+                      className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-[#FDB913]/30 focus:border-[#FDB913] transition-all"
+                      placeholder="e.g. Graving Dock"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Location</label>
+                    <input 
+                      type="text"
+                      value={formData.location}
+                      onChange={(e) => setFormData({ ...formData, location: e.target.value })}
+                      className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-[#FDB913]/30 focus:border-[#FDB913] transition-all"
+                      placeholder="e.g. Batam Area"
+                    />
+                  </div>
+                  
+                  {/* Dynamic Duration Calculation */}
+                  <div className="space-y-2 md:col-span-2 bg-blue-50/50 p-5 rounded-xl border border-blue-100 flex items-center justify-between mt-2">
+                    <div className="flex flex-col">
+                      <span className="text-[10px] font-bold text-blue-500 uppercase tracking-widest">Total Project Duration</span>
+                      <span className="text-xs text-slate-500 mt-0.5">Calculated automatically from Est. Start to Est. Finish</span>
+                    </div>
+                    <div className="text-2xl font-black text-blue-700 flex items-baseline gap-1.5">
+                      {(() => {
+                        if (!formData.est_start || !formData.est_finish) return 0;
+                        const s = new Date(formData.est_start);
+                        const e = new Date(formData.est_finish);
+                        if (isNaN(s.getTime()) || isNaN(e.getTime())) return 0;
+                        const diffDays = Math.ceil((e.getTime() - s.getTime()) / (1000 * 60 * 60 * 24));
+                        return diffDays > 0 ? diffDays : 0;
+                      })()} 
+                      <span className="text-sm font-bold text-blue-500/70">Days</span>
+                    </div>
                   </div>
                 </div>
 
