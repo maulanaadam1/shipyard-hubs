@@ -39,8 +39,8 @@ export default function ShipProjectGanttChart() {
         endOfWeek.setDate(d.getDate() + 6);
         
         headers.push({
-          label: \`W\${i > 0 ? '+' : ''}\${i === 0 ? ' (Now)' : i}\`,
-          labelSecondary: \`\${d.getDate()} \${d.toLocaleString('default', { month: 'short' })}\`,
+          label: `W${i > 0 ? '+' : ''}${i === 0 ? ' (Now)' : i}`,
+          labelSecondary: `${d.getDate()} ${d.toLocaleString('default', { month: 'short' })}`,
           date: d,
         });
       }
@@ -124,19 +124,19 @@ export default function ShipProjectGanttChart() {
           <div className="flex bg-slate-100 p-1 rounded-lg">
             <button 
               onClick={() => setViewMode('daily')} 
-              className={\`px-3 py-1.5 rounded-md transition-colors \${viewMode === 'daily' ? 'bg-white shadow-sm font-bold text-slate-800' : 'text-slate-500 hover:text-slate-700'}\`}
+              className={`px-3 py-1.5 rounded-md transition-colors ${viewMode === 'daily' ? 'bg-white shadow-sm font-bold text-slate-800' : 'text-slate-500 hover:text-slate-700'}`}
             >
               Daily
             </button>
             <button 
               onClick={() => setViewMode('weekly')} 
-              className={\`px-3 py-1.5 rounded-md transition-colors \${viewMode === 'weekly' ? 'bg-white shadow-sm font-bold text-slate-800' : 'text-slate-500 hover:text-slate-700'}\`}
+              className={`px-3 py-1.5 rounded-md transition-colors ${viewMode === 'weekly' ? 'bg-white shadow-sm font-bold text-slate-800' : 'text-slate-500 hover:text-slate-700'}`}
             >
               Weekly
             </button>
             <button 
               onClick={() => setViewMode('monthly')} 
-              className={\`px-3 py-1.5 rounded-md transition-colors \${viewMode === 'monthly' ? 'bg-white shadow-sm font-bold text-slate-800' : 'text-slate-500 hover:text-slate-700'}\`}
+              className={`px-3 py-1.5 rounded-md transition-colors ${viewMode === 'monthly' ? 'bg-white shadow-sm font-bold text-slate-800' : 'text-slate-500 hover:text-slate-700'}`}
             >
               Monthly
             </button>
@@ -190,11 +190,11 @@ export default function ShipProjectGanttChart() {
                     <div 
                       className="absolute top-0 bottom-0 rounded-full shadow-sm flex items-center justify-center overflow-hidden transition-all duration-300 group-hover:brightness-110"
                       style={{ 
-                        left: \`\${project.left}%\`, 
-                        width: \`\${project.width}%\`,
+                        left: `${project.left}%`, 
+                        width: `${project.width}%`,
                         backgroundColor: project.color
                       }}
-                      title={\`\${project.name} (\${project.startStr} to \${project.endStr})\`}
+                      title={`${project.name} (${project.startStr} to ${project.endStr})`}
                     >
                     </div>
                   </div>
