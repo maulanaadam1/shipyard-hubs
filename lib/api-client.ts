@@ -137,9 +137,6 @@ export const api = {
         },
         signOut: async () => {
             localStorage.removeItem('auth_token');
-            // Trigger a hard reload to clear React state easily since 
-            // we removed Next-auth's hook-based session manager
-            typeof window !== 'undefined' ? window.location.href = '/' : null;
             return { error: null };
         },
         signUp: async ({ email, password}: any) => {

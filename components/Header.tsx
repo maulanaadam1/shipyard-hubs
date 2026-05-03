@@ -139,24 +139,20 @@ export default function Header({ onMenuClick }: { onMenuClick?: () => void }) {
   };
 
   const handleSupabaseLogout = async () => {
-    // Force instant UI clearance so the user feels the logout immediately
-    localStorage.clear();
+    // 1. Clear local state immediately
+    localStorage.removeItem('auth_token');
     setCurrentUser(null);
     setIsUserSwitcherOpen(false);
 
+    // 2. Perform backend signout (optional/async)
     try {
-      // Race supabase signout against a 1.5-second timeout to prevent deadlocks
-      // if internet connection is lagging or the websocket is unresponsive.
-      await Promise.race([
-        api.auth.signOut(),
-        new Promise(resolve => setTimeout(resolve, 1500))
-      ]);
-    } catch (error) {
-      console.error('Error during sign out:', error);
-    } finally {
-      // Always redirect back to root to clean any leftover state.
-      window.location.replace('/');
+      api.auth.signOut();
+    } catch (e) {
+      console.error('Sign out error:', e);
     }
+
+    // 3. Force redirect to landing page
+    window.location.replace('/');
   };
 
   return (
