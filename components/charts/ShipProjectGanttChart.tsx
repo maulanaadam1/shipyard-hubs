@@ -32,6 +32,14 @@ export default function ShipProjectGanttChart() {
       const diff = today.getDate() - day + (day === 0 ? -6 : 1);
       const startOfWeek = new Date(today.setDate(diff));
       
+      const getWeek = (date: Date) => {
+        const d = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
+        const dayNum = d.getUTCDay() || 7;
+        d.setUTCDate(d.getUTCDate() + 4 - dayNum);
+        const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
+        return Math.ceil((((d.getTime() - yearStart.getTime()) / 86400000) + 1) / 7);
+      };
+
       for (let i = -6; i <= 6; i++) {
         const d = new Date(startOfWeek);
         d.setDate(d.getDate() + (i * 7));
@@ -39,7 +47,7 @@ export default function ShipProjectGanttChart() {
         endOfWeek.setDate(d.getDate() + 6);
         
         headers.push({
-          label: `W${i > 0 ? '+' : ''}${i === 0 ? ' (Now)' : i}`,
+          label: `W${getWeek(d)}${i === 0 ? ' (Now)' : ''}`,
           labelSecondary: `${d.getDate()} ${d.toLocaleString('default', { month: 'short' })}`,
           date: d,
         });
