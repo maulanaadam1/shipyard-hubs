@@ -231,7 +231,7 @@ createRoot(document.getElementById('root')!).render(
               </ProtectedRoute>
             } />
             <Route path="ship-docking" element={
-              <ProtectedRoute resource="Job Order">
+              <ProtectedRoute resource="Ship Docking">
                 <ShipDocking />
               </ProtectedRoute>
             } />

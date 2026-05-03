@@ -60,7 +60,7 @@ var tableToResource = map[string]string{
 	"approval_workflow":  "Master Workflow",
 	"notifications":      "Dashboard",
 	"master_locations":   "Master Location",
-	"ship_movements":     "Job Order",
+	"ship_movements":     "Ship Docking",
 }
 
 // CheckTablePermission verifies if the user from context has permission for table and action
