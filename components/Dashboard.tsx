@@ -1,7 +1,6 @@
 'use client';
 
 import React from 'react';
-import StatsOverview from './StatsOverview';
 import ShipProjectGanttChart from './charts/ShipProjectGanttChart';
 import { motion } from 'motion/react';
 
@@ -17,11 +16,7 @@ const item = {
 
 export default function Dashboard() {
   return (
-    <motion.div variants={container} initial="hidden" animate="show" className="p-8 space-y-8">
-      <motion.div variants={item}>
-        <StatsOverview />
-      </motion.div>
-
+    <motion.div variants={container} initial="hidden" animate="show" className="p-8">
       <motion.div variants={item} style={{ height: 640 }}>
         <ShipProjectGanttChart />
       </motion.div>
