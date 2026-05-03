@@ -124,11 +124,11 @@ export default function ShipProjectGanttChart() {
                     <div 
                       className="absolute top-0 bottom-0 rounded-full shadow-sm flex items-center justify-center overflow-hidden transition-all duration-300 group-hover:brightness-110"
                       style={{ 
-                        left: \`\${project.left}%\`, 
-                        width: \`\${project.width}%\`,
+                        left: `${project.left}%`, 
+                        width: `${project.width}%`,
                         backgroundColor: project.color
                       }}
-                      title={\`\${project.name} (\${project.startStr} to \${project.endStr})\`}
+                      title={`${project.name} (${project.startStr} to ${project.endStr})`}
                     >
                     </div>
                   </div>
