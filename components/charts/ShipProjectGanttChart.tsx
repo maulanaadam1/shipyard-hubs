@@ -14,7 +14,7 @@ export default function ShipProjectGanttChart() {
     const currentMonth = now.getMonth(); // 0-11
     
     const months = [];
-    for (let i = 0; i < 6; i++) {
+    for (let i = -6; i <= 6; i++) {
       const d = new Date(currentYear, currentMonth + i, 1);
       months.push({
         label: d.toLocaleString('default', { month: 'short', year: '2-digit' }),
@@ -24,8 +24,8 @@ export default function ShipProjectGanttChart() {
     }
 
     const windowStart = months[0].date.getTime();
-    // End of the 6th month
-    const windowEnd = new Date(currentYear, currentMonth + 6, 0, 23, 59, 59).getTime();
+    // End of the last month in the array (currentMonth + 6)
+    const windowEnd = new Date(currentYear, currentMonth + 7, 0, 23, 59, 59).getTime();
     const totalDuration = windowEnd - windowStart;
 
     // Filter active projects that have valid dates
@@ -76,7 +76,7 @@ export default function ShipProjectGanttChart() {
   return (
     <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm h-full flex flex-col">
       <div className="flex items-center justify-between mb-6">
-        <h3 className="font-display font-bold text-slate-800">6-Month Active Job Orders Gantt</h3>
+        <h3 className="font-display font-bold text-slate-800">Active Job Orders Gantt (6 Months Before & After)</h3>
         <div className="flex items-center gap-4 text-xs font-medium">
           <div className="flex items-center gap-1.5">
             <div className="w-3 h-3 rounded-sm bg-[#0ea5e9]"></div>
