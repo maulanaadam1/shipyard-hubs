@@ -659,7 +659,7 @@ export default function ProjectManagement() {
               initial={{ scale: 0.95, opacity: 0, y: 20 }}
               animate={{ scale: 1, opacity: 1, y: 0 }}
               exit={{ scale: 0.95, opacity: 0, y: 20 }}
-              className="relative w-full max-w-2xl bg-white rounded-3xl shadow-2xl overflow-hidden"
+              className="relative w-full max-w-5xl bg-white rounded-3xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]"
             >
               <div className="p-6 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
                 <h3 className="font-display font-bold text-xl text-slate-800">
@@ -670,8 +670,8 @@ export default function ProjectManagement() {
                 </button>
               </div>
 
-              <form onSubmit={handleSubmit} className="p-8 space-y-6">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <form onSubmit={handleSubmit} className="p-6 overflow-y-auto space-y-6">
+                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
                   <div className="space-y-2">
                     <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Project ID</label>
                     <input 
@@ -823,7 +823,7 @@ export default function ProjectManagement() {
                   </div>
                   
                   {/* Dynamic Duration Calculation */}
-                  <div className="space-y-2 md:col-span-2 bg-blue-50/50 p-5 rounded-xl border border-blue-100 flex items-center justify-between mt-2">
+                  <div className="space-y-2 sm:col-span-2 md:col-span-3 lg:col-span-4 bg-blue-50/50 p-4 rounded-xl border border-blue-100 flex items-center justify-between mt-2">
                     <div className="flex flex-col">
                       <span className="text-[10px] font-bold text-blue-500 uppercase tracking-widest">Total Project Duration</span>
                       <span className="text-xs text-slate-500 mt-0.5">Calculated automatically from Est. Start to Est. Finish</span>
