@@ -112,13 +112,13 @@ export default function ShipDocking() {
   const openEdit = (project: any) => {
     setEditingProject(project);
     setFormData({
-      actual_start: toInputDate(project.actual_start),
-      actual_finish: toInputDate(project.actual_finish),
-      act_arrival_date: toInputDate(project.act_arrival_date),
-      act_trial_date: toInputDate(project.act_trial_date),
-      act_departure_date: toInputDate(project.act_departure_date),
-      docking: toInputDate(project.docking),
-      undocking: toInputDate(project.undocking),
+      actual_start: toInputDate(project.actual_start || project.est_start),
+      actual_finish: toInputDate(project.actual_finish || project.est_finish),
+      act_arrival_date: toInputDate(project.act_arrival_date || project.est_arrival_date),
+      act_trial_date: toInputDate(project.act_trial_date || project.est_trial_date),
+      act_departure_date: toInputDate(project.act_departure_date || project.est_departure_date),
+      docking: toInputDate(project.docking || project.est_docking_date),
+      undocking: toInputDate(project.undocking || project.est_undocking_date),
       status_dock: project.status_dock || '',
     });
   };
