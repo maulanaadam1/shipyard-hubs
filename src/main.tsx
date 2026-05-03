@@ -34,6 +34,7 @@ import UtilityDashboard from '../components/UtilityDashboard';
 import ApprovalWorkflowManagement from '../components/ApprovalWorkflowManagement';
 import DropdownConfiguration from '../components/DropdownConfiguration';
 import RoleManagement from '../components/RoleManagement';
+import ShipDocking from '../components/ShipDocking';
 
 function PlaceholderPage({ title }: { title: string }) {
   return (
@@ -227,6 +228,11 @@ createRoot(document.getElementById('root')!).render(
             <Route path="user-management" element={
               <ProtectedRoute resource="User Management">
                 <UserManagement />
+              </ProtectedRoute>
+            } />
+            <Route path="ship-docking" element={
+              <ProtectedRoute resource="Job Order">
+                <ShipDocking />
               </ProtectedRoute>
             } />
           </Route>

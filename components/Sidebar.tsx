@@ -37,6 +37,7 @@ export default function Sidebar({ onTabChange }: { onTabChange: () => void }) {
         { icon: LayoutDashboard, label: 'Dashboard', path: '/dashboard', resource: 'Dashboard' },
         { icon: Activity, label: 'Utility', path: '/utility', resource: 'Utility' },
         { icon: Briefcase, label: 'Job Order', path: '/job-order', resource: 'Job Order' },
+        { icon: Anchor, label: 'Ship Docking', path: '/ship-docking', resource: 'Job Order' },
       ]
     },
     {
