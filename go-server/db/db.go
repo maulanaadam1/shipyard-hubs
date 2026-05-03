@@ -262,20 +262,25 @@ func createTables() {
 
 	// Migration: ensure docking_types exist in dropdown_configs (safe upsert per item)
 	seedMissingDropdownItems()
+
+	// Migration: ensure master_locations are pre-populated from real project data
+	seedMissingLocations()
 }
 
 func seedMissingDropdownItems() {
 	// Each entry is inserted only if a matching category+value doesn't exist yet.
-	// This is safe to run on every startup.
+	// Values sourced from actual docking_type column in the projects table.
 	items := []struct {
 		Category string
 		Label    string
 		Value    string
 	}{
-		{"docking_types", "Graving Dock", "Graving Dock"},
-		{"docking_types", "Slipway", "Slipway"},
-		{"docking_types", "Airbag System", "Airbag System"},
-		{"docking_types", "Floating Dock", "Floating Dock"},
+		{"docking_types", "Docking Repair", "Docking Repair"},
+		{"docking_types", "Emergency Repair", "Emergency Repair"},
+		{"docking_types", "Floating Repair", "Floating Repair"},
+		{"docking_types", "New Building", "New Building"},
+		{"docking_types", "Non Ship", "Non Ship"},
+		{"docking_types", "Running Repair", "Running Repair"},
 	}
 
 	for _, item := range items {
@@ -292,6 +297,46 @@ func seedMissingDropdownItems() {
 				id, item.Category, item.Label, item.Value,
 			)
 			log.Printf("Seeded missing dropdown: [%s] %s", item.Category, item.Label)
+		}
+	}
+}
+
+func seedMissingLocations() {
+	// Pre-populate master_locations from real project location data.
+	locations := []struct {
+		Name string
+		Size string
+	}{
+		{"Building Berth", ""},
+		{"FASGAL", ""},
+		{"FLOATING AREA JMI 1", ""},
+		{"Floating Area", ""},
+		{"Floating Repair ABC", ""},
+		{"GSM", ""},
+		{"Graving Dock JMI 1", ""},
+		{"Graving Dock JMI 2", ""},
+		{"INTERNAL", ""},
+		{"Non Ship", ""},
+		{"PELINDO MARINE SERVICE (PMS)", ""},
+		{"SLIPWAY E", ""},
+		{"Slipway A", ""},
+		{"Slipway B", ""},
+		{"Slipway C", ""},
+		{"Slipway D", ""},
+		{"Slipway E", ""},
+		{"TEGAL SHIPYARD UTAMA CILACAP", ""},
+	}
+
+	for _, loc := range locations {
+		var count int
+		DB.QueryRow("SELECT COUNT(*) FROM master_locations WHERE name = ?", loc.Name).Scan(&count)
+		if count == 0 {
+			id := uuid.New().String()
+			_, _ = DB.Exec(
+				"INSERT INTO master_locations (id, name, size, description, status) VALUES (?, ?, ?, '', 'Active')",
+				id, loc.Name, loc.Size,
+			)
+			log.Printf("Seeded missing location: %s", loc.Name)
 		}
 	}
 }
