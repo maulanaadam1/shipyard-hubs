@@ -26,6 +26,7 @@ export default function ShipProjectGanttChart() {
   const [hoveredProject, setHoveredProject] = useState<any>(null);
   const [mousePos, setMousePos] = useState({ x: 0, y: 0 });
   const [collapsedLocations, setCollapsedLocations] = useState<Set<string>>(new Set());
+  const [selectedLocations, setSelectedLocations] = useState<Set<string>>(new Set(['__ALL__']));
 
   // Measure track width for SVG pixel calculations
   const trackRef = useRef<HTMLDivElement>(null);
@@ -46,6 +47,24 @@ export default function ShipProjectGanttChart() {
       return next;
     });
   };
+
+  const toggleLocationFilter = (loc: string) => {
+    if (loc === '__ALL__') {
+      setSelectedLocations(new Set(['__ALL__']));
+      return;
+    }
+    setSelectedLocations(prev => {
+      const next = new Set(prev);
+      next.delete('__ALL__');
+      if (next.has(loc)) {
+        next.delete(loc);
+        if (next.size === 0) return new Set(['__ALL__']);
+      } else {
+        next.add(loc);
+      }
+      return next;
+    });
+  };;
 
   const chartData = useMemo(() => {
     const headers: { label: string; labelSecondary?: string; date: Date }[] = [];
@@ -122,7 +141,14 @@ export default function ShipProjectGanttChart() {
     });
     Object.keys(grouped).forEach(loc => grouped[loc].sort((a, b) => a.startMs - b.startMs));
 
-    return { headers, grouped, sortedLocations: Object.keys(grouped).sort(), todayPct, totalDuration };
+    // Sort: named locations first alphabetically, (No Location) last
+    const sortedLocations = Object.keys(grouped).sort((a, b) => {
+      if (a === '(No Location)') return 1;
+      if (b === '(No Location)') return -1;
+      return a.localeCompare(b);
+    });
+
+    return { headers, grouped, sortedLocations, todayPct, totalDuration };
   }, [projects, viewMode]);
 
   return (
@@ -131,7 +157,7 @@ export default function ShipProjectGanttChart() {
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-5 shrink-0">
         <div>
           <h3 className="font-display font-bold text-slate-800">Active Job Orders — by Location</h3>
-          <p className="text-[11px] text-slate-400 mt-0.5">Grouped by dock · Dashed L-lines show predecessor dependencies</p>
+          <p className="text-[11px] text-slate-400 mt-0.5">Grouped by dock · sorted by start date</p>
         </div>
         <div className="flex flex-wrap items-center gap-3 text-xs">
           <div className="flex bg-slate-100 p-1 rounded-lg">
@@ -163,11 +189,55 @@ export default function ShipProjectGanttChart() {
             ))}
           </div>
 
+          {/* Location filter chips */}
+          {chartData.sortedLocations.length > 0 && (
+            <div className="flex flex-wrap gap-1.5 mb-3 shrink-0">
+              <button
+                onClick={() => toggleLocationFilter('__ALL__')}
+                className={'px-3 py-1 rounded-full text-[10px] font-bold border transition-all ' +
+                  (selectedLocations.has('__ALL__')
+                    ? 'bg-slate-800 text-white border-slate-800'
+                    : 'bg-white text-slate-500 border-slate-200 hover:border-slate-400')}
+              >
+                All Locations
+              </button>
+              {chartData.sortedLocations.filter(l => l !== '(No Location)').map((loc, locIdx) => {
+                const color = LOCATION_COLORS[locIdx % LOCATION_COLORS.length];
+                const isActive = !selectedLocations.has('__ALL__') && selectedLocations.has(loc);
+                return (
+                  <button
+                    key={loc}
+                    onClick={() => toggleLocationFilter(loc)}
+                    className={'px-3 py-1 rounded-full text-[10px] font-bold border transition-all'}
+                    style={isActive
+                      ? { backgroundColor: color.bg, color: '#fff', borderColor: color.bg }
+                      : { backgroundColor: color.light, color: color.text, borderColor: color.light }}
+                  >
+                    {loc}
+                  </button>
+                );
+              })}
+              {chartData.sortedLocations.includes('(No Location)') && (
+                <button
+                  onClick={() => toggleLocationFilter('(No Location)')}
+                  className={'px-3 py-1 rounded-full text-[10px] font-bold border transition-all ' +
+                    (!selectedLocations.has('__ALL__') && selectedLocations.has('(No Location)')
+                      ? 'bg-slate-600 text-white border-slate-600'
+                      : 'bg-slate-100 text-slate-500 border-slate-100 hover:border-slate-300')}
+                >
+                  (No Location)
+                </button>
+              )}
+            </div>
+          )}
+
           {chartData.sortedLocations.length === 0 ? (
             <div className="text-center py-12 text-sm text-slate-400">No active projects with dates in this time window.</div>
           ) : (
             <div className="space-y-2 pb-4">
-              {chartData.sortedLocations.map((location, locIdx) => {
+              {chartData.sortedLocations
+                .filter(loc => selectedLocations.has('__ALL__') || selectedLocations.has(loc))
+                .map((location, locIdx) => {
                 const color = LOCATION_COLORS[locIdx % LOCATION_COLORS.length];
                 const rows = chartData.grouped[location];
                 const isCollapsed = collapsedLocations.has(location);
