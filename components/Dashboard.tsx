@@ -4,22 +4,18 @@ import React from 'react';
 import ShipProjectGanttChart from './charts/ShipProjectGanttChart';
 import { motion } from 'motion/react';
 
-const container = {
-  hidden: { opacity: 0 },
-  show: { opacity: 1, transition: { staggerChildren: 0.1 } }
-};
-
-const item = {
-  hidden: { y: 20, opacity: 0 },
-  show: { y: 0, opacity: 1 }
-};
-
 export default function Dashboard() {
   return (
-    <motion.div variants={container} initial="hidden" animate="show" className="p-8">
-      <motion.div variants={item} style={{ height: 640 }}>
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      transition={{ duration: 0.25 }}
+      className="p-6 flex flex-col"
+      style={{ height: 'calc(100vh - 64px)' }}
+    >
+      <div className="flex-1 min-h-0">
         <ShipProjectGanttChart />
-      </motion.div>
+      </div>
     </motion.div>
   );
 }

@@ -20,7 +20,7 @@ const ROW_HEIGHT = 36;
 const BAR_HEIGHT = 20;
 const BAR_OFFSET = (ROW_HEIGHT - BAR_HEIGHT) / 2; // vertical center of bar within row
 
-export default function ShipProjectGanttChart() {
+export default function ShipProjectGanttChart({ fullPage = false }: { fullPage?: boolean }) {
   const { projects } = useData();
   const [viewMode, setViewMode] = useState<'daily' | 'weekly' | 'monthly'>('monthly');
   const [hoveredProject, setHoveredProject] = useState<any>(null);
@@ -152,7 +152,7 @@ export default function ShipProjectGanttChart() {
   }, [projects, viewMode]);
 
   return (
-    <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm h-full flex flex-col">
+    <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm flex flex-col h-full min-h-0">
       {/* Title & Controls */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-5 shrink-0">
         <div>
