@@ -229,7 +229,7 @@ export default function RoleManagement() {
                     >
                       {role.name}
                     </button>
-                    <div className="hidden group-hover:flex items-center gap-1 transition-all">
+                    <div className="flex items-center gap-1 transition-all">
                       <button 
                         onClick={(e) => { e.stopPropagation(); handleEditRoleHeader(role); }}
                         className="p-1 hover:bg-[#FDB913]/20 rounded-md text-[#e5a611]"
