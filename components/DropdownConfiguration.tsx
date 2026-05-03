@@ -5,13 +5,10 @@ import { motion, AnimatePresence } from 'motion/react';
 import { 
   Plus, 
   Trash2, 
-  Save, 
-  RefreshCw,
+  Edit2,
   Settings,
-  Check,
   X,
   Search,
-  Tag,
   Layers,
   ChevronRight
 } from 'lucide-react';
@@ -34,6 +31,7 @@ export default function DropdownConfiguration() {
   const [selectedCategory, setSelectedCategory] = useState(CATEGORIES[0].id);
   const [isLoading, setIsLoading] = useState(false);
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [editingConfig, setEditingConfig] = useState<DropdownConfig | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   
   const [formData, setFormData] = useState({
@@ -48,6 +46,7 @@ export default function DropdownConfiguration() {
     .filter(c => c.label.toLowerCase().includes(searchTerm.toLowerCase()));
 
   const handleAdd = () => {
+    setEditingConfig(null);
     setFormData({
       label: '',
       value: '',
@@ -57,20 +56,42 @@ export default function DropdownConfiguration() {
     setIsModalOpen(true);
   };
 
+  const handleEdit = (config: DropdownConfig) => {
+    setEditingConfig(config);
+    setFormData({
+      label: config.label,
+      value: config.value,
+      category: config.category,
+      is_active: config.is_active
+    });
+    setIsModalOpen(true);
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
     try {
-      const { error } = await api.from('dropdown_configs').insert([{
-        category: formData.category,
-        label: formData.label,
-        value: formData.value || formData.label,
-        is_active: formData.is_active
-      }]);
-
-      if (error) throw error;
+      if (editingConfig) {
+        const { error } = await api.from('dropdown_configs')
+          .update({
+            label: formData.label,
+            value: formData.value || formData.label,
+            is_active: formData.is_active
+          })
+          .eq('id', editingConfig.id);
+        if (error) throw error;
+      } else {
+        const { error } = await api.from('dropdown_configs').insert([{
+          category: formData.category,
+          label: formData.label,
+          value: formData.value || formData.label,
+          is_active: formData.is_active
+        }]);
+        if (error) throw error;
+      }
       
       setIsModalOpen(false);
+      setEditingConfig(null);
       await fetchData();
     } catch (error: any) {
       alert('Error saving config: ' + error.message);
@@ -201,12 +222,22 @@ export default function DropdownConfiguration() {
                         </button>
                       </td>
                       <td className="px-6 py-4 text-right">
-                        <button 
-                          onClick={() => handleDelete(config.id)}
-                          className="p-2 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-lg transition-all"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
+                        <div className="flex items-center justify-end gap-1">
+                          <button 
+                            onClick={() => handleEdit(config)}
+                            className="p-2 text-slate-300 hover:text-blue-500 hover:bg-blue-50 rounded-lg transition-all"
+                            title="Edit"
+                          >
+                            <Edit2 className="w-4 h-4" />
+                          </button>
+                          <button 
+                            onClick={() => handleDelete(config.id)}
+                            className="p-2 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-lg transition-all"
+                            title="Delete"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   ))}
@@ -247,7 +278,7 @@ export default function DropdownConfiguration() {
                     <div className="w-10 h-10 bg-[#FDB913]/20 rounded-xl flex items-center justify-center text-[#FDB913]">
                       <Settings className="w-5 h-5" />
                     </div>
-                    <h3 className="font-display font-bold text-xl text-slate-800">Add New Option</h3>
+                    <h3 className="font-display font-bold text-xl text-slate-800">{editingConfig ? 'Edit Option' : 'Add New Option'}</h3>
                   </div>
                   <button type="button" onClick={() => setIsModalOpen(false)} className="p-2 hover:bg-slate-200 rounded-full">
                     <X className="w-5 h-5 text-slate-500" />
@@ -257,15 +288,21 @@ export default function DropdownConfiguration() {
                 <div className="p-8 space-y-4">
                   <div className="space-y-1">
                     <label className="text-xs font-bold text-slate-500 uppercase">Category</label>
-                    <select 
-                      value={formData.category}
-                      onChange={(e) => setFormData({ ...formData, category: e.target.value })}
-                      className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-[#FDB913]/30"
-                    >
-                      {CATEGORIES.map(cat => (
-                        <option key={cat.id} value={cat.id}>{cat.label}</option>
-                      ))}
-                    </select>
+                    {editingConfig ? (
+                      <p className="px-4 py-2.5 bg-slate-100 border border-slate-200 rounded-xl text-sm text-slate-500 font-mono">
+                        {CATEGORIES.find(c => c.id === formData.category)?.label || formData.category}
+                      </p>
+                    ) : (
+                      <select 
+                        value={formData.category}
+                        onChange={(e) => setFormData({ ...formData, category: e.target.value })}
+                        className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-[#FDB913]/30"
+                      >
+                        {CATEGORIES.map(cat => (
+                          <option key={cat.id} value={cat.id}>{cat.label}</option>
+                        ))}
+                      </select>
+                    )}
                   </div>
                   <div className="space-y-1">
                     <label className="text-xs font-bold text-slate-500 uppercase">Label (Display Name)</label>
@@ -303,7 +340,7 @@ export default function DropdownConfiguration() {
                     disabled={isLoading}
                     className="px-8 py-2.5 bg-[#FDB913] text-slate-900 rounded-xl text-sm font-bold hover:bg-[#e5a611] transition-all shadow-lg shadow-[#FDB913]/20"
                   >
-                    {isLoading ? 'Saving...' : 'Add Option'}
+                    {isLoading ? 'Saving...' : editingConfig ? 'Save Changes' : 'Add Option'}
                   </button>
                 </div>
               </form>
