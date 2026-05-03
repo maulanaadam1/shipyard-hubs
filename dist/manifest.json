@@ -1,0 +1,17 @@
+{
+  "name": "Shipyard Hub",
+  "short_name": "Shipyard",
+  "description": "Premium Shipyard Management and Equipment Monitoring System",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0f172a",
+  "theme_color": "#FDB913",
+  "icons": [
+    {
+      "src": "/app_icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

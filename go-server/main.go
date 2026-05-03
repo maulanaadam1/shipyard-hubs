@@ -73,23 +73,33 @@ func main() {
 		})
 	})
 
-	// Serve static frontend in production
-	if os.Getenv("NODE_ENV") == "production" {
-		// Use "./dist" because Docker sets WORKDIR to /app where dist is copied
-		distDir := "./dist"
+	// Serve static frontend
+	distDir := "./dist"
+	if _, err := os.Stat(distDir); os.IsNotExist(err) {
+		distDir = "../dist" // Try parent if running from go-server/
+	}
+
+	if _, err := os.Stat(distDir); err == nil {
 		fs := http.FileServer(http.Dir(distDir))
-		
 		r.Get("/*", func(w http.ResponseWriter, req *http.Request) {
-			// Check if the requested file exists
 			path := req.URL.Path
-			if _, err := os.Stat(distDir + path); os.IsNotExist(err) {
-				// File does not exist, serve index.html for SPA routing
+			// If file exists, serve it
+			if _, err := os.Stat(distDir + path); err == nil {
+				fs.ServeHTTP(w, req)
+				return
+			}
+			
+			// For SPA routing: if path doesn't have an extension (like .js, .css), 
+			// it's likely a frontend route, serve index.html.
+			// Otherwise, it's a missing asset, let it 404 naturally.
+			if !strings.Contains(path, ".") {
 				http.ServeFile(w, req, distDir+"/index.html")
 				return
 			}
-			// File exists, serve it
-			fs.ServeHTTP(w, req)
+			
+			http.NotFound(w, req)
 		})
+		log.Printf("Serving static files from: %s", distDir)
 	}
 
 	port := os.Getenv("PORT")
