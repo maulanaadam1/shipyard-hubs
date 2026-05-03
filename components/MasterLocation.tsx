@@ -201,11 +201,11 @@ export default function MasterLocation() {
                       {loc.description || '-'}
                     </td>
                     <td className="p-4">
-                      <span className={\`px-3 py-1 text-xs font-bold rounded-full \${
+                      <span className={'px-3 py-1 text-xs font-bold rounded-full ' + (
                         loc.status === 'Active' 
                           ? 'bg-emerald-100 text-emerald-700' 
                           : 'bg-slate-100 text-slate-600'
-                      }\`}>
+                      )}>
                         {loc.status}
                       </span>
                     </td>
