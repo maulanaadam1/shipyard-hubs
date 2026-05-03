@@ -334,10 +334,10 @@ export default function ShipDocking() {
                             {project.status_dock || 'Belum Dok'}
                           </span>
                         </td>
-                        <td className="px-6 py-4 text-xs text-slate-600">{formatDate(project.actual_start)}</td>
-                        <td className="px-6 py-4 text-xs text-slate-600">{formatDate(project.actual_finish)}</td>
-                        <td className="px-6 py-4 text-xs text-slate-600">{formatDate(project.docking)}</td>
-                        <td className="px-6 py-4 text-xs text-slate-600">{formatDate(project.undocking)}</td>
+                        <td className="px-6 py-4 text-xs text-slate-600">{formatDate(project.actual_start || project.est_start)}</td>
+                        <td className="px-6 py-4 text-xs text-slate-600">{formatDate(project.actual_finish || project.est_finish)}</td>
+                        <td className="px-6 py-4 text-xs text-slate-600">{formatDate(project.docking || project.est_docking_date)}</td>
+                        <td className="px-6 py-4 text-xs text-slate-600">{formatDate(project.undocking || project.est_undocking_date)}</td>
                         <td className="px-6 py-4 text-right">
                           <div className="flex items-center justify-end gap-2">
                             <button
