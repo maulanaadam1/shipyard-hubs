@@ -42,6 +42,10 @@ export default function ShipProjectGanttChart() {
       
       // Check if it overlaps with our 6-month window
       return start <= windowEnd && end >= windowStart;
+    }).sort((a, b) => {
+      const dateA = new Date(a.create_date || 0).getTime();
+      const dateB = new Date(b.create_date || 0).getTime();
+      return dateB - dateA; // Descending order (newest first)
     }).map(p => {
       const startDateStr = p.est_start || p.actual_start;
       const endDateStr = p.est_finish || p.actual_finish;
