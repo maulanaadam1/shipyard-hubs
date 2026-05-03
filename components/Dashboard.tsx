@@ -37,7 +37,7 @@ export default function Dashboard() {
         <StatsOverview />
       </motion.div>
 
-      <motion.div variants={item} className="mb-8 h-[450px]">
+      <motion.div variants={item} className="mb-8" style={{ height: 600 }}>
         <ShipProjectGanttChart />
       </motion.div>
 
