@@ -160,7 +160,7 @@ export default function Header({ onMenuClick }: { onMenuClick?: () => void }) {
   };
 
   return (
-    <header className="h-16 shrink-0 bg-[#FDB913] text-slate-900 flex items-center justify-between px-4 md:px-8 z-30 shadow-sm">
+    <header className="h-14 md:h-16 shrink-0 bg-[#FDB913] text-slate-900 flex items-center justify-between px-4 md:px-8 z-30 shadow-sm">
       <div className="flex items-center gap-4 md:gap-8">
         {currentUser && (
           <button 
@@ -182,7 +182,7 @@ export default function Header({ onMenuClick }: { onMenuClick?: () => void }) {
                 setIsNotificationsOpen(!isNotificationsOpen);
                 setIsUserSwitcherOpen(false);
               }}
-              className="relative p-2 hover:bg-slate-900/10 rounded-full transition-colors hidden sm:block"
+              className="relative p-2 hover:bg-slate-900/10 rounded-full transition-colors"
             >
               <Bell className="w-5 h-5" />
               {notifications.filter(n => !n.is_read).length > 0 && (
