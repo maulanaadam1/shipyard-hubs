@@ -48,7 +48,12 @@ export default function ProjectManagement() {
     status: 'Active',
     project_lead: '',
     est_start: '',
-    est_finish: ''
+    est_finish: '',
+    est_docking_date: '',
+    est_undocking_date: '',
+    est_trial_date: '',
+    est_arrival_date: '',
+    est_departure_date: ''
   });
 
   const handleOpenModal = (project: Project | null = null) => {
@@ -62,7 +67,12 @@ export default function ProjectManagement() {
         status: project.status || 'Active',
         project_lead: project.project_lead || '',
         est_start: project.est_start || '',
-        est_finish: project.est_finish || ''
+        est_finish: project.est_finish || '',
+        est_docking_date: project.est_docking_date || '',
+        est_undocking_date: project.est_undocking_date || '',
+        est_trial_date: project.est_trial_date || '',
+        est_arrival_date: project.est_arrival_date || '',
+        est_departure_date: project.est_departure_date || ''
       });
     } else {
       setEditingProject(null);
@@ -74,7 +84,12 @@ export default function ProjectManagement() {
         status: 'Active',
         project_lead: '',
         est_start: '',
-        est_finish: ''
+        est_finish: '',
+        est_docking_date: '',
+        est_undocking_date: '',
+        est_trial_date: '',
+        est_arrival_date: '',
+        est_departure_date: ''
       });
     }
     setIsModalOpen(true);
@@ -721,6 +736,51 @@ export default function ProjectManagement() {
                       type="date"
                       value={formData.est_finish}
                       onChange={(e) => setFormData({ ...formData, est_finish: e.target.value })}
+                      className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-[#FDB913]/30 focus:border-[#FDB913] transition-all"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Est. Docking Date</label>
+                    <input 
+                      type="date"
+                      value={formData.est_docking_date}
+                      onChange={(e) => setFormData({ ...formData, est_docking_date: e.target.value })}
+                      className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-[#FDB913]/30 focus:border-[#FDB913] transition-all"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Est. Undocking Date</label>
+                    <input 
+                      type="date"
+                      value={formData.est_undocking_date}
+                      onChange={(e) => setFormData({ ...formData, est_undocking_date: e.target.value })}
+                      className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-[#FDB913]/30 focus:border-[#FDB913] transition-all"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Est. Trial Date</label>
+                    <input 
+                      type="date"
+                      value={formData.est_trial_date}
+                      onChange={(e) => setFormData({ ...formData, est_trial_date: e.target.value })}
+                      className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-[#FDB913]/30 focus:border-[#FDB913] transition-all"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Est. Arrival Date</label>
+                    <input 
+                      type="date"
+                      value={formData.est_arrival_date}
+                      onChange={(e) => setFormData({ ...formData, est_arrival_date: e.target.value })}
+                      className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-[#FDB913]/30 focus:border-[#FDB913] transition-all"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Est. Departure Date</label>
+                    <input 
+                      type="date"
+                      value={formData.est_departure_date}
+                      onChange={(e) => setFormData({ ...formData, est_departure_date: e.target.value })}
                       className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-[#FDB913]/30 focus:border-[#FDB913] transition-all"
                     />
                   </div>
