@@ -1,63 +1,69 @@
 'use client';
 
 import React from 'react';
-import { Package, ClipboardList, Wrench, AlertCircle } from 'lucide-react';
+import { Briefcase, CheckCircle, Clock, AlertTriangle } from 'lucide-react';
 import { useData } from '@/context/DataContext';
 
 export default function StatsOverview() {
-  const { fleet, deployments } = useData();
+  const { projects } = useData();
 
-  const totalEquipment = fleet.length;
-  const activeLoans = fleet.filter(a => a.available === 'Deployed').length;
-  const inMaintenance = fleet.filter(a => a.available === 'Maintenance').length;
-  const damaged = fleet.filter(a => a.available === 'Damaged').length;
-  const utilizationRate = totalEquipment > 0 ? Math.round((activeLoans / totalEquipment) * 100) : 0;
+  const activeJobs = projects.filter(p => {
+    const s = p.status?.toLowerCase() || '';
+    return s === 'active' || s === 'in progress' || s === 'on going' || s === 'ongoing';
+  }).length;
+
+  const completedJobs = projects.filter(p =>
+    p.status?.toLowerCase() === 'completed'
+  ).length;
+
+  const delayedJobs = projects.filter(p => {
+    const s = p.status?.toLowerCase() || '';
+    const isActive = s === 'active' || s === 'in progress' || s === 'on going' || s === 'ongoing';
+    if (!isActive) return false;
+    const ed = p.est_finish || p.actual_finish;
+    return ed && new Date(ed).getTime() < Date.now();
+  }).length;
+
+  const totalJobs = projects.length;
 
   const stats = [
-    { 
-      label: 'Total Equipment', 
-      value: totalEquipment, 
-      icon: Package, 
+    {
+      label: 'Total Job Orders',
+      value: totalJobs,
+      icon: Briefcase,
       color: 'bg-[#FDB913]/10 text-[#FDB913]',
-      trend: '+2.5%',
-      trendUp: true
+      trend: null,
     },
-    { 
-      label: 'Utilization Rate', 
-      value: `${utilizationRate}%`, 
-      icon: ClipboardList, 
+    {
+      label: 'Active Jobs',
+      value: activeJobs,
+      icon: Clock,
       color: 'bg-sky-50 text-sky-600',
-      trend: '+12%',
-      trendUp: true
+      trend: null,
     },
-    { 
-      label: 'In Maintenance', 
-      value: inMaintenance, 
-      icon: Wrench, 
-      color: 'bg-amber-50 text-amber-600',
-      trend: '-5%',
-      trendUp: false
+    {
+      label: 'Completed',
+      value: completedJobs,
+      icon: CheckCircle,
+      color: 'bg-emerald-50 text-emerald-600',
+      trend: null,
     },
-    { 
-      label: 'Damaged Items', 
-      value: damaged, 
-      icon: AlertCircle, 
+    {
+      label: 'Delayed / Overdue',
+      value: delayedJobs,
+      icon: AlertTriangle,
       color: 'bg-red-50 text-red-600',
-      trend: '+1%',
-      trendUp: true
+      trend: null,
     },
   ];
 
   return (
-    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+    <div className="grid grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
       {stats.map((stat, i) => (
         <div key={i} className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm hover:shadow-md transition-shadow">
           <div className="flex items-center justify-between mb-4">
             <div className={`p-3 rounded-xl ${stat.color}`}>
               <stat.icon className="w-6 h-6" />
-            </div>
-            <div className={`text-xs font-bold px-2 py-1 rounded-full ${stat.trendUp ? 'bg-green-50 text-green-600' : 'bg-red-50 text-red-600'}`}>
-              {stat.trend}
             </div>
           </div>
           <div>
