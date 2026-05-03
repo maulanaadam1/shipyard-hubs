@@ -75,9 +75,9 @@ export default function Header({ onMenuClick }: { onMenuClick?: () => void }) {
       const defaultAdminPassword = import.meta.env.VITE_DEFAULT_ADMIN_PASSWORD || 'admin123';
       const isDefaultAdminLogin = identifier === defaultAdminUsername && password === defaultAdminPassword;
 
-      // If it's a username (no @), append dummy domain
+      // If it's a username (no @) and we are NOT using supabase, append dummy domain
       const isEmail = identifier.includes('@');
-      const authEmail = isEmail ? identifier : `${identifier}@shipyard.local`;
+      const authEmail = isEmail || isConfigured ? identifier : `${identifier}@shipyard.local`;
 
       if (authMode === 'login') {
         const { error } = await api.auth.signInWithPassword({ email: authEmail, password });

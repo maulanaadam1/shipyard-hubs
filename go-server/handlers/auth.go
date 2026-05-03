@@ -92,16 +92,33 @@ func GetSession(w http.ResponseWriter, r *http.Request) {
 		tokenStr = authHeader[7:]
 	}
 
+	supabaseSecret := os.Getenv("SUPABASE_JWT_SECRET")
+	key := []byte(secretKey)
+	
 	token, err := jwt.Parse(tokenStr, func(t *jwt.Token) (any, error) {
 		if _, ok := t.Method.(*jwt.SigningMethodHMAC); !ok {
 			return nil, jwt.ErrSignatureInvalid
 		}
-		return []byte(secretKey), nil
+		
+		// If it's a Supabase-like token or we have a supabase secret, try it
+		if supabaseSecret != "" {
+			return []byte(supabaseSecret), nil
+		}
+		return key, nil
 	})
 
 	if err != nil || !token.Valid {
-		writeJSON(w, 200, map[string]any{"session": nil})
-		return
+		// Try fallback if first attempt failed and we have two keys
+		if supabaseSecret != "" {
+			token, err = jwt.Parse(tokenStr, func(t *jwt.Token) (any, error) {
+				return key, nil
+			})
+		}
+		
+		if err != nil || !token.Valid {
+			writeJSON(w, 200, map[string]any{"session": nil})
+			return
+		}
 	}
 
 	claims, ok := token.Claims.(jwt.MapClaims)
@@ -110,7 +127,14 @@ func GetSession(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Supabase stores email in claims["email"] or claims["user_metadata"]["email"]
 	email, _ := claims["email"].(string)
+	if email == "" {
+		// Try meta
+		if meta, ok := claims["user_metadata"].(map[string]any); ok {
+			email, _ = meta["email"].(string)
+		}
+	}
 	user := db.GetUserPublicByEmail(email)
 	if user == nil {
 		writeJSON(w, 200, map[string]any{"session": nil})
