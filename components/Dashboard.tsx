@@ -7,6 +7,7 @@ import MaintenanceScheduleChart from './charts/MaintenanceScheduleChart';
 import EquipmentUtilizationChart from './charts/EquipmentUtilizationChart';
 import ActiveRepairsQueue from './ActiveRepairsQueue';
 import RepairHistoryChart from './charts/RepairHistoryChart';
+import ShipProjectGanttChart from './charts/ShipProjectGanttChart';
 import { motion } from 'motion/react';
 
 const container = {
@@ -34,6 +35,10 @@ export default function Dashboard() {
     >
       <motion.div variants={item}>
         <StatsOverview />
+      </motion.div>
+
+      <motion.div variants={item} className="mb-8 h-[450px]">
+        <ShipProjectGanttChart />
       </motion.div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
