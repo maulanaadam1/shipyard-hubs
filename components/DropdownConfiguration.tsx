@@ -24,7 +24,9 @@ const CATEGORIES = [
   { id: 'departments', label: 'Departments', icon: 'Building2' },
   { id: 'company_types', label: 'Company Types', icon: 'Building' },
   { id: 'ship_types', label: 'Ship Types', icon: 'Ship' },
+  { id: 'docking_types', label: 'Docking Types', icon: 'Anchor' },
   { id: 'equipment_types', label: 'Equipment Types', icon: 'Tool' },
+  { id: 'extra_permissions', label: 'Extra Permissions', icon: 'Lock' },
 ];
 
 export default function DropdownConfiguration() {
