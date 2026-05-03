@@ -229,9 +229,9 @@ export default function RoleManagement() {
                     >
                       {role.name}
                     </button>
-                    <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <div className="hidden group-hover:flex items-center gap-1 transition-all">
                       <button 
-                        onClick={() => handleEditRoleHeader(role)}
+                        onClick={(e) => { e.stopPropagation(); handleEditRoleHeader(role); }}
                         className="p-1 hover:bg-[#FDB913]/20 rounded-md text-[#e5a611]"
                         title="Edit Role Name"
                       >
@@ -239,7 +239,7 @@ export default function RoleManagement() {
                       </button>
                       {role.name !== 'Admin' && (
                         <button 
-                          onClick={() => handleDeleteRole(role.id, role.name)}
+                          onClick={(e) => { e.stopPropagation(); handleDeleteRole(role.id, role.name); }}
                           className="p-1 hover:bg-red-50 rounded-md text-red-400 hover:text-red-600"
                           title="Delete Role"
                         >

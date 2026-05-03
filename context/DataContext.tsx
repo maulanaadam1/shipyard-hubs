@@ -331,15 +331,13 @@ export function DataProvider({ children }: { children: ReactNode }) {
     }, 7000);
 
     try {
-      // Priority 1: RBAC Data (Need this for Sidebar/Menu)
-      if (isInitial) {
-        const [rolesRes, permsRes] = await Promise.all([
-          api.from('roles_master').select('*'),
-          api.from('role_permissions').select('*')
-        ]);
-        if (rolesRes.data) setRolesMaster(rolesRes.data as RoleMaster[]);
-        if (permsRes.data) setRolePermissions(permsRes.data as RolePermission[]);
-      }
+      // RBAC Data (Need this for Sidebar/Menu and Role Management)
+      const [rolesRes, permsRes] = await Promise.all([
+        api.from('roles_master').select('*'),
+        api.from('role_permissions').select('*')
+      ]);
+      if (rolesRes.data) setRolesMaster(rolesRes.data as RoleMaster[]);
+      if (permsRes.data) setRolePermissions(permsRes.data as RolePermission[]);
 
       // Priority 2: Everything else
       const results = await Promise.allSettled([
