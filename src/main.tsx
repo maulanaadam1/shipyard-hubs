@@ -27,6 +27,7 @@ import EquipmentRelease from '../components/EquipmentRelease';
 import VendorManagement from '../components/VendorManagement';
 import CompanyManagement from '../components/CompanyManagement';
 import ShipManagement from '../components/ShipManagement';
+import MasterLocation from '../components/MasterLocation';
 import UserManagement from '../components/UserManagement';
 import ProjectManagement from '../components/ProjectManagement';
 import UtilityDashboard from '../components/UtilityDashboard';
@@ -201,6 +202,11 @@ createRoot(document.getElementById('root')!).render(
             <Route path="master-kapal" element={
               <ProtectedRoute resource="Master Kapal">
                 <ShipManagement />
+              </ProtectedRoute>
+            } />
+            <Route path="master-location" element={
+              <ProtectedRoute resource="Master Location">
+                <MasterLocation />
               </ProtectedRoute>
             } />
             <Route path="master-workflow" element={

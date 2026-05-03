@@ -27,7 +27,7 @@ import Papa from 'papaparse';
 import * as XLSX from 'xlsx';
 
 export default function ProjectManagement() {
-  const { projects, setProjects } = useData();
+  const { projects, setProjects, dropdownConfigs, locations } = useData();
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [showSuccessModal, setShowSuccessModal] = useState(false);
   const [editingProject, setEditingProject] = useState<Project | null>(null);
@@ -803,23 +803,38 @@ export default function ProjectManagement() {
                   </div>
                   <div className="space-y-2">
                     <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Docking Type</label>
-                    <input 
-                      type="text"
+                    <select 
                       value={formData.docking_type}
                       onChange={(e) => setFormData({ ...formData, docking_type: e.target.value })}
                       className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-[#FDB913]/30 focus:border-[#FDB913] transition-all"
-                      placeholder="e.g. Graving Dock"
-                    />
+                    >
+                      <option value="">Select Docking Type</option>
+                      {dropdownConfigs?.filter(c => c.category === 'docking_types' && c.is_active).map(c => (
+                        <option key={c.id} value={c.value}>{c.label}</option>
+                      ))}
+                      {/* Fallbacks if DB is completely empty */}
+                      {(!dropdownConfigs || dropdownConfigs.filter(c => c.category === 'docking_types').length === 0) && (
+                        <>
+                          <option value="Graving Dock">Graving Dock</option>
+                          <option value="Slipway">Slipway</option>
+                          <option value="Airbag System">Airbag System</option>
+                          <option value="Floating Dock">Floating Dock</option>
+                        </>
+                      )}
+                    </select>
                   </div>
                   <div className="space-y-2">
                     <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Location</label>
-                    <input 
-                      type="text"
+                    <select 
                       value={formData.location}
                       onChange={(e) => setFormData({ ...formData, location: e.target.value })}
                       className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-[#FDB913]/30 focus:border-[#FDB913] transition-all"
-                      placeholder="e.g. Batam Area"
-                    />
+                    >
+                      <option value="">Select Location</option>
+                      {locations?.filter(l => l.status === 'Active').map(l => (
+                        <option key={l.id} value={l.name}>{l.name} {l.size ? `(${l.size})` : ''}</option>
+                      ))}
+                    </select>
                   </div>
                   
                   {/* Dynamic Duration Calculation */}

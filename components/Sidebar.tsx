@@ -19,7 +19,8 @@ import {
   Anchor,
   Briefcase,
   Activity,
-  Shield
+  Shield,
+  MapPin
 } from 'lucide-react';
 import { useData } from '@/context/DataContext';
 import { motion } from 'motion/react';
@@ -61,6 +62,7 @@ export default function Sidebar({ onTabChange }: { onTabChange: () => void }) {
         { icon: Truck, label: 'Master Vendor', path: '/master-vendor', resource: 'Master Vendor' },
         { icon: Building2, label: 'Master Company', path: '/master-company', resource: 'Master Company' },
         { icon: Anchor, label: 'Master Kapal', path: '/master-kapal', resource: 'Master Kapal' },
+        { icon: MapPin, label: 'Master Location', path: '/master-location', resource: 'Master Location' },
         { icon: ClipboardList, label: 'Approval Workflow', path: '/master-workflow', resource: 'Master Workflow' },
         { icon: Settings, label: 'Master Configuration', path: '/master-config', resource: 'Master Configuration' },
         { icon: Shield, label: 'Role Management', path: '/master-roles', resource: 'Role Management' },

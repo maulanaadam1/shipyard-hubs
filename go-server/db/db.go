@@ -193,6 +193,14 @@ func createTables() {
 		return_status TEXT,
 		description TEXT
 	);
+
+	CREATE TABLE IF NOT EXISTS master_locations (
+		id TEXT PRIMARY KEY,
+		name TEXT,
+		size TEXT,
+		description TEXT,
+		status TEXT DEFAULT 'Active'
+	);
 	`
 
 	if _, err := DB.Exec(schema); err != nil {
@@ -381,7 +389,7 @@ func seedRolesAndPermissions() {
 		resources := []string{
 			"Dashboard", "Utility", "Job Order", "Request", "Release", "Return", 
 			"Maintenance", "Inventory", "Reports", "Master Equipment", 
-			"Master Vendor", "Master Company", "Master Kapal", "Master Workflow", 
+			"Master Vendor", "Master Company", "Master Kapal", "Master Location", "Master Workflow", 
 			"Master Configuration", "User Management", "Role Management",
 		}
 		actions := []string{"view", "add", "edit", "delete", "approve", "import", "export"}
@@ -441,6 +449,12 @@ func seedDropdownConfigs() {
 		{"ship_types", "Barge", "Barge"},
 		{"ship_types", "LCT", "LCT"},
 		{"ship_types", "SPOB", "SPOB"},
+		
+		// Docking Types
+		{"docking_types", "Graving Dock", "Graving Dock"},
+		{"docking_types", "Slipway", "Slipway"},
+		{"docking_types", "Airbag System", "Airbag System"},
+		{"docking_types", "Floating Dock", "Floating Dock"},
 		
 		// Departments
 		{"departments", "Operations", "Operations"},

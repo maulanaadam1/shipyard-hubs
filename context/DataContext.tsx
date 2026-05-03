@@ -142,6 +142,14 @@ export interface Company {
   status: 'Active' | 'Inactive';
 }
 
+export interface LocationMaster {
+  id: string;
+  name: string;
+  size: string;
+  description: string;
+  status: 'Active' | 'Inactive';
+}
+
 export interface ApprovalWorkflow {
   id: string;
   module: string;
@@ -247,6 +255,8 @@ interface DataContextType {
   setDropdownConfigs: (configs: DropdownConfig[]) => void;
   companies: Company[];
   setCompanies: React.Dispatch<React.SetStateAction<Company[]>>;
+  locations: LocationMaster[];
+  setLocations: React.Dispatch<React.SetStateAction<LocationMaster[]>>;
   ships: Ship[];
   setShips: React.Dispatch<React.SetStateAction<Ship[]>>;
   projects: Project[];
@@ -279,6 +289,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
   const [users, setUsers] = useState<User[]>([]);
   const [vendors, setVendors] = useState<Vendor[]>([]);
   const [companies, setCompanies] = useState<Company[]>([]);
+  const [locations, setLocations] = useState<LocationMaster[]>([]);
   const [ships, setShips] = useState<Ship[]>([]);
   const [projects, setProjects] = useState<Project[]>([]);
   const [workflows, setWorkflows] = useState<ApprovalWorkflow[]>([]);
@@ -338,6 +349,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
         api.from('profiles').select('*'),
         api.from('vendors').select('*').order('vendor', { ascending: true }),
         api.from('companies').select('*').order('company_name', { ascending: true }),
+        api.from('master_locations').select('*'),
         api.from('ships').select('*').order('shipname', { ascending: true }),
         api.from('projects').select('*').order('create_date', { ascending: false }),
         api.from('dropdown_configs').select('*'),
@@ -362,12 +374,13 @@ export function DataProvider({ children }: { children: ReactNode }) {
             if (index === 3) setUsers(data as User[]);
             if (index === 4) setVendors(data as Vendor[]);
             if (index === 5) setCompanies(data as Company[]);
-            if (index === 6) setShips(data as Ship[]);
-            if (index === 7) setProjects(data as Project[]);
-            if (index === 8) setDropdownConfigs(data as DropdownConfig[]);
-            if (index === 9) setReleases(data as ReleaseRecord[]);
-            if (index === 10) setWorkflows(data as ApprovalWorkflow[]);
-            if (index === 11) setNotifications(data as Notification[]);
+            if (index === 6) setLocations(data as LocationMaster[]);
+            if (index === 7) setShips(data as Ship[]);
+            if (index === 8) setProjects(data as Project[]);
+            if (index === 9) setDropdownConfigs(data as DropdownConfig[]);
+            if (index === 10) setReleases(data as ReleaseRecord[]);
+            if (index === 11) setWorkflows(data as ApprovalWorkflow[]);
+            if (index === 12) setNotifications(data as Notification[]);
           }
         }
       });
@@ -548,6 +561,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
       users, setUsers,
       vendors, setVendors,
       companies, setCompanies,
+      locations, setLocations,
       ships, setShips,
       projects, setProjects,
       dropdownConfigs, setDropdownConfigs,

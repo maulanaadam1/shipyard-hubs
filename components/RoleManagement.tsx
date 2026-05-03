@@ -33,6 +33,7 @@ const RESOURCES = [
   { id: 'Master Vendor', type: 'menu' },
   { id: 'Master Company', type: 'menu' },
   { id: 'Master Kapal', type: 'menu' },
+  { id: 'Master Location', type: 'menu' },
   { id: 'Master Workflow', type: 'menu' },
   { id: 'Master Configuration', type: 'menu' },
   { id: 'User Management', type: 'menu' },
