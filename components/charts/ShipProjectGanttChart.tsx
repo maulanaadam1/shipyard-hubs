@@ -17,76 +17,8 @@ const LOCATION_COLORS = [
 
 const LABEL_WIDTH = 160;
 const ROW_HEIGHT = 36;
-
-// SVG connector between rows within a location group
-function PredecessorConnectors({
-  rows,
-  color,
-  trackWidth,
-}: {
-  rows: any[];
-  color: (typeof LOCATION_COLORS)[0];
-  trackWidth: number;
-}) {
-  if (rows.length < 2 || trackWidth === 0) return null;
-
-  const paths: React.ReactNode[] = [];
-
-  for (let i = 0; i < rows.length - 1; i++) {
-    const curr = rows[i];
-    const next = rows[i + 1];
-
-    const currEndX = (curr.left + curr.width) / 100 * trackWidth;
-    const nextStartX = next.left / 100 * trackWidth;
-
-    const currCenterY = i * ROW_HEIGHT + ROW_HEIGHT / 2;
-    const nextCenterY = (i + 1) * ROW_HEIGHT + ROW_HEIGHT / 2;
-
-    // Only draw when bars don't completely overlap in time
-    if (nextStartX <= 0) continue;
-
-    const bendX = Math.max(currEndX + 10, nextStartX - 2);
-
-    // L-shaped path: right → down → right to bar start
-    const d = `M ${currEndX} ${currCenterY} L ${bendX} ${currCenterY} L ${bendX} ${nextCenterY} L ${nextStartX} ${nextCenterY}`;
-
-    paths.push(
-      <g key={i}>
-        <path
-          d={d}
-          fill="none"
-          stroke={color.bg}
-          strokeWidth={1.5}
-          strokeDasharray="4 2"
-          opacity={0.6}
-        />
-        {/* Arrowhead */}
-        <polygon
-          points={`${nextStartX},${nextCenterY} ${nextStartX - 7},${nextCenterY - 4} ${nextStartX - 7},${nextCenterY + 4}`}
-          fill={color.bg}
-          opacity={0.7}
-        />
-      </g>
-    );
-  }
-
-  const totalHeight = rows.length * ROW_HEIGHT;
-
-  return (
-    <svg
-      className="absolute pointer-events-none"
-      style={{ left: 0, top: 0, width: trackWidth, height: totalHeight, overflow: 'visible', zIndex: 5 }}
-      viewBox={`0 0 ${trackWidth} ${totalHeight}`}
-    >
-      <defs>
-        <marker id="arrow" markerWidth="6" markerHeight="6" refX="3" refY="3" orient="auto">
-          <path d="M0,0 L0,6 L6,3 z" fill={color.bg} opacity="0.7" />
-        </marker>
-      </defs>
-      {paths}
-    </svg>
-  );
-}
+const BAR_HEIGHT = 20;
+const BAR_OFFSET = (ROW_HEIGHT - BAR_HEIGHT) / 2; // vertical center of bar within row
 
 export default function ShipProjectGanttChart() {
   const { projects } = useData();
@@ -95,9 +27,9 @@ export default function ShipProjectGanttChart() {
   const [mousePos, setMousePos] = useState({ x: 0, y: 0 });
   const [collapsedLocations, setCollapsedLocations] = useState<Set<string>>(new Set());
 
-  // Measure track width for SVG connector drawing
+  // Measure track width for SVG pixel calculations
   const trackRef = useRef<HTMLDivElement>(null);
-  const [trackWidth, setTrackWidth] = useState(0);
+  const [trackWidth, setTrackWidth] = useState(600);
   useEffect(() => {
     if (!trackRef.current) return;
     const ro = new ResizeObserver(entries => {
@@ -117,8 +49,7 @@ export default function ShipProjectGanttChart() {
 
   const chartData = useMemo(() => {
     const headers: { label: string; labelSecondary?: string; date: Date }[] = [];
-    let windowStart = 0;
-    let windowEnd = 0;
+    let windowStart = 0, windowEnd = 0;
     const today = new Date(); today.setHours(0, 0, 0, 0);
 
     if (viewMode === 'monthly') {
@@ -156,10 +87,11 @@ export default function ShipProjectGanttChart() {
     }
 
     const totalDuration = windowEnd - windowStart;
+    const todayPct = Math.max(0, Math.min(100, ((today.getTime() - windowStart) / totalDuration) * 100));
 
     const activeProjects = projects.filter(p => {
       const s = p.status?.toLowerCase() || '';
-      if (!['active','in progress','on going','ongoing'].includes(s)) return false;
+      if (!['active', 'in progress', 'on going', 'ongoing'].includes(s)) return false;
       const sd = p.est_start || p.actual_start;
       const ed = p.est_finish || p.actual_finish;
       if (!sd || !ed) return false;
@@ -179,11 +111,10 @@ export default function ShipProjectGanttChart() {
         id: p.id, name: p.shipname || p.idproject, code: p.idproject,
         location: p.location || '(No Location)', dockingType: p.docking_type || '',
         startDateStr: sd, endDateStr: ed, startMs, endMs,
-        left, width, isDelayed: Date.now() > endMs, create_date: p.create_date,
+        left, width, isDelayed: Date.now() > endMs,
       };
     });
 
-    // Group by location, sort within group by startMs (predecessor order)
     const grouped: Record<string, typeof mapped> = {};
     mapped.forEach(p => {
       if (!grouped[p.location]) grouped[p.location] = [];
@@ -191,23 +122,20 @@ export default function ShipProjectGanttChart() {
     });
     Object.keys(grouped).forEach(loc => grouped[loc].sort((a, b) => a.startMs - b.startMs));
 
-    // Today line position (%)
-    const todayPct = Math.max(0, Math.min(100, ((today.getTime() - windowStart) / totalDuration) * 100));
-
-    return { headers, grouped, sortedLocations: Object.keys(grouped).sort(), todayPct };
+    return { headers, grouped, sortedLocations: Object.keys(grouped).sort(), todayPct, totalDuration };
   }, [projects, viewMode]);
 
   return (
     <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm h-full flex flex-col">
-      {/* Header */}
+      {/* Title & Controls */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-5 shrink-0">
         <div>
           <h3 className="font-display font-bold text-slate-800">Active Job Orders — by Location</h3>
-          <p className="text-[11px] text-slate-400 mt-0.5">Predecessor order within each location · Dashed lines show dependencies</p>
+          <p className="text-[11px] text-slate-400 mt-0.5">Grouped by dock · Dashed L-lines show predecessor dependencies</p>
         </div>
         <div className="flex flex-wrap items-center gap-3 text-xs">
           <div className="flex bg-slate-100 p-1 rounded-lg">
-            {(['daily','weekly','monthly'] as const).map(m => (
+            {(['daily', 'weekly', 'monthly'] as const).map(m => (
               <button key={m} onClick={() => setViewMode(m)}
                 className={'px-3 py-1.5 rounded-md capitalize transition-colors ' + (viewMode === m ? 'bg-white shadow-sm font-bold text-slate-800' : 'text-slate-500 hover:text-slate-700')}>
                 {m}
@@ -217,21 +145,24 @@ export default function ShipProjectGanttChart() {
           <div className="hidden sm:flex items-center gap-3 font-medium">
             <div className="flex items-center gap-1.5"><div className="w-3 h-3 rounded-sm bg-sky-500" /><span className="text-slate-600">On Track</span></div>
             <div className="flex items-center gap-1.5"><div className="w-3 h-3 rounded-sm bg-red-500" /><span className="text-slate-600">Delayed</span></div>
-            <div className="flex items-center gap-1.5"><div className="w-8 border-t-2 border-dashed border-slate-400" /><span className="text-slate-600">Dependency</span></div>
+            <div className="flex items-center gap-1.5">
+              <svg width="20" height="12"><path d="M0,6 L14,6" stroke="#94a3b8" strokeWidth="1.5" strokeDasharray="3 2" /><polygon points="14,6 9,3 9,9" fill="#94a3b8" /></svg>
+              <span className="text-slate-600">Predecessor</span>
+            </div>
           </div>
         </div>
       </div>
 
-      {/* Chart body */}
+      {/* Chart */}
       <div className="flex-1 overflow-auto">
         <div style={{ minWidth: 800 }}>
 
-          {/* Time column headers */}
+          {/* Column headers */}
           <div className="flex border-b border-slate-100 pb-2 mb-3 sticky top-0 bg-white z-20" style={{ paddingLeft: LABEL_WIDTH }}>
             {chartData.headers.map((h, i) => (
-              <div key={i} className="flex-1 text-center flex flex-col justify-end">
-                <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">{h.label}</span>
-                {h.labelSecondary && <span className="text-[9px] text-slate-400 mt-0.5">{h.labelSecondary}</span>}
+              <div key={i} className="flex-1 text-center">
+                <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block">{h.label}</span>
+                {h.labelSecondary && <span className="text-[9px] text-slate-400">{h.labelSecondary}</span>}
               </div>
             ))}
           </div>
@@ -244,12 +175,14 @@ export default function ShipProjectGanttChart() {
                 const color = LOCATION_COLORS[locIdx % LOCATION_COLORS.length];
                 const rows = chartData.grouped[location];
                 const isCollapsed = collapsedLocations.has(location);
+                const totalGroupHeight = rows.length * ROW_HEIGHT;
 
                 return (
                   <div key={location} className="rounded-xl overflow-hidden border border-slate-100">
-                    {/* Location section header */}
+
+                    {/* Location header */}
                     <button onClick={() => toggleLocation(location)}
-                      className="w-full flex items-center gap-2 px-3 py-2 text-left transition-colors hover:opacity-90"
+                      className="w-full flex items-center gap-2 px-3 py-2 text-left hover:opacity-90 transition-opacity"
                       style={{ backgroundColor: color.light }}>
                       <MapPin className="w-3.5 h-3.5 shrink-0" style={{ color: color.bg }} />
                       <span className="text-xs font-bold" style={{ color: color.text }}>{location}</span>
@@ -259,59 +192,125 @@ export default function ShipProjectGanttChart() {
                       <span className="ml-auto text-xs" style={{ color: color.text }}>{isCollapsed ? '▸' : '▾'}</span>
                     </button>
 
-                    {/* Job rows */}
+                    {/* Rows body — single flex layout */}
                     {!isCollapsed && (
-                      <div className="bg-white">
-                        <div className="flex">
-                          {/* Fixed label column */}
-                          <div style={{ width: LABEL_WIDTH, minWidth: LABEL_WIDTH }} className="shrink-0 border-r border-slate-50">
-                            {rows.map((project, rowIdx) => (
-                              <div key={project.id} className="flex flex-col justify-center px-3 border-b border-slate-50 last:border-b-0"
-                                style={{ height: ROW_HEIGHT }}>
-                                <p className="text-xs font-bold text-slate-800 truncate leading-tight" title={project.name}>{project.name}</p>
-                                <p className="text-[10px] text-slate-400 truncate">{project.code}</p>
-                              </div>
-                            ))}
-                          </div>
+                      <div className="flex bg-white" style={{ height: totalGroupHeight }}>
 
-                          {/* Track area with SVG connectors */}
-                          <div className="flex-1 relative" ref={locIdx === 0 ? trackRef : undefined}>
-                            {/* Grid column lines */}
-                            <div className="absolute inset-0 flex pointer-events-none opacity-[0.06]">
-                              {chartData.headers.map((_, i) => (
-                                <div key={i} className="flex-1 border-l border-slate-500" />
-                              ))}
+                        {/* Labels column */}
+                        <div style={{ width: LABEL_WIDTH, minWidth: LABEL_WIDTH }} className="shrink-0 border-r border-slate-50 relative">
+                          {rows.map((project, rowIdx) => (
+                            <div key={project.id}
+                              className="absolute w-full flex flex-col justify-center px-3 border-b border-slate-50"
+                              style={{ top: rowIdx * ROW_HEIGHT, height: ROW_HEIGHT }}>
+                              <p className="text-xs font-bold text-slate-800 truncate leading-tight" title={project.name}>{project.name}</p>
+                              <p className="text-[10px] text-slate-400 truncate">{project.code}</p>
                             </div>
+                          ))}
+                        </div>
 
-                            {/* Today vertical line */}
-                            <div className="absolute top-0 bottom-0 w-0.5 bg-orange-400 opacity-70 z-10 pointer-events-none"
-                              style={{ left: chartData.todayPct + '%' }} />
-
-                            {/* SVG predecessor connectors (L-shaped) */}
-                            <PredecessorConnectors rows={rows} color={color} trackWidth={trackWidth} />
-
-                            {/* Bars */}
-                            {rows.map((project, rowIdx) => (
-                              <div key={project.id} className="relative flex items-center border-b border-slate-50 last:border-b-0 hover:bg-slate-50/50 group"
-                                style={{ height: ROW_HEIGHT }}>
-                                <div
-                                  className="absolute rounded-md shadow-sm cursor-pointer transition-all duration-150 group-hover:brightness-110 flex items-center justify-center overflow-hidden z-10"
-                                  style={{
-                                    left: project.left + '%',
-                                    width: Math.max(project.width, 0.8) + '%',
-                                    height: 20,
-                                    backgroundColor: project.isDelayed ? '#ef4444' : color.bg,
-                                    minWidth: 8,
-                                  }}
-                                  onMouseEnter={(e) => { setHoveredProject({ ...project, color: project.isDelayed ? '#ef4444' : color.bg, location }); setMousePos({ x: e.clientX, y: e.clientY }); }}
-                                  onMouseMove={(e) => setMousePos({ x: e.clientX, y: e.clientY })}
-                                  onMouseLeave={() => setHoveredProject(null)}
-                                >
-                                  <span className="text-[9px] font-bold text-white/90 px-1.5 truncate select-none">{project.name}</span>
-                                </div>
-                              </div>
+                        {/* Track area — single container for bars + SVG */}
+                        <div
+                          className="flex-1 relative"
+                          ref={locIdx === 0 ? trackRef : undefined}
+                          style={{ height: totalGroupHeight }}
+                        >
+                          {/* Column grid lines */}
+                          <div className="absolute inset-0 flex pointer-events-none">
+                            {chartData.headers.map((_, i) => (
+                              <div key={i} className="flex-1 border-l border-slate-100 first:border-l-0" />
                             ))}
                           </div>
+
+                          {/* Row separator lines */}
+                          {rows.map((_, i) => i > 0 && (
+                            <div key={i} className="absolute left-0 right-0 border-t border-slate-50 pointer-events-none"
+                              style={{ top: i * ROW_HEIGHT }} />
+                          ))}
+
+                          {/* Today line */}
+                          <div
+                            className="absolute top-0 bottom-0 w-0.5 bg-orange-400 opacity-70 pointer-events-none z-10"
+                            style={{ left: chartData.todayPct + '%' }}
+                          />
+
+                          {/* ── SVG Predecessor connectors (spans full group height) ── */}
+                          {rows.length > 1 && trackWidth > 0 && (
+                            <svg
+                              className="absolute inset-0 pointer-events-none z-20"
+                              width={trackWidth}
+                              height={totalGroupHeight}
+                              style={{ overflow: 'visible' }}
+                            >
+                              <defs>
+                                <marker id={`arrow-${locIdx}`} markerWidth="8" markerHeight="8"
+                                  refX="7" refY="4" orient="auto">
+                                  <path d="M0,0 L0,8 L8,4 z" fill={color.bg} opacity="0.75" />
+                                </marker>
+                              </defs>
+
+                              {rows.map((curr, i) => {
+                                if (i === rows.length - 1) return null;
+                                const next = rows[i + 1];
+
+                                // Pixel X: right edge of curr bar
+                                const currEndX = (curr.left + curr.width) / 100 * trackWidth;
+                                // Pixel X: left edge of next bar
+                                const nextStartX = next.left / 100 * trackWidth;
+
+                                // Y: center of bar in each row
+                                const currBarCenterY = i * ROW_HEIGHT + ROW_HEIGHT / 2;
+                                const nextBarCenterY = (i + 1) * ROW_HEIGHT + ROW_HEIGHT / 2;
+
+                                // Horizontal bend point: slightly right of curr end
+                                const bendX = currEndX + 12;
+
+                                // Path: right → down → to start of next bar
+                                const d = [
+                                  `M ${currEndX} ${currBarCenterY}`,          // start at right edge of bar
+                                  `H ${bendX}`,                                // go right 12px
+                                  `V ${nextBarCenterY}`,                       // go DOWN to next row center
+                                  `H ${Math.max(nextStartX - 1, bendX)}`,     // go horizontal to bar start
+                                ].join(' ');
+
+                                return (
+                                  <path
+                                    key={i}
+                                    d={d}
+                                    fill="none"
+                                    stroke={color.bg}
+                                    strokeWidth={1.5}
+                                    strokeDasharray="5 3"
+                                    opacity={0.65}
+                                    markerEnd={`url(#arrow-${locIdx})`}
+                                  />
+                                );
+                              })}
+                            </svg>
+                          )}
+
+                          {/* Bars (absolute positioned) */}
+                          {rows.map((project, rowIdx) => (
+                            <div
+                              key={project.id}
+                              className="absolute rounded-md shadow-sm cursor-pointer transition-all duration-150 hover:brightness-110 flex items-center justify-center overflow-hidden z-30"
+                              style={{
+                                left: project.left + '%',
+                                width: Math.max(project.width, 0.8) + '%',
+                                top: rowIdx * ROW_HEIGHT + BAR_OFFSET,
+                                height: BAR_HEIGHT,
+                                backgroundColor: project.isDelayed ? '#ef4444' : color.bg,
+                                minWidth: 8,
+                              }}
+                              onMouseEnter={(e) => {
+                                setHoveredProject({ ...project, color: project.isDelayed ? '#ef4444' : color.bg, location });
+                                setMousePos({ x: e.clientX, y: e.clientY });
+                              }}
+                              onMouseMove={(e) => setMousePos({ x: e.clientX, y: e.clientY })}
+                              onMouseLeave={() => setHoveredProject(null)}
+                            >
+                              <span className="text-[9px] font-bold text-white/90 px-1.5 truncate select-none">{project.name}</span>
+                            </div>
+                          ))}
                         </div>
                       </div>
                     )}
