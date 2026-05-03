@@ -145,10 +145,6 @@ export default function ShipProjectGanttChart() {
           <div className="hidden sm:flex items-center gap-3 font-medium">
             <div className="flex items-center gap-1.5"><div className="w-3 h-3 rounded-sm bg-sky-500" /><span className="text-slate-600">On Track</span></div>
             <div className="flex items-center gap-1.5"><div className="w-3 h-3 rounded-sm bg-red-500" /><span className="text-slate-600">Delayed</span></div>
-            <div className="flex items-center gap-1.5">
-              <svg width="20" height="12"><path d="M0,6 L14,6" stroke="#94a3b8" strokeWidth="1.5" strokeDasharray="3 2" /><polygon points="14,6 9,3 9,9" fill="#94a3b8" /></svg>
-              <span className="text-slate-600">Predecessor</span>
-            </div>
           </div>
         </div>
       </div>
@@ -232,61 +228,6 @@ export default function ShipProjectGanttChart() {
                             className="absolute top-0 bottom-0 w-0.5 bg-orange-400 opacity-70 pointer-events-none z-10"
                             style={{ left: chartData.todayPct + '%' }}
                           />
-
-                          {/* ── SVG Predecessor connectors (spans full group height) ── */}
-                          {rows.length > 1 && trackWidth > 0 && (
-                            <svg
-                              className="absolute inset-0 pointer-events-none z-20"
-                              width={trackWidth}
-                              height={totalGroupHeight}
-                              style={{ overflow: 'visible' }}
-                            >
-                              <defs>
-                                <marker id={`arrow-${locIdx}`} markerWidth="8" markerHeight="8"
-                                  refX="7" refY="4" orient="auto">
-                                  <path d="M0,0 L0,8 L8,4 z" fill={color.bg} opacity="0.75" />
-                                </marker>
-                              </defs>
-
-                              {rows.map((curr, i) => {
-                                if (i === rows.length - 1) return null;
-                                const next = rows[i + 1];
-
-                                // Pixel X: right edge of curr bar
-                                const currEndX = (curr.left + curr.width) / 100 * trackWidth;
-                                // Pixel X: left edge of next bar
-                                const nextStartX = next.left / 100 * trackWidth;
-
-                                // Y: center of bar in each row
-                                const currBarCenterY = i * ROW_HEIGHT + ROW_HEIGHT / 2;
-                                const nextBarCenterY = (i + 1) * ROW_HEIGHT + ROW_HEIGHT / 2;
-
-                                // Horizontal bend point: slightly right of curr end
-                                const bendX = currEndX + 12;
-
-                                // Path: right → down → to start of next bar
-                                const d = [
-                                  `M ${currEndX} ${currBarCenterY}`,          // start at right edge of bar
-                                  `H ${bendX}`,                                // go right 12px
-                                  `V ${nextBarCenterY}`,                       // go DOWN to next row center
-                                  `H ${Math.max(nextStartX - 1, bendX)}`,     // go horizontal to bar start
-                                ].join(' ');
-
-                                return (
-                                  <path
-                                    key={i}
-                                    d={d}
-                                    fill="none"
-                                    stroke={color.bg}
-                                    strokeWidth={1.5}
-                                    strokeDasharray="5 3"
-                                    opacity={0.65}
-                                    markerEnd={`url(#arrow-${locIdx})`}
-                                  />
-                                );
-                              })}
-                            </svg>
-                          )}
 
                           {/* Bars (absolute positioned) */}
                           {rows.map((project, rowIdx) => (
