@@ -259,6 +259,41 @@ func createTables() {
 
 	// Migration: add user_ids column if not exists
 	DB.Exec("ALTER TABLE approval_workflow ADD COLUMN user_ids TEXT DEFAULT '[]'")
+
+	// Migration: ensure docking_types exist in dropdown_configs (safe upsert per item)
+	seedMissingDropdownItems()
+}
+
+func seedMissingDropdownItems() {
+	// Each entry is inserted only if a matching category+value doesn't exist yet.
+	// This is safe to run on every startup.
+	items := []struct {
+		Category string
+		Label    string
+		Value    string
+	}{
+		{"docking_types", "Graving Dock", "Graving Dock"},
+		{"docking_types", "Slipway", "Slipway"},
+		{"docking_types", "Airbag System", "Airbag System"},
+		{"docking_types", "Floating Dock", "Floating Dock"},
+	}
+
+	for _, item := range items {
+		var count int
+		DB.QueryRow(
+			"SELECT COUNT(*) FROM dropdown_configs WHERE category = ? AND value = ?",
+			item.Category, item.Value,
+		).Scan(&count)
+
+		if count == 0 {
+			id := uuid.New().String()
+			_, _ = DB.Exec(
+				"INSERT INTO dropdown_configs (id, category, label, value, is_active) VALUES (?, ?, ?, ?, 1)",
+				id, item.Category, item.Label, item.Value,
+			)
+			log.Printf("Seeded missing dropdown: [%s] %s", item.Category, item.Label)
+		}
+	}
 }
 
 func seedApprovalWorkflows() {
