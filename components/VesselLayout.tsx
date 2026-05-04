@@ -22,14 +22,15 @@ const ORIGINAL_PATH_HEIGHT = 235;
 export default function VesselLayout() {
   const { projects, fetchData, canAccess } = useData();
   const [searchTerm, setSearchTerm] = useState('');
-  const [zoom, setZoom] = useState(1);
+  const [zoom, setZoom] = useState(1.2); // Start with a better zoom level
   const [hoveredVessel, setHoveredVessel] = useState<Project | null>(null);
   const [isSaving, setIsSaving] = useState(false);
+  const [offset, setOffset] = useState({ x: 0, y: 0 });
 
   // Filter only active vessels (status_dock or ship_visibility)
   const activeVessels = useMemo(() => {
     return projects.filter(p => {
-      const isVisible = p.ship_visibility === 'active' || p.status_dock === 'Docking' || p.status_dock === 'On Dock';
+      const isVisible = p.ship_visibility === 'active' || p.status_dock === 'Docking' || p.status_dock === 'On Dock' || p.status_dock === 'Undocking';
       const matchesSearch = p.shipname?.toLowerCase().includes(searchTerm.toLowerCase());
       return isVisible && matchesSearch;
     });
@@ -40,8 +41,8 @@ export default function VesselLayout() {
     try {
       const { error } = await api.from('projects')
         .update({ 
-          x_coordinate: Math.round(x), 
-          y_coordinate: Math.round(y) 
+          x_coordinate: x, 
+          y_coordinate: y 
         })
         .eq('id', project.id);
       
@@ -84,58 +85,67 @@ export default function VesselLayout() {
   };
 
   return (
-    <div className="flex flex-col h-full bg-slate-900 overflow-hidden relative">
+    <div className="flex flex-col h-full bg-[#f8fafc] overflow-hidden relative">
       {/* Header Controls */}
       <div className="absolute top-6 left-6 z-20 flex flex-col gap-4">
-        <div className="bg-white/10 backdrop-blur-md border border-white/20 p-2 rounded-2xl flex items-center gap-3 shadow-2xl">
-          <div className="w-10 h-10 bg-[#FDB913] rounded-xl flex items-center justify-center text-slate-900 shadow-lg">
+        <div className="bg-white/80 backdrop-blur-xl border border-slate-200 p-2 rounded-2xl flex items-center gap-3 shadow-xl">
+          <div className="w-10 h-10 bg-[#FDB913] rounded-xl flex items-center justify-center text-slate-900 shadow-md">
             <MapIcon className="w-5 h-5" />
           </div>
-          <div className="pr-4 border-r border-white/10">
-            <h2 className="text-white font-bold text-sm leading-none">Vessel Layout</h2>
-            <p className="text-white/40 text-[10px] mt-1 font-medium tracking-wider uppercase">Shipyard Terminal</p>
+          <div className="pr-4 border-r border-slate-200">
+            <h2 className="text-slate-800 font-bold text-sm leading-none">Vessel Layout</h2>
+            <p className="text-slate-400 text-[10px] mt-1 font-medium tracking-wider uppercase">Shipyard Terminal</p>
           </div>
-          <div className="flex items-center gap-2 px-2">
+          <div className="flex items-center gap-1 px-2">
             <button 
-              onClick={() => setZoom(z => Math.min(2, z + 0.1))}
-              className="p-2 hover:bg-white/10 rounded-lg text-white/70 transition-colors"
+              onClick={() => setZoom(z => Math.min(4, z + 0.2))}
+              className="p-2 hover:bg-slate-100 rounded-lg text-slate-600 transition-colors"
+              title="Zoom In"
             >
               <Maximize2 className="w-4 h-4" />
             </button>
             <button 
-              onClick={() => setZoom(z => Math.max(0.5, z - 0.1))}
-              className="p-2 hover:bg-white/10 rounded-lg text-white/70 transition-colors"
+              onClick={() => setZoom(z => Math.max(0.2, z - 0.2))}
+              className="p-2 hover:bg-slate-100 rounded-lg text-slate-600 transition-colors"
+              title="Zoom Out"
             >
               <Minimize2 className="w-4 h-4" />
+            </button>
+            <button 
+              onClick={() => { setZoom(1.2); setOffset({ x: 0, y: 0 }); }}
+              className="p-2 hover:bg-slate-100 rounded-lg text-slate-600 transition-colors ml-1"
+              title="Reset View"
+            >
+              <RotateCw className="w-4 h-4" />
             </button>
           </div>
         </div>
 
-        <div className="relative w-64">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-white/40" />
+        <div className="relative w-72">
+          <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
           <input 
             type="text" 
             placeholder="Search vessel..." 
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
-            className="w-full pl-10 pr-4 py-2.5 bg-white/10 backdrop-blur-md border border-white/20 rounded-xl text-xs text-white outline-none focus:ring-2 focus:ring-[#FDB913]/30 transition-all"
+            className="w-full pl-11 pr-4 py-3 bg-white/80 backdrop-blur-xl border border-slate-200 rounded-2xl text-sm text-slate-700 outline-none focus:ring-2 focus:ring-[#FDB913]/30 shadow-lg transition-all"
           />
         </div>
       </div>
 
       {/* Legend */}
-      <div className="absolute bottom-6 left-6 z-20 bg-white/10 backdrop-blur-md border border-white/20 p-4 rounded-2xl shadow-2xl space-y-3">
-        <h4 className="text-[10px] font-bold text-white/40 uppercase tracking-widest">Status Legend</h4>
-        <div className="grid grid-cols-2 gap-x-4 gap-y-2">
+      <div className="absolute bottom-6 left-6 z-20 bg-white/80 backdrop-blur-xl border border-slate-200 p-5 rounded-3xl shadow-xl space-y-4">
+        <h4 className="text-[10px] font-bold text-slate-400 uppercase tracking-widest border-b border-slate-100 pb-2">Status Legend</h4>
+        <div className="grid grid-cols-1 gap-y-2.5">
           {[
             { label: 'Docking', color: '#2ecc71' },
             { label: 'On Dock', color: '#3498db' },
             { label: 'Undocking', color: '#f1c40f' },
             { label: 'Completed', color: '#95a5a6' }
           ].map(s => (
-            <div key={s.label} className="flex items-center gap-2">
-              <div className="w-2 h-2 rounded-full" style={{ backgroundColor: s.color }} />
-              <span className="text-[10px] text-white/60 font-medium">{s.label}</span>
+            <div key={s.label} className="flex items-center gap-3">
+              <div className="w-2.5 h-2.5 rounded-full shadow-sm" style={{ backgroundColor: s.color }} />
+              <span className="text-[11px] text-slate-600 font-semibold">{s.label}</span>
             </div>
           ))}
         </div>
@@ -150,15 +160,24 @@ export default function VesselLayout() {
       )}
 
       {/* SVG Layout Area */}
-      <div className="flex-1 overflow-hidden cursor-move select-none flex items-center justify-center">
-        <div 
-          className="transition-transform duration-300 origin-center"
-          style={{ transform: `scale(${zoom})` }}
+      <div className="flex-1 w-full h-full overflow-hidden cursor-move select-none flex items-center justify-center bg-[#f1f5f9]">
+        <motion.div 
+          drag
+          dragMomentum={false}
+          onDrag={(e, info) => setOffset(prev => ({ x: prev.x + info.delta.x, y: prev.y + info.delta.y }))}
+          animate={{ 
+            scale: zoom,
+            x: offset.x,
+            y: offset.y
+          }}
+          transition={{ type: 'spring', damping: 25, stiffness: 200 }}
+          className="origin-center w-full h-full flex items-center justify-center"
         >
           <svg 
             viewBox="0 0 1234.961 649.739" 
-            className="w-[1200px] h-auto drop-shadow-2xl"
+            className="w-full h-full max-w-none drop-shadow-sm"
             xmlns="http://www.w3.org/2000/svg"
+            preserveAspectRatio="xMidYMid meet"
           >
             {/* Full Original Port Background Elements from Reference */}
             <g id="layer15" transform="translate(-1170.8034,-52.171147)">
