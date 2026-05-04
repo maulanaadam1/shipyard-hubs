@@ -564,24 +564,48 @@ export function DataProvider({ children }: { children: ReactNode }) {
       isAuthLoading,
       canAccess: (resource: string, action: string = 'view') => {
         if (!currentUser) return false;
-        if (currentUser.role === 'Admin') return true;
+        
+        // Admin always has access
+        if (currentUser.role === 'Admin') {
+          // console.log(`RBAC [${resource}:${action}]: Allowed (Admin)`);
+          return true;
+        }
 
         // Check extra_roles override (e.g. "Dashboard:view" or "Dashboard")
-        const extraRoles = currentUser.extra_roles?.split(',').filter(Boolean) || [];
-        if (extraRoles.some(r => r === resource || r === `${resource}:${action}`)) return true;
+        const extraRoles = currentUser.extra_roles?.split(',').map(r => r.trim()).filter(Boolean) || [];
+        if (extraRoles.some(r => r === resource || r === `${resource}:${action}`)) {
+          console.log(`RBAC [${resource}:${action}]: Allowed (Extra Role Override)`);
+          return true;
+        }
 
         // Check roles from rolesMaster and rolePermissions
-        const userRoleNames = currentUser.roles?.split(',').filter(Boolean) || [];
+        const userRoleNames = currentUser.roles?.split(',').map(r => r.trim()).filter(Boolean) || [];
         const userRoleIds = rolesMaster
           .filter(r => userRoleNames.includes(r.name))
           .map(r => r.id);
 
-        return rolePermissions.some(p => 
+        const isAllowed = rolePermissions.some(p => 
           userRoleIds.includes(p.role_id) && 
           p.resource === resource && 
           (p.action === action || p.action === '*') &&
-          p.is_allowed
+          (p.is_allowed === true || String(p.is_allowed) === 'true' || Number(p.is_allowed) === 1)
         );
+
+        if (isAllowed) {
+          // Find which role allowed it for debugging if needed
+          const allowingPerm = rolePermissions.find(p => 
+            userRoleIds.includes(p.role_id) && 
+            p.resource === resource && 
+            (p.action === action || p.action === '*') &&
+            (p.is_allowed === true || String(p.is_allowed) === 'true' || Number(p.is_allowed) === 1)
+          );
+          const roleName = rolesMaster.find(r => r.id === allowingPerm?.role_id)?.name;
+          console.log(`RBAC [${resource}:${action}]: Allowed via Role [${roleName}]`);
+        } else {
+          // console.log(`RBAC [${resource}:${action}]: Denied`);
+        }
+
+        return isAllowed;
       }
     }}>
       {children}
