@@ -397,6 +397,9 @@ function VesselComponent({ vessel, getSVGCoordinates, handleUpdatePosition, hand
         y: mvY,
         cursor: 'grab'
       }}
+      initial={{ 
+        rotate: vessel.rotation || 0
+      }}
       animate={{ 
         rotate: vessel.rotation || 0
       }}
