@@ -259,7 +259,7 @@ createRoot(document.getElementById('root')!).render(
               </ProtectedRoute>
             } />
             <Route path="vessel-layout" element={
-              <ProtectedRoute resource="Dashboard">
+              <ProtectedRoute resource="Vessel Layout">
                 <VesselLayout />
               </ProtectedRoute>
             } />
