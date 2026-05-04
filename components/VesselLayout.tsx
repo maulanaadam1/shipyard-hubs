@@ -25,7 +25,6 @@ export default function VesselLayout() {
   const [zoom, setZoom] = useState(1.0); 
   const [hoveredVessel, setHoveredVessel] = useState<Project | null>(null);
   const [isSaving, setIsSaving] = useState(false);
-  const [offset, setOffset] = useState({ x: 0, y: 0 });
   
   const svgRef = React.useRef<SVGSVGElement>(null);
 
@@ -127,7 +126,7 @@ export default function VesselLayout() {
               <Minimize2 className="w-4 h-4" />
             </button>
             <button 
-              onClick={() => { setZoom(1.0); setOffset({ x: 0, y: 0 }); }}
+              onClick={() => { setZoom(1.0); }}
               className="p-2 hover:bg-slate-100 rounded-lg text-slate-600 transition-colors ml-1"
               title="Reset View"
             >
@@ -175,15 +174,10 @@ export default function VesselLayout() {
       )}
 
       {/* SVG Layout Area */}
-      <div className="flex-1 w-full h-full overflow-hidden cursor-move select-none flex items-center justify-center bg-[#f1f5f9]">
+      <div className="flex-1 w-full h-full overflow-hidden select-none flex items-center justify-center bg-[#f1f5f9]">
         <motion.div 
-          drag
-          dragMomentum={false}
-          onDrag={(e, info) => setOffset(prev => ({ x: prev.x + info.delta.x, y: prev.y + info.delta.y }))}
           animate={{ 
-            scale: zoom,
-            x: offset.x,
-            y: offset.y
+            scale: zoom
           }}
           transition={{ type: 'spring', damping: 25, stiffness: 200 }}
           className="origin-center w-full h-full flex items-center justify-center"
