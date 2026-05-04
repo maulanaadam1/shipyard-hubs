@@ -1,7 +1,6 @@
 'use client';
 
-import React, { useState, useMemo } from 'react';
-import { motion, AnimatePresence } from 'motion/react';
+import { motion, AnimatePresence, useMotionValue } from 'motion/react';
 import { 
   Search, 
   Map as MapIcon, 
@@ -219,8 +218,9 @@ export default function VesselLayout() {
                 <path style={{ display: 'inline', fill: '#21b1e6', fillOpacity: 1, stroke: '#000', strokeWidth: '.110242', strokeDasharray: 'none' }} transform="matrix(0 1 1 0 0 0)" d="M338.906 1917.208h29.067v65.946h-29.067z"/>
                 <path style={{ display: 'inline', fill: '#f8f461', fillOpacity: 1, stroke: '#000', strokeWidth: '.274439', strokeDasharray: 'none' }} transform="rotate(-90)" d="M-161.356 2283.957h13.164v16.541h-13.164z"/>
                 <path style={{ display: 'inline', fill: '#b3b3b3', fillOpacity: 1, stroke: '#000', strokeWidth: '.323352', strokeDasharray: 'none' }} transform="rotate(-90)" d="M-274.24 2342.773h77.875v63.318h-77.875z"/>
+ 
+                 <text xmlSpace="preserve" style={{ fontWeight: 700, fontSize: '10.9276px', fontFamily: 'Arial', textAlign: 'end', textAnchor: 'end', display: 'inline', fill: 'none', fillOpacity: 1, stroke: '#000', strokeWidth: '.666584', strokeOpacity: 1 }} x="1720.393" y="382.532"><tspan style={{ textAlign: 'start', textAnchor: 'start', fill: 'none', fillOpacity: 1, stroke: '#000', strokeWidth: '.666584', strokeOpacity: 1 }} x="1720.393" y="382.532">SLIPWAY E</tspan></text>
 
-                <text xmlSpace="preserve" style={{ fontWeight: 700, fontSize: '10.9276px', fontFamily: 'Arial', textAlign: 'end', textAnchor: 'end', display: 'inline', fill: 'none', fillOpacity: 1, stroke: '#000', strokeWidth: '.666584', strokeOpacity: 1 }} x="1720.393" y="382.532"><tspan style={{ textAlign: 'start', textAnchor: 'start', fill: 'none', fillOpacity: 1, stroke: '#000', strokeWidth: '.666584', strokeOpacity: 1 }} x="1720.393" y="382.532">SLIPWAY E</tspan></text>
                 <text xmlSpace="preserve" style={{ fontWeight: 700, fontSize: '10.9276px', fontFamily: 'Arial', textAlign: 'end', textAnchor: 'end', display: 'inline', fill: 'none', fillOpacity: 1, stroke: '#000', strokeWidth: '.666584', strokeOpacity: 1 }} x="1645.315" y="264.662"><tspan style={{ textAlign: 'center', textAnchor: 'middle', fill: 'none', fillOpacity: 1, stroke: '#000', strokeWidth: '.666584', strokeOpacity: 1 }} x="1645.315" y="264.662">CNC</tspan></text>
                 <text xmlSpace="preserve" style={{ fontWeight: 700, fontSize: '10.9276px', fontFamily: 'Arial', textAlign: 'end', textAnchor: 'end', display: 'inline', fill: 'none', fillOpacity: 1, stroke: '#000', strokeWidth: '.666584', strokeOpacity: 1 }} x="1950.052" y="357.616"><tspan style={{ textAlign: 'center', textAnchor: 'middle', fill: 'none', fillOpacity: 1, stroke: '#000', strokeWidth: '.666584', strokeOpacity: 1 }} x="1950.052" y="357.616">CNC</tspan></text>
                 <text xmlSpace="preserve" style={{ fontWeight: 700, fontSize: '10.9276px', fontFamily: 'Arial', textAlign: 'end', textAnchor: 'end', display: 'inline', fill: 'none', fillOpacity: 1, stroke: '#000', strokeWidth: '.666584', strokeOpacity: 1 }} x="1846.556" y="325.514"><tspan style={{ textAlign: 'center', textAnchor: 'middle', fill: 'none', fillOpacity: 1, stroke: '#000', strokeWidth: '.666584', strokeOpacity: 1 }} x="1846.556" y="325.514">WAREHOUSE</tspan></text>
@@ -339,8 +339,8 @@ function VesselComponent({ vessel, getSVGCoordinates, handleUpdatePosition, hand
   const targetHeight = (vessel.length || 30) * 3.2;
 
   // Use MotionValues for smoother, jump-free dragging
-  const mvX = motion.useMotionValue(vessel.x_coordinate || 100);
-  const mvY = motion.useMotionValue(vessel.y_coordinate || 100);
+  const mvX = useMotionValue(vessel.x_coordinate || 100);
+  const mvY = useMotionValue(vessel.y_coordinate || 100);
 
   // Sync MotionValues when vessel props change (e.g. after DB update)
   React.useEffect(() => {
