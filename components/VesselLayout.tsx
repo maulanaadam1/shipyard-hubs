@@ -338,6 +338,16 @@ function VesselComponent({ vessel, getSVGCoordinates, handleUpdatePosition, hand
   const targetWidth = (vessel.width || 10) * 3.6;
   const targetHeight = (vessel.length || 30) * 3.2;
 
+  // Use MotionValues for smoother, jump-free dragging
+  const mvX = motion.useMotionValue(vessel.x_coordinate || 100);
+  const mvY = motion.useMotionValue(vessel.y_coordinate || 100);
+
+  // Sync MotionValues when vessel props change (e.g. after DB update)
+  React.useEffect(() => {
+    mvX.set(vessel.x_coordinate || 100);
+    mvY.set(vessel.y_coordinate || 100);
+  }, [vessel.x_coordinate, vessel.y_coordinate, mvX, mvY]);
+
   const getStatusColor = (status?: string) => {
     switch (status) {
       case 'Docking': return '#2ecc71';
@@ -352,55 +362,63 @@ function VesselComponent({ vessel, getSVGCoordinates, handleUpdatePosition, hand
     <motion.g
       drag
       dragMomentum={false}
-      initial={false}
+      dragElastic={0}
+      style={{ 
+        x: mvX, 
+        y: mvY,
+        cursor: 'grab'
+      }}
       animate={{ 
-        x: vessel.x_coordinate || 100, 
-        y: vessel.y_coordinate || 100,
         rotate: vessel.rotation || 0
       }}
       onDragEnd={(e, info) => {
+        // Calculate the new center point in SVG units
         const point = getSVGCoordinates(info.point.x, info.point.y);
         handleUpdatePosition(vessel, Math.round(point.x), Math.round(point.y));
       }}
       onMouseEnter={() => setHoveredVessel(vessel)}
       onMouseLeave={() => setHoveredVessel(null)}
-      className="cursor-grab active:cursor-grabbing"
+      className="active:cursor-grabbing"
       whileHover={{ scale: 1.05 }}
     >
-      {isRect ? (
-        <rect 
-          width={targetWidth}
-          height={targetHeight}
-          x={-targetWidth / 2}
-          y={-targetHeight / 2}
-          fill={getStatusColor(vessel.status_dock)}
-          stroke="#000"
-          strokeWidth="1"
-          rx="4"
-        />
-      ) : (
-        <g transform={`scale(${targetWidth / ORIGINAL_PATH_WIDTH}, ${targetHeight / ORIGINAL_PATH_HEIGHT}) translate(-${ORIGINAL_PATH_WIDTH/2}, -${ORIGINAL_PATH_HEIGHT/2})`}>
-          <path 
-            d={NORMALIZED_PATH_D}
+      {/* Visual content centered at 0,0 */}
+      <g style={{ pointerEvents: 'auto' }}>
+        {isRect ? (
+          <rect 
+            width={targetWidth}
+            height={targetHeight}
+            x={-targetWidth / 2}
+            y={-targetHeight / 2}
             fill={getStatusColor(vessel.status_dock)}
             stroke="#000"
             strokeWidth="1"
+            rx="4"
           />
-        </g>
-      )}
-      
-      <text 
-        textAnchor="middle" 
-        dominantBaseline="middle"
-        fill="white"
-        className="text-[8px] font-bold pointer-events-none select-none uppercase"
-        style={{ textShadow: '0 1px 2px rgba(0,0,0,0.5)' }}
-        transform="rotate(90)"
-      >
-        {vessel.shipname?.substring(0, 15)}
-      </text>
+        ) : (
+          <g transform={`scale(${targetWidth / ORIGINAL_PATH_WIDTH}, ${targetHeight / ORIGINAL_PATH_HEIGHT}) translate(-${ORIGINAL_PATH_WIDTH/2}, -${ORIGINAL_PATH_HEIGHT/2})`}>
+            <path 
+              d={NORMALIZED_PATH_D}
+              fill={getStatusColor(vessel.status_dock)}
+              stroke="#000"
+              strokeWidth="1"
+            />
+          </g>
+        )}
+        
+        <text 
+          textAnchor="middle" 
+          dominantBaseline="middle"
+          fill="white"
+          className="text-[8px] font-bold pointer-events-none select-none uppercase"
+          style={{ textShadow: '0 1px 2px rgba(0,0,0,0.5)' }}
+          transform="rotate(90)"
+        >
+          {vessel.shipname?.substring(0, 15)}
+        </text>
+      </g>
 
-      <foreignObject x={targetWidth/2} y={-targetHeight/2} width="30" height="30">
+      {/* Rotation tool - positioned relative to vessel center */}
+      <foreignObject x={targetWidth/2} y={-targetHeight/2} width="30" height="30" style={{ pointerEvents: 'auto' }}>
         <button 
           onClick={(e) => {
             e.stopPropagation();
