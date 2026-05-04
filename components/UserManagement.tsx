@@ -19,7 +19,7 @@ import { useData, User } from '@/context/DataContext';
 import { api } from '@/lib/api-client';
 
 export default function UserManagement() {
-  const { users, setUsers, currentUser, dropdownConfigs, rolesMaster, fetchData } = useData();
+  const { users, setUsers, currentUser, dropdownConfigs, rolesMaster, fetchData, canAccess } = useData();
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [showSuccessModal, setShowSuccessModal] = useState(false);
   const [editingUser, setEditingUser] = useState<User | null>(null);

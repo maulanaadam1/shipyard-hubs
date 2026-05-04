@@ -27,7 +27,7 @@ const CATEGORIES = [
 ];
 
 export default function DropdownConfiguration() {
-  const { dropdownConfigs, fetchData, currentUser } = useData();
+  const { dropdownConfigs, fetchData, currentUser, canAccess } = useData();
   const [selectedCategory, setSelectedCategory] = useState(CATEGORIES[0].id);
   const [isLoading, setIsLoading] = useState(false);
   const [isModalOpen, setIsModalOpen] = useState(false);
