@@ -84,16 +84,24 @@ func main() {
 		fs := http.FileServer(http.Dir(distDir))
 		r.Get("/*", func(w http.ResponseWriter, req *http.Request) {
 			path := req.URL.Path
+			
 			// If file exists, serve it
 			if _, err := os.Stat(distDir + path); err == nil {
+				// Assets (JS, CSS, images) can be cached for a long time since they have hashes
+				if strings.Contains(path, "/assets/") {
+					w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
+				}
 				fs.ServeHTTP(w, req)
 				return
 			}
 			
 			// For SPA routing: if path doesn't have an extension (like .js, .css), 
 			// it's likely a frontend route, serve index.html.
-			// Otherwise, it's a missing asset, let it 404 naturally.
 			if !strings.Contains(path, ".") {
+				// CRITICAL: Prevent caching of index.html so browser always gets latest asset hashes
+				w.Header().Set("Cache-Control", "no-cache, no-store, must-revalidate")
+				w.Header().Set("Pragma", "no-cache")
+				w.Header().Set("Expires", "0")
 				http.ServeFile(w, req, distDir+"/index.html")
 				return
 			}
