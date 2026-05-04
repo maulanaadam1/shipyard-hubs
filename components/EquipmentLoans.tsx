@@ -417,14 +417,13 @@ export default function EquipmentLoans() {
       alert('Error saving: ' + error.message);
     } else {
       setIsModalOpen(false);
-        if (!selectedLoan && loanData.status === 'Pending') {
-          const firstStep = loanData.approval_steps.find(s => s.isCurrent);
-          if (firstStep) {
-            notifyApprover(loanData.request_id, firstStep);
-          }
+      if (!selectedLoan && loanData.status === 'Pending') {
+        const firstStep = loanData.approval_steps.find(s => s.isCurrent);
+        if (firstStep) {
+          notifyApprover(loanData.request_id, firstStep);
         }
-        await fetchData();
       }
+      await fetchData();
     }
   };
 
