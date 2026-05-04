@@ -594,9 +594,6 @@ export function DataProvider({ children }: { children: ReactNode }) {
       {children}
     </DataContext.Provider>
   );
-      {children}
-    </DataContext.Provider>
-  );
 }
 
 export function useData() {
