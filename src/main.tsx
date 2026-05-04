@@ -7,8 +7,30 @@ import { DataProvider, useData } from '../context/DataContext';
 // Register Service Worker for PWA
 if (typeof window !== 'undefined' && 'serviceWorker' in navigator) {
   window.addEventListener('load', () => {
-    navigator.serviceWorker.register('/sw.js').then(registration => {
+    // Add version query to bypass potential intermediate caches
+    navigator.serviceWorker.register('/sw.js?v=2').then(registration => {
       console.log('SW registered: ', registration);
+      
+      // Check for updates frequently
+      registration.update();
+
+      // If a new SW is waiting, skip waiting and activate
+      if (registration.waiting) {
+        registration.waiting.postMessage({ type: 'SKIP_WAITING' });
+      }
+
+      registration.onupdatefound = () => {
+        const installingWorker = registration.installing;
+        if (installingWorker) {
+          installingWorker.onstatechange = () => {
+            if (installingWorker.state === 'installed' && navigator.serviceWorker.controller) {
+              // New content is available, reload the page
+              console.log('New content available; reloading...');
+              window.location.reload();
+            }
+          };
+        }
+      };
     }).catch(registrationError => {
       console.log('SW registration failed: ', registrationError);
     });

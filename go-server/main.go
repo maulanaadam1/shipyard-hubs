@@ -90,6 +90,9 @@ func main() {
 				// Assets (JS, CSS, images) can be cached for a long time since they have hashes
 				if strings.Contains(path, "/assets/") {
 					w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
+				} else if strings.HasSuffix(path, "sw.js") || strings.HasSuffix(path, "manifest.json") {
+					// Service worker and manifest should never be cached long-term
+					w.Header().Set("Cache-Control", "no-cache, no-store, must-revalidate")
 				}
 				fs.ServeHTTP(w, req)
 				return
