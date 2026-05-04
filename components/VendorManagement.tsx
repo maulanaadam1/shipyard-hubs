@@ -243,25 +243,25 @@ export default function VendorManagement() {
           <h1 className="font-display font-bold text-2xl text-slate-800 tracking-tight">Master Vendor</h1>
           <p className="text-slate-500 text-sm mt-1">Manage your sub-contractors and service providers.</p>
         </div>
-        <div className="flex gap-3">
-          <label 
-            htmlFor="vendor-import"
-            className="flex items-center justify-center gap-2 px-6 py-2.5 bg-white border border-slate-200 text-slate-600 rounded-xl text-sm font-bold hover:bg-slate-50 transition-all cursor-pointer shadow-sm"
-          >
-            <FileSpreadsheet className="w-4 h-4 text-green-600" />
-            {importing ? 'Importing...' : 'Import CSV/Excel'}
-            <input 
-              id="vendor-import"
-              type="file" 
-        <input 
-          id="vendor-import"
-          type="file" 
-          accept=".csv, .xlsx, .xls, text/csv, application/vnd.openxmlformats-officedocument.spreadsheetml.sheet, application/vnd.ms-excel" 
-          className="hidden" 
-          onChange={handleImportFile} 
-          disabled={importing}
-        />
         <div className="flex flex-wrap items-center gap-3">
+          {canAccess('Master Vendor', 'add') && (
+            <button 
+              onClick={() => document.getElementById('vendor-import')?.click()}
+              disabled={importing}
+              className="flex items-center gap-2 bg-white text-slate-700 px-6 py-2.5 rounded-xl font-bold text-sm hover:bg-slate-50 transition-all border border-slate-200 shadow-sm disabled:opacity-50"
+            >
+              <Upload className="w-4 h-4" />
+              {importing ? 'Importing...' : 'Import Data'}
+            </button>
+          )}
+          <input 
+            id="vendor-import"
+            type="file" 
+            accept=".csv, .xlsx, .xls, text/csv, application/vnd.openxmlformats-officedocument.spreadsheetml.sheet, application/vnd.ms-excel" 
+            className="hidden" 
+            onChange={handleImportFile} 
+            disabled={importing}
+          />
           {canAccess('Master Vendor', 'add') && (
             <button 
               onClick={() => handleOpenModal()}

@@ -429,16 +429,17 @@ export default function ProjectManagement() {
             <span className="hidden sm:inline">Download Template</span>
             <span className="sm:hidden">Template</span>
           </button>
-          <label 
-            htmlFor="project-import"
-            className="flex items-center justify-center gap-2 px-6 py-2.5 bg-white border border-slate-200 text-slate-600 rounded-xl text-sm font-bold hover:bg-slate-50 transition-all cursor-pointer shadow-sm"
-          >
-            <FileSpreadsheet className="w-4 h-4 text-green-600" />
-            {importing ? 'Importing...' : 'Import CSV/Excel'}
-            <input 
-              id="project-import"
-              type="file" 
         <div className="flex flex-wrap items-center gap-3">
+          {canAccess('Job Order', 'add') && (
+            <button 
+              onClick={() => document.getElementById('import-input')?.click()}
+              disabled={importing}
+              className="flex items-center gap-2 bg-white text-slate-700 px-6 py-2.5 rounded-xl font-bold text-sm hover:bg-slate-50 transition-all border border-slate-200 shadow-sm disabled:opacity-50"
+            >
+              <Upload className="w-4 h-4" />
+              {importing ? 'Importing...' : 'Import Data'}
+            </button>
+          )}
           {canAccess('Job Order', 'add') && (
             <button 
               onClick={() => handleOpenModal()}

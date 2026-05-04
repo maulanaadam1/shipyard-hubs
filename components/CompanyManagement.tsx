@@ -224,16 +224,6 @@ export default function CompanyManagement() {
           <h1 className="font-display font-bold text-2xl text-slate-800 tracking-tight">Master Company</h1>
           <p className="text-slate-500 text-sm mt-1">Manage client companies and ship owners.</p>
         </div>
-        <div className="flex gap-3">
-          <label 
-            htmlFor="company-import"
-            className="flex items-center justify-center gap-2 px-6 py-2.5 bg-white border border-slate-200 text-slate-600 rounded-xl text-sm font-bold hover:bg-slate-50 transition-all cursor-pointer shadow-sm"
-          >
-            <FileSpreadsheet className="w-4 h-4 text-green-600" />
-            {importing ? 'Importing...' : 'Import CSV/Excel'}
-            <input 
-              id="company-import"
-              type="file" 
         <div className="flex flex-wrap items-center gap-3">
           <input 
             id="company-import"
