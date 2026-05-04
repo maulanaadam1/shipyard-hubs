@@ -349,6 +349,9 @@ function VesselComponent({ vessel, getSVGCoordinates, handleUpdatePosition, hand
   const mvX = useMotionValue(vessel.x_coordinate || 100);
   const mvY = useMotionValue(vessel.y_coordinate || 100);
 
+  // Store the drag offset in SVG units
+  const dragOffset = React.useRef({ x: 0, y: 0 });
+
   // Sync MotionValues when vessel props change (e.g. after DB update or project reload)
   React.useEffect(() => {
     mvX.set(vessel.x_coordinate || 100);
@@ -367,18 +370,26 @@ function VesselComponent({ vessel, getSVGCoordinates, handleUpdatePosition, hand
 
   return (
     <motion.g
+      onPanStart={(e, info) => {
+        // Calculate the initial offset between the mouse and the vessel center
+        const mouseSVG = getSVGCoordinates(info.point.x, info.point.y);
+        dragOffset.current = {
+          x: mouseSVG.x - mvX.get(),
+          y: mouseSVG.y - mvY.get()
+        };
+      }}
       onPan={(e, info) => {
-        // info.delta is in screen pixels. 
-        // We need to scale it by zoom to match SVG internal units
-        const deltaX = info.delta.x / zoom;
-        const deltaY = info.delta.y / zoom;
-        
-        mvX.set(mvX.get() + deltaX);
-        mvY.set(mvY.get() + deltaY);
+        // Use absolute mouse position minus the initial offset for 100% precision
+        const mouseSVG = getSVGCoordinates(info.point.x, info.point.y);
+        mvX.set(mouseSVG.x - dragOffset.current.x);
+        mvY.set(mouseSVG.y - dragOffset.current.y);
       }}
       onPanEnd={(e, info) => {
-        // Save final rounded position
-        handleUpdatePosition(vessel, Math.round(mvX.get()), Math.round(mvY.get()));
+        // Save the final absolute position
+        const mouseSVG = getSVGCoordinates(info.point.x, info.point.y);
+        const finalX = Math.round(mouseSVG.x - dragOffset.current.x);
+        const finalY = Math.round(mouseSVG.y - dragOffset.current.y);
+        handleUpdatePosition(vessel, finalX, finalY);
       }}
       style={{ 
         x: mvX, 
