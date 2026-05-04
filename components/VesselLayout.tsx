@@ -9,7 +9,8 @@ import {
   Minimize2, 
   RotateCw,
   Info,
-  Ship
+  Ship,
+  LayoutGrid
 } from 'lucide-react';
 import { useData, Project } from '@/context/DataContext';
 import { api } from '@/lib/api-client';
@@ -26,6 +27,7 @@ export default function VesselLayout() {
   const [hoveredVessel, setHoveredVessel] = useState<Project | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const canEdit = canAccess('Vessel Layout', 'edit');
+  const [isLegendExpanded, setIsLegendExpanded] = useState(false);
   
   const svgRef = React.useRef<SVGSVGElement>(null);
 
@@ -99,17 +101,36 @@ export default function VesselLayout() {
   return (
     <div className="flex flex-col h-full bg-[#f8fafc] overflow-hidden relative">
       {/* Legend */}
-      <div className="absolute bottom-6 left-6 z-20 bg-white/80 backdrop-blur-xl border border-slate-200 p-5 rounded-3xl shadow-xl space-y-4">
-        <h4 className="text-[10px] font-bold text-slate-400 uppercase tracking-widest border-b border-slate-100 pb-2">Status Legend</h4>
-        <div className="grid grid-cols-1 gap-y-2.5">
-          {(dockStatuses || []).filter(s => s.is_active).map(s => (
-            <div key={s.id} className="flex items-center gap-3">
-              <div className="w-2.5 h-2.5 rounded-full shadow-sm" style={{ backgroundColor: s.color }} />
-              <span className="text-[11px] text-slate-600 font-semibold">{s.name}</span>
+      <motion.div 
+        layout
+        initial={false}
+        animate={{ 
+          width: isLegendExpanded ? 'auto' : '48px',
+          height: isLegendExpanded ? 'auto' : '48px',
+          padding: isLegendExpanded ? '20px' : '12px'
+        }}
+        onClick={() => setIsLegendExpanded(!isLegendExpanded)}
+        className="absolute bottom-6 left-6 z-20 bg-white/90 backdrop-blur-xl border border-slate-200 rounded-2xl shadow-xl cursor-pointer overflow-hidden transition-all duration-300 hover:shadow-2xl active:scale-95 flex flex-col items-center justify-center group"
+      >
+        {!isLegendExpanded ? (
+          <LayoutGrid className="w-6 h-6 text-slate-600 transition-colors group-hover:text-[#FDB913]" />
+        ) : (
+          <div className="space-y-4 min-w-[140px]">
+             <div className="flex justify-between items-center border-b border-slate-100 pb-2 mb-2">
+                <h4 className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Status Legend</h4>
+                <Minimize2 className="w-3 h-3 text-slate-400 hover:text-slate-600" />
+             </div>
+            <div className="grid grid-cols-1 gap-y-2.5">
+              {(dockStatuses || []).filter(s => s.is_active).map(s => (
+                <div key={s.id} className="flex items-center gap-3">
+                  <div className="w-2.5 h-2.5 rounded-full shadow-sm" style={{ backgroundColor: s.color }} />
+                  <span className="text-[11px] text-slate-600 font-bold whitespace-nowrap">{s.name}</span>
+                </div>
+              ))}
             </div>
-          ))}
-        </div>
-      </div>
+          </div>
+        )}
+      </motion.div>
 
       {/* Saving Indicator */}
       {isSaving && (
