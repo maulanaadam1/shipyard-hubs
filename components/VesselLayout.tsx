@@ -1,5 +1,6 @@
 'use client';
 
+import React, { useState, useMemo } from 'react';
 import { motion, AnimatePresence, useMotionValue } from 'motion/react';
 import { 
   Search, 
