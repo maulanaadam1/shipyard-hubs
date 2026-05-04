@@ -31,7 +31,9 @@ export default function MasterLocation() {
     name: '',
     size: '',
     description: '',
-    status: 'Active'
+    status: 'Active',
+    center_x: '',
+    center_y: ''
   });
 
   const handleOpenModal = (location: LocationMaster | null = null) => {
@@ -41,7 +43,9 @@ export default function MasterLocation() {
         name: location.name,
         size: location.size || '',
         description: location.description || '',
-        status: location.status || 'Active'
+        status: location.status || 'Active',
+        center_x: location.center_x?.toString() || '',
+        center_y: location.center_y?.toString() || ''
       });
     } else {
       setEditingLocation(null);
@@ -49,7 +53,9 @@ export default function MasterLocation() {
         name: '',
         size: '',
         description: '',
-        status: 'Active'
+        status: 'Active',
+        center_x: '',
+        center_y: ''
       });
     }
     setIsModalOpen(true);
@@ -62,7 +68,11 @@ export default function MasterLocation() {
     try {
       if (editingLocation) {
         const { error } = await api.from('master_locations')
-          .update(formData)
+          .update({
+            ...formData,
+            center_x: formData.center_x ? parseFloat(formData.center_x) : null,
+            center_y: formData.center_y ? parseFloat(formData.center_y) : null
+          })
           .eq('id', editingLocation.id);
         
         if (error) throw error;
@@ -75,7 +85,9 @@ export default function MasterLocation() {
       } else {
         const newLocationData = {
           id: crypto.randomUUID(),
-          ...formData
+          ...formData,
+          center_x: formData.center_x ? parseFloat(formData.center_x) : null,
+          center_y: formData.center_y ? parseFloat(formData.center_y) : null
         };
 
         const { error } = await api.from('master_locations')
@@ -168,9 +180,9 @@ export default function MasterLocation() {
               <tr className="bg-slate-50 text-slate-500 text-xs uppercase tracking-wider border-b border-slate-200">
                 <th className="p-4 font-bold">Location Name</th>
                 <th className="p-4 font-bold">Size / Dimensions</th>
-                <th className="p-4 font-bold">Description</th>
-                <th className="p-4 font-bold">Status</th>
-                <th className="p-4 font-bold text-center">Actions</th>
+                <th className="p-4 font-bold text-center">Center Point</th>
+                <th className="p-4 font-bold text-center">Status</th>
+                <th className="p-4 font-bold text-right">Actions</th>
               </tr>
             </thead>
             <tbody className="text-sm text-slate-700 divide-y divide-slate-100">
@@ -201,10 +213,16 @@ export default function MasterLocation() {
                     <td className="p-4 font-medium text-slate-600">
                       {loc.size || '-'}
                     </td>
-                    <td className="p-4 text-slate-500 max-w-xs truncate" title={loc.description}>
-                      {loc.description || '-'}
+                    <td className="p-4 text-center">
+                      {loc.center_x && loc.center_y ? (
+                        <span className="text-[10px] font-mono bg-slate-100 px-2 py-1 rounded text-slate-500">
+                          {loc.center_x}, {loc.center_y}
+                        </span>
+                      ) : (
+                        <span className="text-slate-300">-</span>
+                      )}
                     </td>
-                    <td className="p-4">
+                    <td className="p-4 text-center">
                       <span className={'px-3 py-1 text-xs font-bold rounded-full ' + (
                         loc.status === 'Active' 
                           ? 'bg-emerald-100 text-emerald-700' 
@@ -336,6 +354,31 @@ export default function MasterLocation() {
                     <option value="Active">Active</option>
                     <option value="Inactive">Inactive</option>
                   </select>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Center X</label>
+                    <input 
+                      type="number"
+                      step="any"
+                      value={formData.center_x}
+                      onChange={(e) => setFormData({ ...formData, center_x: e.target.value })}
+                      className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-[#FDB913]/30 focus:border-[#FDB913] transition-all"
+                      placeholder="X Coordinate"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Center Y</label>
+                    <input 
+                      type="number"
+                      step="any"
+                      value={formData.center_y}
+                      onChange={(e) => setFormData({ ...formData, center_y: e.target.value })}
+                      className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-[#FDB913]/30 focus:border-[#FDB913] transition-all"
+                      placeholder="Y Coordinate"
+                    />
+                  </div>
                 </div>
 
                 <div className="pt-4 flex gap-3">

@@ -148,6 +148,8 @@ export interface LocationMaster {
   size: string;
   description: string;
   status: 'Active' | 'Inactive';
+  center_x?: number;
+  center_y?: number;
 }
 
 export interface ApprovalWorkflow {

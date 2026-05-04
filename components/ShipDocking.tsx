@@ -48,6 +48,7 @@ type DockingForm = {
   docking: string;
   undocking: string;
   status_dock: string;
+  location: string;
   x_coordinate: string;
   y_coordinate: string;
   rotation: string;
@@ -75,7 +76,7 @@ export default function ShipDocking() {
     actual_start: '', actual_finish: '',
     act_arrival_date: '', act_trial_date: '', act_departure_date: '',
     docking: '', undocking: '', status_dock: '',
-    x_coordinate: '', y_coordinate: '', rotation: ''
+    location: '', x_coordinate: '', y_coordinate: '', rotation: ''
   });
   const [saving, setSaving] = useState(false);
 
@@ -124,6 +125,7 @@ export default function ShipDocking() {
       docking: toInputDate(project.docking || project.est_docking_date),
       undocking: toInputDate(project.undocking || project.est_undocking_date),
       status_dock: project.status_dock || '',
+      location: project.location || '',
       x_coordinate: project.x_coordinate?.toString() || '',
       y_coordinate: project.y_coordinate?.toString() || '',
       rotation: project.rotation?.toString() || '',
@@ -145,6 +147,7 @@ export default function ShipDocking() {
           docking: formData.docking || null,
           undocking: formData.undocking || null,
           status_dock: formData.status_dock || null,
+          location: formData.location || null,
           x_coordinate: formData.x_coordinate ? parseFloat(formData.x_coordinate) : null,
           y_coordinate: formData.y_coordinate ? parseFloat(formData.y_coordinate) : null,
           rotation: formData.rotation ? parseFloat(formData.rotation) : null,
@@ -160,8 +163,19 @@ export default function ShipDocking() {
     }
   };
 
-  const f = (key: keyof DockingForm) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) =>
-    setFormData(prev => ({ ...prev, [key]: e.target.value }));
+  const f = (key: keyof DockingForm) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
+    const value = e.target.value;
+    setFormData(prev => {
+      const next = { ...prev, [key]: value };
+      
+      // Auto-reposition logic for location
+      if (key === 'location' && value) {
+        const { locations } = useData.getState(); // Assuming we can get fresh state if needed, but we have it in scope
+        // Actually we have locations from useData() in the component
+      }
+      return next;
+    });
+  };
 
   const getDockBadge = (p: any) => {
     const s = p.status_dock || '';
@@ -633,9 +647,37 @@ export default function ShipDocking() {
                     </div>
                   </div>
 
-                  {/* Shipyard Position (New) */}
+                  {/* Shipyard Position */}
                   <div className="border-t border-slate-100 pt-4 space-y-3">
-                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Posisi Galangan (Layout)</p>
+                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Posisi & Lokasi Galangan</p>
+                    
+                    <div className="space-y-1">
+                      <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Lokasi Galangan</label>
+                      <div className="relative">
+                        <select
+                          value={formData.location}
+                          onChange={(e) => {
+                            const locName = e.target.value;
+                            const locData = (locations || []).find(l => l.name === locName);
+                            setFormData(prev => ({
+                              ...prev,
+                              location: locName,
+                              // Auto-fill coordinates if center point exists
+                              x_coordinate: locData?.center_x ? locData.center_x.toString() : prev.x_coordinate,
+                              y_coordinate: locData?.center_y ? locData.center_y.toString() : prev.y_coordinate
+                            }));
+                          }}
+                          className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-[#FDB913]/30 appearance-none"
+                        >
+                          <option value="">— Pilih Lokasi —</option>
+                          {(locations || []).map(loc => (
+                            <option key={loc.id} value={loc.name}>{loc.name}</option>
+                          ))}
+                        </select>
+                        <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
+                      </div>
+                    </div>
+
                     <div className="grid grid-cols-2 gap-4">
                       <div className="space-y-1">
                         <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Koordinat X</label>
@@ -644,7 +686,7 @@ export default function ShipDocking() {
                           step="any"
                           value={formData.x_coordinate} 
                           onChange={f('x_coordinate')}
-                          placeholder="Contoh: 500"
+                          placeholder="X"
                           className="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-[#FDB913]/30" 
                         />
                       </div>
@@ -655,7 +697,7 @@ export default function ShipDocking() {
                           step="any"
                           value={formData.y_coordinate} 
                           onChange={f('y_coordinate')}
-                          placeholder="Contoh: 300"
+                          placeholder="Y"
                           className="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-[#FDB913]/30" 
                         />
                       </div>
