@@ -20,7 +20,8 @@ import {
   Briefcase,
   Activity,
   Shield,
-  MapPin
+  MapPin,
+  Map as MapIcon
 } from 'lucide-react';
 import { useData } from '@/context/DataContext';
 import { motion } from 'motion/react';
@@ -35,6 +36,7 @@ export default function Sidebar({ onTabChange }: { onTabChange: () => void }) {
       title: 'Main',
       items: [
         { icon: LayoutDashboard, label: 'Dashboard', path: '/dashboard', resource: 'Dashboard' },
+        { icon: MapIcon, label: 'Vessel Layout', path: '/vessel-layout', resource: 'Dashboard' },
         { icon: Activity, label: 'Utility', path: '/utility', resource: 'Utility' },
         { icon: Briefcase, label: 'Job Order', path: '/job-order', resource: 'Job Order' },
         { icon: Anchor, label: 'Ship Docking', path: '/ship-docking', resource: 'Ship Docking' },

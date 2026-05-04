@@ -236,6 +236,7 @@ export interface Project {
   manpower_ven?: number;
   update_pdf?: string;
   print?: string;
+  rotation?: number;
 }
 
 // --- Context Type ---

@@ -167,7 +167,8 @@ func createTables() {
 		manpower_in INTEGER,
 		manpower_ven INTEGER,
 		update_pdf TEXT,
-		print TEXT
+		print TEXT,
+		rotation REAL DEFAULT 0
 	);
 
 	CREATE TABLE IF NOT EXISTS deployment_records (
@@ -265,6 +266,9 @@ func createTables() {
 
 	// Migration: ensure master_locations are pre-populated from real project data
 	seedMissingLocations()
+
+	// Migration: Add rotation to projects
+	DB.Exec("ALTER TABLE projects ADD COLUMN rotation REAL DEFAULT 0")
 }
 
 func seedMissingDropdownItems() {

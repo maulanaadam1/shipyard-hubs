@@ -57,6 +57,7 @@ import ApprovalWorkflowManagement from '../components/ApprovalWorkflowManagement
 import DropdownConfiguration from '../components/DropdownConfiguration';
 import RoleManagement from '../components/RoleManagement';
 import ShipDocking from '../components/ShipDocking';
+import VesselLayout from '../components/VesselLayout';
 
 function PlaceholderPage({ title }: { title: string }) {
   return (
@@ -255,6 +256,11 @@ createRoot(document.getElementById('root')!).render(
             <Route path="ship-docking" element={
               <ProtectedRoute resource="Ship Docking">
                 <ShipDocking />
+              </ProtectedRoute>
+            } />
+            <Route path="vessel-layout" element={
+              <ProtectedRoute resource="Dashboard">
+                <VesselLayout />
               </ProtectedRoute>
             } />
           </Route>
