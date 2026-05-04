@@ -39,7 +39,7 @@ const statusColors: Record<string, string> = {
 const equipmentTypes = ['SMAW', 'FCAW', 'Blower', 'Angle Grinder', 'Forklift (3T)', 'Forklift (10T)', 'Gantry Crane'];
 
 export default function EquipmentLoans() {
-  const { loans, setLoans, vendors, ships, projects, workflows, currentUser, users, createNotification, notifications, markNotificationRead } = useData();
+  const { loans, fetchData, vendors, ships, projects, workflows, currentUser, users, createNotification, notifications, markNotificationRead } = useData();
   const [searchParams, setSearchParams] = useSearchParams();
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isApproveModalOpen, setIsApproveModalOpen] = useState(false);

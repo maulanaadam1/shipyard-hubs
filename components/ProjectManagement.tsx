@@ -27,7 +27,7 @@ import Papa from 'papaparse';
 import * as XLSX from 'xlsx';
 
 export default function ProjectManagement() {
-  const { projects, setProjects, dropdownConfigs, locations } = useData();
+  const { projects, setProjects, dropdownConfigs, locations, fetchData } = useData();
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [showSuccessModal, setShowSuccessModal] = useState(false);
   const [editingProject, setEditingProject] = useState<Project | null>(null);

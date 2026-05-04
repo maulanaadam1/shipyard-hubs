@@ -18,7 +18,7 @@ import { useData, Equipment } from '@/context/DataContext';
 import { api } from '@/lib/api-client';
 
 export default function EquipmentMaintenance() {
-  const { fleet: assets, setFleet: setAssets } = useData();
+  const { fleet: assets, setFleet: setAssets, fetchData } = useData();
   const [searchTerm, setSearchTerm] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState<number | 'all'>(10);
@@ -70,6 +70,7 @@ export default function EquipmentMaintenance() {
       alert('Error completing repair: ' + error.message);
     } else {
       setIsRepairModalOpen(false);
+      await fetchData();
       alert(`Asset ${selectedAsset.no_asset} has been repaired and is now Available.`);
     }
   };
@@ -82,6 +83,8 @@ export default function EquipmentMaintenance() {
     if (error) {
       console.error('Error starting maintenance in Supabase:', error.message);
       alert('Error starting maintenance: ' + error.message);
+    } else {
+      await fetchData();
     }
   };
 

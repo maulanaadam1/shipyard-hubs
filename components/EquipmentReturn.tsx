@@ -21,7 +21,7 @@ import { useData, LoanRequest, DeploymentRecord } from '@/context/DataContext';
 import { api } from '@/lib/api-client';
 
 export default function EquipmentReturn() {
-  const { fleet: assets, setFleet: setAssets, loans, setLoans, deployments, setDeployments } = useData();
+  const { fleet: assets, setFleet: setAssets, loans, setLoans, deployments, setDeployments, fetchData } = useData();
   const [searchTerm, setSearchTerm] = useState('');
   const [expandedRequests, setExpandedRequests] = useState<Set<string>>(new Set());
   const [activeTab, setActiveTab] = useState<'pending' | 'history'>('pending');
@@ -134,6 +134,7 @@ export default function EquipmentReturn() {
       }
 
       setIsReturnModalOpen(false);
+      await fetchData();
       alert('Equipment return processed successfully!');
     } catch (error: any) {
       console.error('Error during return in Supabase:', error.message);
