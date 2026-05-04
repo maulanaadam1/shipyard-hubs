@@ -305,17 +305,22 @@ export default function VesselLayout() {
       <AnimatePresence>
         {hoveredVessel && (
           <motion.div 
-            initial={{ opacity: 0, x: 20, scale: 0.95 }}
-            animate={{ opacity: 1, x: 0, scale: 1 }}
-            exit={{ opacity: 0, x: 20, scale: 0.95 }}
-            className="absolute top-6 right-6 z-30 w-72 bg-white border border-slate-200 rounded-[2rem] p-6 shadow-2xl"
+            initial={{ opacity: 0, scale: 0.9, y: 20 }}
+            animate={{ 
+              opacity: 1, 
+              scale: 1, 
+              y: 0,
+              x: 0 
+            }}
+            exit={{ opacity: 0, scale: 0.9, y: 20 }}
+            className="fixed md:absolute md:top-6 md:right-6 top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 md:translate-x-0 md:translate-y-0 z-50 w-[90%] max-w-[320px] md:w-72 bg-white border border-slate-200 rounded-[2rem] p-6 shadow-2xl"
           >
             <div className="flex items-center gap-4 mb-6">
               <div className="w-12 h-12 rounded-2xl flex items-center justify-center text-white shadow-lg" style={{ backgroundColor: getStatusColor(hoveredVessel.status_dock) }}>
                 <Ship className="w-6 h-6" />
               </div>
-              <div>
-                <h3 className="text-slate-800 font-bold text-base leading-tight">{hoveredVessel.shipname}</h3>
+              <div className="overflow-hidden">
+                <h3 className="text-slate-800 font-bold text-base leading-tight truncate">{hoveredVessel.shipname}</h3>
                 <span className="inline-block mt-1 px-2 py-0.5 bg-slate-100 rounded-full text-[9px] font-bold text-slate-500 uppercase tracking-widest border border-slate-200">
                   {hoveredVessel.type || 'Standard'}
                 </span>
@@ -352,6 +357,14 @@ export default function VesselLayout() {
                 </p>
               </div>
             </div>
+            
+            {/* Close button for mobile */}
+            <button 
+              onClick={() => setHoveredVessel(null)}
+              className="md:hidden mt-6 w-full py-3 bg-slate-100 text-slate-600 rounded-2xl text-xs font-bold hover:bg-slate-200 transition-colors"
+            >
+              Close Details
+            </button>
           </motion.div>
         )}
       </AnimatePresence>
