@@ -117,26 +117,26 @@ export default function VesselLayout() {
       {/* Legend */}
       <div 
         onClick={() => setIsLegendExpanded(!isLegendExpanded)}
-        className={`absolute bottom-6 left-6 z-20 bg-white/95 backdrop-blur-xl border border-slate-200 rounded-full shadow-xl cursor-pointer overflow-hidden flex items-center hover:shadow-2xl group ${isLegendExpanded ? 'px-6 py-3 w-auto' : 'w-12 h-12 justify-center'}`}
+        className={`absolute bottom-6 left-6 z-20 bg-white/95 backdrop-blur-xl border border-slate-200 rounded-full shadow-xl cursor-pointer overflow-hidden items-center hover:shadow-2xl group hidden md:flex transition-all ${isLegendExpanded ? 'px-5 h-10 w-auto' : 'w-10 h-10 justify-center'}`}
       >
         {!isLegendExpanded ? (
-          <LayoutGrid className="w-5 h-5 text-slate-600 group-hover:text-[#FDB913]" />
+          <LayoutGrid className="w-4 h-4 text-slate-500 group-hover:text-[#FDB913]" />
         ) : (
-          <div className="flex items-center gap-6">
-            <div className="flex items-center gap-2 pr-4 border-r border-slate-100">
-               <LayoutGrid className="w-4 h-4 text-[#FDB913]" />
-               <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Legend</span>
+          <div className="flex items-center gap-5">
+            <div className="flex items-center gap-2 pr-4 border-r border-slate-100 h-4">
+               <LayoutGrid className="w-3.5 h-3.5 text-[#FDB913]" />
+               <span className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">Legend</span>
             </div>
-            <div className="flex items-center gap-5">
+            <div className="flex items-center gap-4">
               {(dockStatuses || []).filter(s => s.is_active).map(s => (
-                <div key={s.id} className="flex items-center gap-2">
-                  <div className="w-2.5 h-2.5 rounded-full shadow-sm" style={{ backgroundColor: s.color }} />
-                  <span className="text-[10px] text-slate-700 font-bold whitespace-nowrap uppercase tracking-tight">{s.name}</span>
+                <div key={s.id} className="flex items-center gap-1.5">
+                  <div className="w-2 h-2 rounded-full shadow-sm" style={{ backgroundColor: s.color }} />
+                  <span className="text-[9px] text-slate-700 font-bold whitespace-nowrap uppercase tracking-tight">{s.name}</span>
                 </div>
               ))}
             </div>
-            <div className="pl-2">
-              <Minimize2 className="w-3.5 h-3.5 text-slate-300 hover:text-slate-500" />
+            <div className="pl-1 border-l border-slate-100 ml-2 h-4 flex items-center">
+              <Minimize2 className="w-3 h-3 text-slate-300 hover:text-slate-500" />
             </div>
           </div>
         )}
