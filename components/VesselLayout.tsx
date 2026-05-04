@@ -101,36 +101,32 @@ export default function VesselLayout() {
   return (
     <div className="flex flex-col h-full bg-[#f8fafc] overflow-hidden relative">
       {/* Legend */}
-      <motion.div 
-        layout
-        initial={false}
-        animate={{ 
-          width: isLegendExpanded ? 'auto' : '48px',
-          height: isLegendExpanded ? 'auto' : '48px',
-          padding: isLegendExpanded ? '20px' : '12px'
-        }}
+      <div 
         onClick={() => setIsLegendExpanded(!isLegendExpanded)}
-        className="absolute bottom-6 left-6 z-20 bg-white/90 backdrop-blur-xl border border-slate-200 rounded-2xl shadow-xl cursor-pointer overflow-hidden transition-all duration-300 hover:shadow-2xl active:scale-95 flex flex-col items-center justify-center group"
+        className={`absolute bottom-6 left-6 z-20 bg-white/95 backdrop-blur-xl border border-slate-200 rounded-full shadow-xl cursor-pointer overflow-hidden flex items-center transition-all duration-200 hover:shadow-2xl group ${isLegendExpanded ? 'px-6 py-3 w-auto' : 'w-12 h-12 justify-center'}`}
       >
         {!isLegendExpanded ? (
-          <LayoutGrid className="w-6 h-6 text-slate-600 transition-colors group-hover:text-[#FDB913]" />
+          <LayoutGrid className="w-5 h-5 text-slate-600 group-hover:text-[#FDB913]" />
         ) : (
-          <div className="space-y-4 min-w-[140px]">
-             <div className="flex justify-between items-center border-b border-slate-100 pb-2 mb-2">
-                <h4 className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Status Legend</h4>
-                <Minimize2 className="w-3 h-3 text-slate-400 hover:text-slate-600" />
-             </div>
-            <div className="grid grid-cols-1 gap-y-2.5">
+          <div className="flex items-center gap-6">
+            <div className="flex items-center gap-2 pr-4 border-r border-slate-100">
+               <LayoutGrid className="w-4 h-4 text-[#FDB913]" />
+               <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Legend</span>
+            </div>
+            <div className="flex items-center gap-5">
               {(dockStatuses || []).filter(s => s.is_active).map(s => (
-                <div key={s.id} className="flex items-center gap-3">
+                <div key={s.id} className="flex items-center gap-2">
                   <div className="w-2.5 h-2.5 rounded-full shadow-sm" style={{ backgroundColor: s.color }} />
-                  <span className="text-[11px] text-slate-600 font-bold whitespace-nowrap">{s.name}</span>
+                  <span className="text-[10px] text-slate-700 font-bold whitespace-nowrap uppercase tracking-tight">{s.name}</span>
                 </div>
               ))}
             </div>
+            <div className="pl-2">
+              <Minimize2 className="w-3.5 h-3.5 text-slate-300 hover:text-slate-500" />
+            </div>
           </div>
         )}
-      </motion.div>
+      </div>
 
       {/* Saving Indicator */}
       {isSaving && (
