@@ -48,6 +48,9 @@ type DockingForm = {
   docking: string;
   undocking: string;
   status_dock: string;
+  x_coordinate: string;
+  y_coordinate: string;
+  rotation: string;
 };
 
 type MovementActivity = {
@@ -71,7 +74,8 @@ export default function ShipDocking() {
   const [formData, setFormData] = useState<DockingForm>({
     actual_start: '', actual_finish: '',
     act_arrival_date: '', act_trial_date: '', act_departure_date: '',
-    docking: '', undocking: '', status_dock: ''
+    docking: '', undocking: '', status_dock: '',
+    x_coordinate: '', y_coordinate: '', rotation: ''
   });
   const [saving, setSaving] = useState(false);
 
@@ -120,6 +124,9 @@ export default function ShipDocking() {
       docking: toInputDate(project.docking || project.est_docking_date),
       undocking: toInputDate(project.undocking || project.est_undocking_date),
       status_dock: project.status_dock || '',
+      x_coordinate: project.x_coordinate?.toString() || '',
+      y_coordinate: project.y_coordinate?.toString() || '',
+      rotation: project.rotation?.toString() || '',
     });
   };
 
@@ -138,6 +145,9 @@ export default function ShipDocking() {
           docking: formData.docking || null,
           undocking: formData.undocking || null,
           status_dock: formData.status_dock || null,
+          x_coordinate: formData.x_coordinate ? parseFloat(formData.x_coordinate) : null,
+          y_coordinate: formData.y_coordinate ? parseFloat(formData.y_coordinate) : null,
+          rotation: formData.rotation ? parseFloat(formData.rotation) : null,
         })
         .eq('id', editingProject.id);
       if (error) throw error;
@@ -620,6 +630,48 @@ export default function ShipDocking() {
                       <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Keberangkatan Aktual</label>
                       <input type="date" value={formData.act_departure_date} onChange={f('act_departure_date')}
                         className="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-[#FDB913]/30" />
+                    </div>
+                  </div>
+
+                  {/* Shipyard Position (New) */}
+                  <div className="border-t border-slate-100 pt-4 space-y-3">
+                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Posisi Galangan (Layout)</p>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="space-y-1">
+                        <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Koordinat X</label>
+                        <input 
+                          type="number" 
+                          step="any"
+                          value={formData.x_coordinate} 
+                          onChange={f('x_coordinate')}
+                          placeholder="Contoh: 500"
+                          className="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-[#FDB913]/30" 
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Koordinat Y</label>
+                        <input 
+                          type="number" 
+                          step="any"
+                          value={formData.y_coordinate} 
+                          onChange={f('y_coordinate')}
+                          placeholder="Contoh: 300"
+                          className="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-[#FDB913]/30" 
+                        />
+                      </div>
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Rotasi (Derajat)</label>
+                      <input 
+                        type="number" 
+                        step="any"
+                        min="0"
+                        max="360"
+                        value={formData.rotation} 
+                        onChange={f('rotation')}
+                        placeholder="0 - 360"
+                        className="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-[#FDB913]/30" 
+                      />
                     </div>
                   </div>
                 </div>
