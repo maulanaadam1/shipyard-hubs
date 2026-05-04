@@ -64,7 +64,7 @@ type MovementActivity = {
 };
 
 export default function ShipDocking() {
-  const { projects, fetchData, canAccess } = useData();
+  const { projects, locations, fetchData, canAccess } = useData();
 
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('active');
