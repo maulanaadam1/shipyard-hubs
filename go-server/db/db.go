@@ -515,10 +515,10 @@ func seedRolesAndPermissions() {
 		
 		// Seed all permissions for Admin, selected for others
 		resources := []string{
-			"Dashboard", "Utility", "Job Order", "Request", "Release", "Return", 
+			"Dashboard", "Utility", "Job Order", "Ship Docking", "Request", "Release", "Return", 
 			"Maintenance", "Inventory", "Reports", "Master Equipment", 
 			"Master Vendor", "Master Company", "Master Kapal", "Master Location", "Master Workflow", 
-			"Master Configuration", "User Management", "Role Management",
+			"Master Configuration", "User Management", "Role Management", "Master Dock Status", "Vessel Layout",
 		}
 		actions := []string{"view", "add", "edit", "delete", "approve", "import", "export"}
 		

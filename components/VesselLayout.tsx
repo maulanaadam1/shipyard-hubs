@@ -10,7 +10,8 @@ import {
   RotateCw,
   Info,
   Ship,
-  LayoutGrid
+  LayoutGrid,
+  Lock
 } from 'lucide-react';
 import { useData, Project } from '@/context/DataContext';
 import { api } from '@/lib/api-client';
@@ -26,8 +27,21 @@ export default function VesselLayout() {
   const [zoom, setZoom] = useState(1.0); 
   const [hoveredVessel, setHoveredVessel] = useState<Project | null>(null);
   const [isSaving, setIsSaving] = useState(false);
+  const canView = canAccess('Vessel Layout', 'view');
   const canEdit = canAccess('Vessel Layout', 'edit');
   const [isLegendExpanded, setIsLegendExpanded] = useState(false);
+
+  if (!canView) {
+    return (
+      <div className="flex flex-col items-center justify-center h-full bg-[#f8fafc] p-8 text-center">
+        <div className="w-16 h-16 bg-red-50 rounded-2xl flex items-center justify-center mb-4">
+          <Lock className="w-8 h-8 text-red-400" />
+        </div>
+        <h2 className="text-xl font-bold text-slate-800">Access Restricted</h2>
+        <p className="text-sm text-slate-500 mt-2 max-w-xs">You do not have permission to view the Vessel Layout. Please contact your administrator.</p>
+      </div>
+    );
+  }
   
   const svgRef = React.useRef<SVGSVGElement>(null);
 
@@ -103,7 +117,7 @@ export default function VesselLayout() {
       {/* Legend */}
       <div 
         onClick={() => setIsLegendExpanded(!isLegendExpanded)}
-        className={`absolute bottom-6 left-6 z-20 bg-white/95 backdrop-blur-xl border border-slate-200 rounded-full shadow-xl cursor-pointer overflow-hidden flex items-center transition-all duration-200 hover:shadow-2xl group ${isLegendExpanded ? 'px-6 py-3 w-auto' : 'w-12 h-12 justify-center'}`}
+        className={`absolute bottom-6 left-6 z-20 bg-white/95 backdrop-blur-xl border border-slate-200 rounded-full shadow-xl cursor-pointer overflow-hidden flex items-center hover:shadow-2xl group ${isLegendExpanded ? 'px-6 py-3 w-auto' : 'w-12 h-12 justify-center'}`}
       >
         {!isLegendExpanded ? (
           <LayoutGrid className="w-5 h-5 text-slate-600 group-hover:text-[#FDB913]" />
