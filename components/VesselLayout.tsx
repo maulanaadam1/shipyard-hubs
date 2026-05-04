@@ -44,7 +44,8 @@ export default function VesselLayout() {
   // Filter only active vessels (status_dock or ship_visibility)
   const activeVessels = useMemo(() => {
     return projects.filter(p => {
-      const isVisible = p.ship_visibility === 'active' || p.status_dock === 'Docking' || p.status_dock === 'On Dock' || p.status_dock === 'Undocking';
+      const isVisible = p.ship_visibility === 'active' || 
+                       ['Docking', 'On Dock', 'Undocking', 'Completed'].includes(p.status_dock || '');
       const matchesSearch = p.shipname?.toLowerCase().includes(searchTerm.toLowerCase());
       return isVisible && matchesSearch;
     });
