@@ -100,53 +100,6 @@ export default function VesselLayout() {
 
   return (
     <div className="flex flex-col h-full bg-[#f8fafc] overflow-hidden relative">
-      {/* Header Controls */}
-      <div className="absolute top-6 left-6 z-20 flex flex-col gap-4">
-        <div className="bg-white/80 backdrop-blur-xl border border-slate-200 p-2 rounded-2xl flex items-center gap-3 shadow-xl">
-          <div className="w-10 h-10 bg-[#FDB913] rounded-xl flex items-center justify-center text-slate-900 shadow-md">
-            <MapIcon className="w-5 h-5" />
-          </div>
-          <div className="pr-4 border-r border-slate-200">
-            <h2 className="text-slate-800 font-bold text-sm leading-none">Vessel Layout</h2>
-            <p className="text-slate-400 text-[10px] mt-1 font-medium tracking-wider uppercase">Shipyard Terminal</p>
-          </div>
-          <div className="flex items-center gap-1 px-2">
-            <button 
-              onClick={() => setZoom(z => Math.min(4, z + 0.2))}
-              className="p-2 hover:bg-slate-100 rounded-lg text-slate-600 transition-colors"
-              title="Zoom In"
-            >
-              <Maximize2 className="w-4 h-4" />
-            </button>
-            <button 
-              onClick={() => setZoom(z => Math.max(0.2, z - 0.2))}
-              className="p-2 hover:bg-slate-100 rounded-lg text-slate-600 transition-colors"
-              title="Zoom Out"
-            >
-              <Minimize2 className="w-4 h-4" />
-            </button>
-            <button 
-              onClick={() => { setZoom(1.0); }}
-              className="p-2 hover:bg-slate-100 rounded-lg text-slate-600 transition-colors ml-1"
-              title="Reset View"
-            >
-              <RotateCw className="w-4 h-4" />
-            </button>
-          </div>
-        </div>
-
-        <div className="relative w-72">
-          <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-          <input 
-            type="text" 
-            placeholder="Search vessel..." 
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            className="w-full pl-11 pr-4 py-3 bg-white/80 backdrop-blur-xl border border-slate-200 rounded-2xl text-sm text-slate-700 outline-none focus:ring-2 focus:ring-[#FDB913]/30 shadow-lg transition-all"
-          />
-        </div>
-      </div>
-
       {/* Legend */}
       <div className="absolute bottom-6 left-6 z-20 bg-white/80 backdrop-blur-xl border border-slate-200 p-5 rounded-3xl shadow-xl space-y-4">
         <h4 className="text-[10px] font-bold text-slate-400 uppercase tracking-widest border-b border-slate-100 pb-2">Status Legend</h4>
