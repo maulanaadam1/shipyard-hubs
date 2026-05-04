@@ -280,44 +280,48 @@ export default function VesselLayout() {
       <AnimatePresence>
         {hoveredVessel && (
           <motion.div 
-            initial={{ opacity: 0, x: 20 }}
-            animate={{ opacity: 1, x: 0 }}
-            exit={{ opacity: 0, x: 20 }}
-            className="absolute top-6 right-6 z-30 w-72 bg-white/10 backdrop-blur-xl border border-white/20 rounded-3xl p-6 shadow-2xl"
+            initial={{ opacity: 0, x: 20, scale: 0.95 }}
+            animate={{ opacity: 1, x: 0, scale: 1 }}
+            exit={{ opacity: 0, x: 20, scale: 0.95 }}
+            className="absolute top-6 right-6 z-30 w-72 bg-white border border-slate-200 rounded-[2rem] p-6 shadow-2xl"
           >
-            <div className="flex items-center gap-3 mb-6">
-              <div className="w-12 h-12 rounded-2xl flex items-center justify-center text-slate-900" style={{ backgroundColor: getStatusColor(hoveredVessel.status_dock) }}>
+            <div className="flex items-center gap-4 mb-6">
+              <div className="w-12 h-12 rounded-2xl flex items-center justify-center text-white shadow-lg" style={{ backgroundColor: getStatusColor(hoveredVessel.status_dock) }}>
                 <Ship className="w-6 h-6" />
               </div>
               <div>
-                <h3 className="text-white font-bold text-base leading-none">{hoveredVessel.shipname}</h3>
-                <span className="inline-block mt-2 px-2 py-0.5 bg-white/10 rounded-full text-[9px] font-bold text-white/60 uppercase tracking-widest border border-white/10">
+                <h3 className="text-slate-800 font-bold text-base leading-tight">{hoveredVessel.shipname}</h3>
+                <span className="inline-block mt-1 px-2 py-0.5 bg-slate-100 rounded-full text-[9px] font-bold text-slate-500 uppercase tracking-widest border border-slate-200">
                   {hoveredVessel.type || 'Standard'}
                 </span>
               </div>
             </div>
 
             <div className="space-y-4">
-              <div className="flex justify-between items-center py-2 border-b border-white/10">
-                <span className="text-[10px] font-bold text-white/40 uppercase">Status</span>
+              <div className="flex justify-between items-center py-2 border-b border-slate-100">
+                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Status</span>
                 <span className="text-xs font-bold" style={{ color: getStatusColor(hoveredVessel.status_dock) }}>
                   {hoveredVessel.status_dock || 'Unknown'}
                 </span>
               </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div className="p-3 bg-white/5 rounded-2xl border border-white/10">
-                  <span className="block text-[9px] font-bold text-white/30 uppercase mb-1">Width</span>
-                  <span className="text-sm font-bold text-white">{hoveredVessel.width || '-'} m</span>
+              
+              <div className="grid grid-cols-2 gap-3">
+                <div className="p-3 bg-slate-50 rounded-2xl border border-slate-100">
+                  <span className="block text-[9px] font-bold text-slate-400 uppercase mb-1">Width</span>
+                  <span className="text-sm font-bold text-slate-700">{hoveredVessel.width || '-'} m</span>
                 </div>
-                <div className="p-3 bg-white/5 rounded-2xl border border-white/10">
-                  <span className="block text-[9px] font-bold text-white/30 uppercase mb-1">Length</span>
-                  <span className="text-sm font-bold text-white">{hoveredVessel.length || '-'} m</span>
+                <div className="p-3 bg-slate-50 rounded-2xl border border-slate-100">
+                  <span className="block text-[9px] font-bold text-slate-400 uppercase mb-1">Length</span>
+                  <span className="text-sm font-bold text-slate-700">{hoveredVessel.length || '-'} m</span>
                 </div>
               </div>
-              <div className="p-4 bg-[#FDB913]/10 border border-[#FDB913]/20 rounded-2xl flex gap-3">
-                <Info className="w-4 h-4 text-[#FDB913] shrink-0" />
-                <p className="text-[10px] text-[#FDB913] leading-relaxed">
-                  Drag the vessel to reposition. Click the rotate icon to adjust orientation.
+
+              <div className="p-4 bg-[#FDB913]/5 border border-[#FDB913]/20 rounded-2xl flex gap-3">
+                <div className="w-6 h-6 bg-[#FDB913]/20 rounded-lg flex items-center justify-center shrink-0">
+                  <Info className="w-3.5 h-3.5 text-[#FDB913]" />
+                </div>
+                <p className="text-[10px] text-slate-500 leading-relaxed font-medium">
+                  Drag vessel to reposition. Click <RotateCw className="inline w-2.5 h-2.5 mx-0.5" /> to rotate orientation.
                 </p>
               </div>
             </div>
