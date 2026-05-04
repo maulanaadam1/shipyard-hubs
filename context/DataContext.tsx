@@ -273,10 +273,12 @@ interface DataContextType {
   currentUser: User | null;
   setCurrentUser: React.Dispatch<React.SetStateAction<User | null>>;
   isAuthLoading: boolean;
+  isLoading: boolean;
   fetchData: (isInitial?: boolean) => Promise<void>;
   notifications: Notification[];
   markNotificationRead: (id: string) => Promise<void>;
   createNotification: (userId: string, title: string, message: string, type: string, link?: string) => Promise<void>;
+  canAccess: (resource: string, action?: string) => boolean;
 }
 
 const DataContext = createContext<DataContextType | undefined>(undefined);
