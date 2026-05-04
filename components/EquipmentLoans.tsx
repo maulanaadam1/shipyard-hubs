@@ -642,7 +642,7 @@ export default function EquipmentLoans() {
                           </button>
                         );
                       })()}
-                      {loan.status === 'Draft' && (
+                      {canAccess('Request', 'edit') && loan.status === 'Draft' && (
                         <button 
                           onClick={() => openEditModal(loan)}
                           className="p-2 text-slate-400 hover:text-blue-600 rounded-lg hover:bg-blue-50 transition-colors"
@@ -651,13 +651,15 @@ export default function EquipmentLoans() {
                           <Edit2 className="w-4 h-4" />
                         </button>
                       )}
-                      <button 
-                        onClick={() => handleDeleteLoan(loan.id, loan.request_id)}
-                        className="p-2 text-slate-400 hover:text-red-600 rounded-lg hover:bg-red-50 transition-colors"
-                        title="Delete"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
+                      {canAccess('Request', 'delete') && (
+                        <button 
+                          onClick={() => handleDeleteLoan(loan.id, loan.request_id)}
+                          className="p-2 text-slate-400 hover:text-red-600 rounded-lg hover:bg-red-50 transition-colors"
+                          title="Delete"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      )}
                     </div>
                   </td>
                 </motion.tr>

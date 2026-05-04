@@ -25,7 +25,7 @@ import { api } from '@/lib/api-client';
 import { motion, AnimatePresence } from 'framer-motion';
 
 export default function EquipmentRelease() {
-  const { fleet: assets, loans, fetchData, currentUser, releases, projects: allProjects } = useData();
+  const { fleet: assets, loans, fetchData, currentUser, releases, projects: allProjects, canAccess } = useData();
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [selectedLoan, setSelectedLoan] = useState<LoanRequest | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
@@ -473,16 +473,20 @@ export default function EquipmentRelease() {
           <p className="text-sm text-slate-500 mt-1">Manage physical deployment and track release history.</p>
         </div>
         <div className="flex items-center gap-3">
-          <button 
-            onClick={handleDeleteAll}
-            className="flex items-center justify-center gap-2 px-6 py-2.5 bg-red-50 border border-red-200 text-red-600 rounded-xl text-sm font-bold hover:bg-red-100 transition-all shadow-sm"
-          >
-            <Trash2 className="w-4 h-4" /> Delete All
-          </button>
-          <label className="flex items-center justify-center gap-2 px-6 py-2.5 bg-white border border-slate-200 text-slate-600 rounded-xl text-sm font-bold hover:bg-slate-50 transition-all cursor-pointer shadow-sm">
-            <Download className="w-4 h-4 text-[#FDB913]" /> Import Legacy
-            <input type="file" className="hidden" accept=".csv,.txt" onChange={handleLegacyImport} />
-          </label>
+          {canAccess('Release', 'delete') && (
+            <button 
+              onClick={handleDeleteAll}
+              className="flex items-center justify-center gap-2 px-6 py-2.5 bg-red-50 border border-red-200 text-red-600 rounded-xl text-sm font-bold hover:bg-red-100 transition-all shadow-sm"
+            >
+              <Trash2 className="w-4 h-4" /> Delete All
+            </button>
+          )}
+          {canAccess('Release', 'import') && (
+            <label className="flex items-center justify-center gap-2 px-6 py-2.5 bg-white border border-slate-200 text-slate-600 rounded-xl text-sm font-bold hover:bg-slate-50 transition-all cursor-pointer shadow-sm">
+              <Download className="w-4 h-4 text-[#FDB913]" /> Import Legacy
+              <input type="file" className="hidden" accept=".csv,.txt" onChange={handleLegacyImport} />
+            </label>
+          )}
           <div className="relative w-full lg:w-80">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
             <input 

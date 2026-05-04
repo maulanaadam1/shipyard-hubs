@@ -60,7 +60,7 @@ type MovementActivity = {
 };
 
 export default function ShipDocking() {
-  const { projects, fetchData } = useData();
+  const { projects, fetchData, canAccess } = useData();
 
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('active');
@@ -340,19 +340,21 @@ export default function ShipDocking() {
                         <td className="px-6 py-4 text-xs text-slate-600">{formatDate(project.undocking || project.est_undocking_date)}</td>
                         <td className="px-6 py-4 text-right">
                           <div className="flex items-center justify-end gap-2">
+                            {canAccess('Ship Docking', 'edit') && (
+                              <button
+                                onClick={() => openEdit(project)}
+                                className="p-2 hover:bg-white hover:shadow-sm rounded-lg transition-all text-slate-400 hover:text-[#FDB913]"
+                                title="Update Status"
+                              >
+                                <Edit2 className="w-4 h-4" />
+                              </button>
+                            )}
                             <button
-                              onClick={(e) => { e.stopPropagation(); toggleExpand(project.id); }}
+                              onClick={() => toggleExpand(project.id)}
                               className={`p-2 rounded-lg transition-all ${isExpanded ? 'bg-[#FDB913] text-slate-900' : 'text-slate-400 hover:text-[#FDB913] hover:bg-white hover:shadow-sm'}`}
                               title="Log Pergerakan"
                             >
                               <History className="w-4 h-4" />
-                            </button>
-                            <button
-                              onClick={(e) => { e.stopPropagation(); openEdit(project); }}
-                              className="p-2 hover:bg-white hover:shadow-sm rounded-lg transition-all text-slate-400 hover:text-[#FDB913]"
-                              title="Update Status"
-                            >
-                              <Edit2 className="w-4 h-4" />
                             </button>
                           </div>
                         </td>
@@ -441,12 +443,14 @@ export default function ShipDocking() {
                                             <td className="px-4 py-3 text-slate-500">{formatDateTime(log.start_time)}</td>
                                             <td className="px-4 py-3 text-slate-500">{formatDateTime(log.end_time)}</td>
                                             <td className="px-4 py-3 text-right">
-                                              <button
-                                                onClick={() => handleDeleteLog(log.id)}
-                                                className="p-1.5 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-lg transition-all"
-                                              >
-                                                <Trash2 className="w-3.5 h-3.5" />
-                                              </button>
+                                              {canAccess('Ship Docking', 'delete') && (
+                                                <button
+                                                  onClick={() => handleDeleteLog(log.id)}
+                                                  className="p-1.5 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-lg transition-all"
+                                                >
+                                                  <Trash2 className="w-3.5 h-3.5" />
+                                                </button>
+                                              )}
                                             </td>
                                           </tr>
                                         ))

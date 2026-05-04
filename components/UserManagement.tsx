@@ -264,18 +264,22 @@ export default function UserManagement() {
                   </td>
                   <td className="px-6 py-4 text-right">
                     <div className="flex items-center justify-end gap-2">
-                      <button 
-                        onClick={() => openModal(user)}
-                        className="p-2 text-slate-400 hover:text-[#FDB913] hover:bg-[#FDB913]/10 rounded-lg transition-all"
-                      >
-                        <Edit2 className="w-4 h-4" />
-                      </button>
-                      <button 
-                        onClick={() => handleDelete(user.id, user.email, user.name)}
-                        className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-all"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
+                      {canAccess('User Management', 'edit') && (
+                        <button 
+                          onClick={() => openModal(user)}
+                          className="p-2 text-slate-400 hover:text-[#FDB913] hover:bg-[#FDB913]/10 rounded-lg transition-all"
+                        >
+                          <Edit2 className="w-4 h-4" />
+                        </button>
+                      )}
+                      {canAccess('User Management', 'delete') && (
+                        <button 
+                          onClick={() => handleDelete(user.id, user.email, user.name)}
+                          className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-all"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      )}
                     </div>
                   </td>
                 </tr>

@@ -22,7 +22,7 @@ import { useData, LoanRequest, DeploymentRecord, Equipment as EquipmentAsset } f
 import { api } from '@/lib/api-client';
 
 export default function EquipmentDeployment() {
-  const { fleet: assets, setFleet: setAssets, loans, setLoans, deployments, setDeployments } = useData();
+  const { fleet: assets, setFleet: setAssets, loans, setLoans, deployments, setDeployments, canAccess } = useData();
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [selectedLoan, setSelectedLoan] = useState<LoanRequest | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
@@ -314,12 +314,14 @@ export default function EquipmentDeployment() {
                           </div>
                         </td>
                         <td className="px-6 py-4 text-right">
-                          <button 
-                            onClick={() => openDeploymentModal(loan)}
-                            className="inline-flex items-center gap-2 px-4 py-1.5 bg-[#FDB913] text-slate-900 rounded-xl text-xs font-bold hover:bg-[#e5a611] transition-colors shadow-sm"
-                          >
-                            <Plus className="w-3 h-3" /> Deploy
-                          </button>
+                          {canAccess('Utility', 'edit') && (
+                            <button 
+                              onClick={() => openDeploymentModal(loan)}
+                              className="inline-flex items-center gap-2 px-4 py-1.5 bg-[#FDB913] text-slate-900 rounded-xl text-xs font-bold hover:bg-[#e5a611] transition-colors shadow-sm"
+                            >
+                              <Plus className="w-3 h-3" /> Deploy
+                            </button>
+                          )}
                         </td>
                       </tr>
                       
@@ -387,9 +389,11 @@ export default function EquipmentDeployment() {
                                                 <span className="text-[11px] text-slate-500">{record.start_date}</span>
                                               </td>
                                               <td className="px-4 py-3 text-right">
-                                                <button className="p-1 text-slate-400 hover:text-red-600 transition-colors">
-                                                  <Trash2 className="w-3.5 h-3.5" />
-                                                </button>
+                                                {canAccess('Utility', 'delete') && (
+                                                  <button className="p-1 text-slate-400 hover:text-red-600 transition-colors">
+                                                    <Trash2 className="w-3.5 h-3.5" />
+                                                  </button>
+                                                )}
                                               </td>
                                             </tr>
                                           );
