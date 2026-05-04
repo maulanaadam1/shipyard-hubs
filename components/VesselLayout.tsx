@@ -268,6 +268,7 @@ export default function VesselLayout() {
                   handleUpdatePosition={handleUpdatePosition}
                   handleRotate={handleRotate}
                   setHoveredVessel={setHoveredVessel}
+                  zoom={zoom}
                 />
               ))}
             </g>
@@ -328,22 +329,23 @@ export default function VesselLayout() {
 }
 
 // Sub-component for individual vessel to encapsulate MotionValues
-function VesselComponent({ vessel, getSVGCoordinates, handleUpdatePosition, handleRotate, setHoveredVessel }: { 
+function VesselComponent({ vessel, getSVGCoordinates, handleUpdatePosition, handleRotate, setHoveredVessel, zoom }: { 
   vessel: Project, 
   getSVGCoordinates: (x: number, y: number) => { x: number, y: number },
   handleUpdatePosition: (v: Project, x: number, y: number) => void,
   handleRotate: (v: Project) => void,
-  setHoveredVessel: (v: Project | null) => void
+  setHoveredVessel: (v: Project | null) => void,
+  zoom: number
 }) {
   const isRect = ['BG', 'TK', 'LCT'].includes(vessel.type || '');
   const targetWidth = (vessel.width || 10) * 3.6;
   const targetHeight = (vessel.length || 30) * 3.2;
 
-  // Use MotionValues for smoother, jump-free dragging
+  // Use MotionValues for smooth position updates
   const mvX = useMotionValue(vessel.x_coordinate || 100);
   const mvY = useMotionValue(vessel.y_coordinate || 100);
 
-  // Sync MotionValues when vessel props change (e.g. after DB update)
+  // Sync MotionValues when vessel props change (e.g. after DB update or project reload)
   React.useEffect(() => {
     mvX.set(vessel.x_coordinate || 100);
     mvY.set(vessel.y_coordinate || 100);
@@ -361,9 +363,19 @@ function VesselComponent({ vessel, getSVGCoordinates, handleUpdatePosition, hand
 
   return (
     <motion.g
-      drag
-      dragMomentum={false}
-      dragElastic={0}
+      onPan={(e, info) => {
+        // info.delta is in screen pixels. 
+        // We need to scale it by zoom to match SVG internal units
+        const deltaX = info.delta.x / zoom;
+        const deltaY = info.delta.y / zoom;
+        
+        mvX.set(mvX.get() + deltaX);
+        mvY.set(mvY.get() + deltaY);
+      }}
+      onPanEnd={(e, info) => {
+        // Save final rounded position
+        handleUpdatePosition(vessel, Math.round(mvX.get()), Math.round(mvY.get()));
+      }}
       style={{ 
         x: mvX, 
         y: mvY,
@@ -371,11 +383,6 @@ function VesselComponent({ vessel, getSVGCoordinates, handleUpdatePosition, hand
       }}
       animate={{ 
         rotate: vessel.rotation || 0
-      }}
-      onDragEnd={(e, info) => {
-        // Calculate the new center point in SVG units
-        const point = getSVGCoordinates(info.point.x, info.point.y);
-        handleUpdatePosition(vessel, Math.round(point.x), Math.round(point.y));
       }}
       onMouseEnter={() => setHoveredVessel(vessel)}
       onMouseLeave={() => setHoveredVessel(null)}
@@ -418,7 +425,7 @@ function VesselComponent({ vessel, getSVGCoordinates, handleUpdatePosition, hand
         </text>
       </g>
 
-      {/* Rotation tool - positioned relative to vessel center */}
+      {/* Rotation tool */}
       <foreignObject x={targetWidth/2} y={-targetHeight/2} width="30" height="30" style={{ pointerEvents: 'auto' }}>
         <button 
           onClick={(e) => {
