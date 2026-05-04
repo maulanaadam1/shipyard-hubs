@@ -202,6 +202,14 @@ func createTables() {
 		description TEXT,
 		status TEXT DEFAULT 'Active'
 	);
+
+	CREATE TABLE IF NOT EXISTS master_status_dock (
+		id TEXT PRIMARY KEY,
+		name TEXT UNIQUE,
+		color TEXT,
+		is_active BOOLEAN DEFAULT 1,
+		created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+	);
 	`
 
 	if _, err := DB.Exec(schema); err != nil {
@@ -269,6 +277,42 @@ func createTables() {
 
 	// Migration: Add rotation to projects
 	DB.Exec("ALTER TABLE projects ADD COLUMN rotation REAL DEFAULT 0")
+
+	// Migration: Add master_status_dock
+	DB.Exec(`CREATE TABLE IF NOT EXISTS master_status_dock (
+		id TEXT PRIMARY KEY,
+		name TEXT UNIQUE,
+		color TEXT,
+		is_active BOOLEAN DEFAULT 1,
+		created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+	);`)
+
+	seedMasterStatusDock()
+}
+
+func seedMasterStatusDock() {
+	statuses := []struct {
+		Name  string
+		Color string
+	}{
+		{"Docking", "#3498db"},
+		{"On Dock", "#2ecc71"},
+		{"Undocking", "#e67e22"},
+		{"Completed", "#95a5a6"},
+	}
+
+	for _, s := range statuses {
+		var count int
+		DB.QueryRow("SELECT COUNT(*) FROM master_status_dock WHERE name = ?", s.Name).Scan(&count)
+		if count == 0 {
+			id := uuid.New().String()
+			_, _ = DB.Exec(
+				"INSERT INTO master_status_dock (id, name, color, is_active) VALUES (?, ?, ?, 1)",
+				id, s.Name, s.Color,
+			)
+			log.Printf("Seeded master status dock: %s", s.Name)
+		}
+	}
 }
 
 func seedMissingDropdownItems() {
