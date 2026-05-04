@@ -8,7 +8,7 @@ import { DataProvider, useData } from '../context/DataContext';
 if (typeof window !== 'undefined' && 'serviceWorker' in navigator) {
   window.addEventListener('load', () => {
     // Add version query to bypass potential intermediate caches
-    navigator.serviceWorker.register('/sw.js?v=3').then(registration => {
+    navigator.serviceWorker.register('/sw.js?v=4').then(registration => {
       console.log('SW registered: ', registration);
       
       // Check for updates frequently

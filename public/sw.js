@@ -1,4 +1,4 @@
-const CACHE_NAME = 'shipyard-hub-v2';
+const CACHE_NAME = 'shipyard-hub-v4';
 const urlsToCache = [
   '/',
   '/index.html',
@@ -16,6 +16,21 @@ self.addEventListener('install', event => {
   event.waitUntil(
     caches.open(CACHE_NAME)
       .then(cache => cache.addAll(urlsToCache))
+  );
+});
+
+self.addEventListener('activate', event => {
+  event.waitUntil(
+    caches.keys().then(cacheNames => {
+      return Promise.all(
+        cacheNames.filter(cacheName => {
+          return cacheName !== CACHE_NAME;
+        }).map(cacheName => {
+          console.log('Deleting old cache:', cacheName);
+          return caches.delete(cacheName);
+        })
+      );
+    }).then(() => self.clients.claim())
   );
 });
 
