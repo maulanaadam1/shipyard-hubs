@@ -22,10 +22,25 @@ const ORIGINAL_PATH_HEIGHT = 235;
 export default function VesselLayout() {
   const { projects, fetchData, canAccess } = useData();
   const [searchTerm, setSearchTerm] = useState('');
-  const [zoom, setZoom] = useState(1.2); // Start with a better zoom level
+  const [zoom, setZoom] = useState(1.2); 
   const [hoveredVessel, setHoveredVessel] = useState<Project | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [offset, setOffset] = useState({ x: 0, y: 0 });
+  
+  const svgRef = React.useRef<SVGSVGElement>(null);
+
+  // Helper to convert screen coordinates to SVG coordinates
+  const getSVGCoordinates = (clientX: number, clientY: number) => {
+    if (!svgRef.current) return { x: 0, y: 0 };
+    const svg = svgRef.current;
+    const pt = svg.createSVGPoint();
+    pt.x = clientX;
+    pt.y = clientY;
+    
+    // This matrix transformation handles zoom, pan, and responsive scaling automatically
+    const transformed = pt.matrixTransform(svg.getScreenCTM()?.inverse());
+    return { x: transformed.x, y: transformed.y };
+  };
 
   // Filter only active vessels (status_dock or ship_visibility)
   const activeVessels = useMemo(() => {
@@ -174,6 +189,7 @@ export default function VesselLayout() {
           className="origin-center w-full h-full flex items-center justify-center"
         >
           <svg 
+            ref={svgRef}
             viewBox="0 0 1234.961 649.739" 
             className="w-full h-full max-w-none drop-shadow-sm"
             xmlns="http://www.w3.org/2000/svg"
@@ -273,6 +289,22 @@ export default function VesselLayout() {
                 <text xmlSpace="preserve" style={{ fontWeight: 700, fontSize: '8.83459px', fontFamily: 'Arial', textAlign: 'end', textAnchor: 'end', display: 'inline', fill: 'none', fillOpacity: 1, stroke: '#000', strokeWidth: '.53891', strokeOpacity: 1 }} x="2182.521" y="341.654"><tspan style={{ textAlign: 'center', textAnchor: 'middle', fill: 'none', fillOpacity: 1, stroke: '#000', strokeWidth: '.53891', strokeOpacity: 1 }} x="2182.521" y="341.654">GRAVING</tspan><tspan style={{ textAlign: 'center', textAnchor: 'middle', fill: 'none', fillOpacity: 1, stroke: '#000', strokeWidth: '.53891', strokeOpacity: 1 }} x="2182.521" y="352.697">DOCK</tspan></text>
                 <text xmlSpace="preserve" style={{ fontWeight: 700, fontSize: '12.0556px', fontFamily: 'Arial', textAlign: 'end', textAnchor: 'end', display: 'inline', fill: 'none', fillOpacity: 1, stroke: '#000', strokeWidth: '.735391', strokeOpacity: 1 }} x="2292.912" y="350.491"><tspan style={{ textAlign: 'center', textAnchor: 'middle', fill: 'none', fillOpacity: 1, stroke: '#000', strokeWidth: '.735391', strokeOpacity: 1 }} x="2292.912" y="350.491">BUILDING</tspan><tspan style={{ textAlign: 'center', textAnchor: 'middle', fill: 'none', fillOpacity: 1, stroke: '#000', strokeWidth: '.735391', strokeOpacity: 1 }} x="2292.912" y="365.56">BERTH</tspan></text>
                 <text xmlSpace="preserve" style={{ fontWeight: 700, fontSize: '10.9277px', fontFamily: 'Arial', textAlign: 'end', textAnchor: 'end', display: 'inline', fill: 'none', fillOpacity: 1, stroke: '#000', strokeWidth: '.666591', strokeOpacity: 1 }} x="1849.619" y="189.034"><tspan style={{ textAlign: 'center', textAnchor: 'middle', fill: 'none', fillOpacity: 1, stroke: '#000', strokeWidth: '.666591', strokeOpacity: 1 }} x="1849.619" y="189.034">OFFICE</tspan></text>
+                <text xmlSpace="preserve" style={{ fontWeight: 700, fontSize: '10.9276px', fontFamily: 'Arial', textAlign: 'end', textAnchor: 'end', display: 'inline', fill: 'none', fillOpacity: 1, stroke: '#000', strokeWidth: '.666584', strokeOpacity: 1 }} x="1720.393" y="382.532"><tspan style={{ textAlign: 'start', textAnchor: 'start', fill: 'none', fillOpacity: 1, stroke: '#000', strokeWidth: '.666584', strokeOpacity: 1 }} x="1720.393" y="382.532">SLIPWAY E</tspan></text>
+                <text xmlSpace="preserve" style={{ fontWeight: 700, fontSize: '10.9276px', fontFamily: 'Arial', textAlign: 'end', textAnchor: 'end', display: 'inline', fill: 'none', fillOpacity: 1, stroke: '#000', strokeWidth: '.666584', strokeOpacity: 1 }} x="1645.315" y="264.662"><tspan style={{ textAlign: 'center', textAnchor: 'middle', fill: 'none', fillOpacity: 1, stroke: '#000', strokeWidth: '.666584', strokeOpacity: 1 }} x="1645.315" y="264.662">CNC</tspan></text>
+                <text xmlSpace="preserve" style={{ fontWeight: 700, fontSize: '10.9276px', fontFamily: 'Arial', textAlign: 'end', textAnchor: 'end', display: 'inline', fill: 'none', fillOpacity: 1, stroke: '#000', strokeWidth: '.666584', strokeOpacity: 1 }} x="1950.052" y="357.616"><tspan style={{ textAlign: 'center', textAnchor: 'middle', fill: 'none', fillOpacity: 1, stroke: '#000', strokeWidth: '.666584', strokeOpacity: 1 }} x="1950.052" y="357.616">CNC</tspan></text>
+                <text xmlSpace="preserve" style={{ fontWeight: 700, fontSize: '10.9276px', fontFamily: 'Arial', textAlign: 'end', textAnchor: 'end', display: 'inline', fill: 'none', fillOpacity: 1, stroke: '#000', strokeWidth: '.666584', strokeOpacity: 1 }} x="1846.556" y="325.514"><tspan style={{ textAlign: 'center', textAnchor: 'middle', fill: 'none', fillOpacity: 1, stroke: '#000', strokeWidth: '.666584', strokeOpacity: 1 }} x="1846.556" y="325.514">WAREHOUSE</tspan></text>
+                <text xmlSpace="preserve" style={{ fontWeight: 700, fontSize: '5.89084px', fontFamily: 'Arial', textAlign: 'end', textAnchor: 'end', display: 'inline', fill: 'none', fillOpacity: 1, stroke: '#000', strokeWidth: '.359341', strokeOpacity: 1 }} x="1754.683" y="237.363"><tspan style={{ textAlign: 'center', textAnchor: 'middle', fill: 'none', fillOpacity: 1, stroke: '#000', strokeWidth: '.359341', strokeOpacity: 1 }} x="1754.683" y="237.363">WAREHOUSE</tspan></text>
+                <text xmlSpace="preserve" style={{ fontWeight: 700, fontSize: '5.89084px', fontFamily: 'Arial', textAlign: 'end', textAnchor: 'end', display: 'inline', fill: 'none', fillOpacity: 1, stroke: '#000', strokeWidth: '.359341', strokeOpacity: 1 }} x="1754.683" y="179.387"><tspan style={{ textAlign: 'center', textAnchor: 'middle', fill: 'none', fillOpacity: 1, stroke: '#000', strokeWidth: '.359341', strokeOpacity: 1 }} x="1754.683" y="179.387">WORSHOP</tspan></text>
+                <text xmlSpace="preserve" style={{ fontWeight: 700, fontSize: '5.89084px', fontFamily: 'Arial', textAlign: 'end', textAnchor: 'end', display: 'inline', fill: 'none', fillOpacity: 1, stroke: '#000', strokeWidth: '.359341', strokeOpacity: 1 }} x="1764.865" y="153.632"><tspan style={{ textAlign: 'center', textAnchor: 'middle', fill: 'none', fillOpacity: 1, stroke: '#000', strokeWidth: '.359341', strokeOpacity: 1 }} x="1764.865" y="153.632">MUSHOLA</tspan></text>
+                <text xmlSpace="preserve" style={{ fontWeight: 700, fontSize: '10.9277px', fontFamily: 'Arial', textAlign: 'end', textAnchor: 'end', display: 'inline', fill: 'none', fillOpacity: 1, stroke: '#000', strokeWidth: '.666591', strokeOpacity: 1 }} x="1650.012" y="175.062"><tspan style={{ textAlign: 'center', textAnchor: 'middle', fill: 'none', fillOpacity: 1, stroke: '#000', strokeWidth: '.666591', strokeOpacity: 1 }} x="1650.012" y="175.062">OFFICE</tspan></text>
+                <text xmlSpace="preserve" style={{ fontWeight: 700, fontSize: '8.83459px', fontFamily: 'Arial', textAlign: 'end', textAnchor: 'end', display: 'inline', fill: 'none', fillOpacity: 1, stroke: '#000', strokeWidth: '.53891', strokeOpacity: 1 }} x="1624.428" y="409.214"><tspan style={{ textAlign: 'start', textAnchor: 'start', fill: 'none', fillOpacity: 1, stroke: '#000', strokeWidth: '.53891', strokeOpacity: 1 }} x="1624.428" y="409.214">HANGGAR</tspan></text>
+                <text xmlSpace="preserve" style={{ fontWeight: 700, fontSize: '10.9276px', fontFamily: 'Arial', textAlign: 'end', textAnchor: 'end', display: 'inline', fill: 'none', fillOpacity: 1, stroke: '#000', strokeWidth: '.666584', strokeOpacity: 1 }} x="1495.754" y="342.553"><tspan style={{ textAlign: 'start', textAnchor: 'start', fill: 'none', fillOpacity: 1, stroke: '#000', strokeWidth: '.666584', strokeOpacity: 1 }} x="1495.754" y="342.553">SLIPWAY D</tspan></text>
+                <text xmlSpace="preserve" style={{ fontWeight: 700, fontSize: '10.9276px', fontFamily: 'Arial', textAlign: 'end', textAnchor: 'end', display: 'inline', fill: 'none', fillOpacity: 1, stroke: '#000', strokeWidth: '.666584', strokeOpacity: 1 }} x="1399.833" y="234.812"><tspan style={{ textAlign: 'center', textAnchor: 'middle', fill: 'none', fillOpacity: 1, stroke: '#000', strokeWidth: '.666584', strokeOpacity: 1 }} x="1399.833" y="234.812">SLIPWAY</tspan><tspan style={{ textAlign: 'center', textAnchor: 'middle', fill: 'none', fillOpacity: 1, stroke: '#000', strokeWidth: '.666584', strokeOpacity: 1 }} x="1399.833" y="248.471">A / B / C</tspan></text>
+                <text xmlSpace="preserve" style={{ fontWeight: 700, fontSize: '8.83459px', fontFamily: 'Arial', textAlign: 'end', textAnchor: 'end', display: 'inline', fill: 'none', fillOpacity: 1, stroke: '#000', strokeWidth: '.53891', strokeOpacity: 1 }} x="1846.327" y="382.342"><tspan style={{ textAlign: 'center', textAnchor: 'middle', fill: 'none', fillOpacity: 1, stroke: '#000', strokeWidth: '.53891', strokeOpacity: 1 }} x="1846.327" y="382.342">WORKSHOP</tspan><tspan style={{ textAlign: 'center', textAnchor: 'middle', fill: 'none', fillOpacity: 1, stroke: '#000', strokeWidth: '.53891', strokeOpacity: 1 }} x="1846.327" y="393.385">PIPA</tspan></text>
+                <text xmlSpace="preserve" style={{ fontWeight: 700, fontSize: '8.83459px', fontFamily: 'Arial', textAlign: 'end', textAnchor: 'end', display: 'inline', fill: 'none', fillOpacity: 1, stroke: '#000', strokeWidth: '.53891', strokeOpacity: 1 }} x="1950.794" y="398.193"><tspan style={{ textAlign: 'center', textAnchor: 'middle', fill: 'none', fillOpacity: 1, stroke: '#000', strokeWidth: '.53891', strokeOpacity: 1 }} x="1950.794" y="398.193">WORKSHOP</tspan><tspan style={{ textAlign: 'center', textAnchor: 'middle', fill: 'none', fillOpacity: 1, stroke: '#000', strokeWidth: '.53891', strokeOpacity: 1 }} x="1950.794" y="409.237">MACHINERY</tspan></text>
+                <text xmlSpace="preserve" style={{ fontWeight: 700, fontSize: '8.83459px', fontFamily: 'Arial', textAlign: 'end', textAnchor: 'end', display: 'inline', fill: 'none', fillOpacity: 1, stroke: '#000', strokeWidth: '.53891', strokeOpacity: 1 }} x="2182.521" y="341.654"><tspan style={{ textAlign: 'center', textAnchor: 'middle', fill: 'none', fillOpacity: 1, stroke: '#000', strokeWidth: '.53891', strokeOpacity: 1 }} x="2182.521" y="341.654">GRAVING</tspan><tspan style={{ textAlign: 'center', textAnchor: 'middle', fill: 'none', fillOpacity: 1, stroke: '#000', strokeWidth: '.53891', strokeOpacity: 1 }} x="2182.521" y="352.697">DOCK</tspan></text>
+                <text xmlSpace="preserve" style={{ fontWeight: 700, fontSize: '12.0556px', fontFamily: 'Arial', textAlign: 'end', textAnchor: 'end', display: 'inline', fill: 'none', fillOpacity: 1, stroke: '#000', strokeWidth: '.735391', strokeOpacity: 1 }} x="2292.912" y="350.491"><tspan style={{ textAlign: 'center', textAnchor: 'middle', fill: 'none', fillOpacity: 1, stroke: '#000', strokeWidth: '.735391', strokeOpacity: 1 }} x="2292.912" y="350.491">BUILDING</tspan><tspan style={{ textAlign: 'center', textAnchor: 'middle', fill: 'none', fillOpacity: 1, stroke: '#000', strokeWidth: '.735391', strokeOpacity: 1 }} x="2292.912" y="365.56">BERTH</tspan></text>
+                <text xmlSpace="preserve" style={{ fontWeight: 700, fontSize: '10.9277px', fontFamily: 'Arial', textAlign: 'end', textAnchor: 'end', display: 'inline', fill: 'none', fillOpacity: 1, stroke: '#000', strokeWidth: '.666591', strokeOpacity: 1 }} x="1849.619" y="189.034"><tspan style={{ textAlign: 'center', textAnchor: 'middle', fill: 'none', fillOpacity: 1, stroke: '#000', strokeWidth: '.666591', strokeOpacity: 1 }} x="1849.619" y="189.034">OFFICE</tspan></text>
                 <text xmlSpace="preserve" style={{ fontWeight: 700, fontSize: '10.9276px', fontFamily: 'Arial', textAlign: 'end', textAnchor: 'end', display: 'inline', fill: 'none', fillOpacity: 1, stroke: '#000', strokeWidth: '.666584', strokeOpacity: 1 }} x="1950.052" y="326.473"><tspan style={{ textAlign: 'center', textAnchor: 'middle', fill: 'none', fillOpacity: 1, stroke: '#000', strokeWidth: '.666584', strokeOpacity: 1 }} x="1950.052" y="326.473">OFFICE</tspan></text>
                 <text xmlSpace="preserve" style={{ fontWeight: 700, fontSize: '10.9276px', fontFamily: 'Arial', textAlign: 'end', textAnchor: 'end', display: 'inline', fill: 'none', fillOpacity: 1, stroke: '#000', strokeWidth: '.666584', strokeOpacity: 1 }} x="1862.513" y="462.831"><tspan style={{ textAlign: 'center', textAnchor: 'middle', fill: 'none', fillOpacity: 1, stroke: '#000', strokeWidth: '.666584', strokeOpacity: 1 }} x="1862.513" y="462.831">OFFICE</tspan></text>
                 <text xmlSpace="preserve" style={{ fontWeight: 700, fontSize: '46.7788px', fontFamily: 'Arial', textAlign: 'end', textAnchor: 'end', display: 'inline', fill: 'none', fillOpacity: 1, stroke: '#000', strokeWidth: 2.85351, strokeOpacity: 1 }} x="1786.056" y="108.399"><tspan style={{ textAlign: 'center', textAnchor: 'middle', fill: '#000', fillOpacity: 1, stroke: 'none', strokeWidth: 2.85351, strokeOpacity: 1 }} x="1786.056" y="108.399">AREA DOCKING DAN FLOATING</tspan></text>
@@ -290,20 +322,15 @@ export default function VesselLayout() {
                     key={vessel.id}
                     drag
                     dragMomentum={false}
-                    initial={{ 
-                      x: vessel.x_coordinate || 100, 
-                      y: vessel.y_coordinate || 100,
-                      rotate: vessel.rotation || 0
-                    }}
+                    initial={false}
                     animate={{ 
                       x: vessel.x_coordinate || 100, 
                       y: vessel.y_coordinate || 100,
                       rotate: vessel.rotation || 0
                     }}
                     onDragEnd={(e, info) => {
-                      // Note: We need to handle relative coordinates correctly
-                      // For now, assume the drag x/y is what we want to save
-                      handleUpdatePosition(vessel, info.point.x, info.point.y);
+                      const point = getSVGCoordinates(info.point.x, info.point.y);
+                      handleUpdatePosition(vessel, Math.round(point.x), Math.round(point.y));
                     }}
                     onMouseEnter={() => setHoveredVessel(vessel)}
                     onMouseLeave={() => setHoveredVessel(null)}
