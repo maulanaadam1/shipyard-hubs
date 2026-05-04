@@ -389,7 +389,7 @@ export default function VesselLayout() {
               })}
             </g>
           </svg>
-        </div>
+        </motion.div>
       </div>
 
       {/* Vessel Callout / Info Panel */}
