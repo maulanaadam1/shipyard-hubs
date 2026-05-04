@@ -87,6 +87,11 @@ func CheckTablePermission(r *http.Request, table string, action string) bool {
 		return true
 	}
 
+	// Special case: anyone can add notifications (send them)
+	if table == "notifications" && action == "add" {
+		return true
+	}
+
 	resource := tableToResource[table]
 	if resource == "" {
 		return false // Default deny for unknown tables
