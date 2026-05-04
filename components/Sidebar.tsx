@@ -66,6 +66,7 @@ export default function Sidebar({ onTabChange }: { onTabChange: () => void }) {
         { icon: Building2, label: 'Master Company', path: '/master-company', resource: 'Master Company' },
         { icon: Anchor, label: 'Master Kapal', path: '/master-kapal', resource: 'Master Kapal' },
         { icon: MapPin, label: 'Master Location', path: '/master-location', resource: 'Master Location' },
+        { icon: Activity, label: 'Master Dock Status', path: '/master-dock-status', resource: 'Master Dock Status' },
         { icon: ClipboardList, label: 'Approval Workflow', path: '/master-workflow', resource: 'Master Workflow' },
         { icon: Settings, label: 'Master Configuration', path: '/master-config', resource: 'Master Configuration' },
         { icon: Shield, label: 'Role Management', path: '/master-roles', resource: 'Role Management' },

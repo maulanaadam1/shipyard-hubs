@@ -20,7 +20,7 @@ const ORIGINAL_PATH_WIDTH = 110;
 const ORIGINAL_PATH_HEIGHT = 235;
 
 export default function VesselLayout() {
-  const { projects, fetchData, canAccess } = useData();
+  const { projects, dockStatuses, fetchData, canAccess } = useData();
   const [searchTerm, setSearchTerm] = useState('');
   const [zoom, setZoom] = useState(1.0); 
   const [hoveredVessel, setHoveredVessel] = useState<Project | null>(null);
@@ -43,13 +43,14 @@ export default function VesselLayout() {
 
   // Filter only active vessels (status_dock or ship_visibility)
   const activeVessels = useMemo(() => {
+    const activeStatusNames = (dockStatuses || []).filter(s => s.is_active).map(s => s.name);
     return projects.filter(p => {
       const isVisible = p.ship_visibility === 'active' || 
-                       ['Docking', 'On Dock', 'Undocking', 'Completed'].includes(p.status_dock || '');
+                       activeStatusNames.includes(p.status_dock || '');
       const matchesSearch = p.shipname?.toLowerCase().includes(searchTerm.toLowerCase());
       return isVisible && matchesSearch;
     });
-  }, [projects, searchTerm]);
+  }, [projects, searchTerm, dockStatuses]);
 
   const handleUpdatePosition = async (project: Project, x: number, y: number) => {
     setIsSaving(true);
@@ -89,14 +90,9 @@ export default function VesselLayout() {
     }
   };
 
-  const getStatusColor = (status?: string) => {
-    switch (status) {
-      case 'Docking': return '#2ecc71'; // Green
-      case 'On Dock': return '#3498db'; // Blue
-      case 'Undocking': return '#f1c40f'; // Yellow
-      case 'Completed': return '#95a5a6'; // Gray
-      default: return '#e67e22'; // Orange
-    }
+  const getStatusColor = (statusName?: string) => {
+    const status = (dockStatuses || []).find(s => s.name === statusName);
+    return status?.color || '#e67e22'; // Default orange
   };
 
   return (
@@ -105,15 +101,10 @@ export default function VesselLayout() {
       <div className="absolute bottom-6 left-6 z-20 bg-white/80 backdrop-blur-xl border border-slate-200 p-5 rounded-3xl shadow-xl space-y-4">
         <h4 className="text-[10px] font-bold text-slate-400 uppercase tracking-widest border-b border-slate-100 pb-2">Status Legend</h4>
         <div className="grid grid-cols-1 gap-y-2.5">
-          {[
-            { label: 'Docking', color: '#2ecc71' },
-            { label: 'On Dock', color: '#3498db' },
-            { label: 'Undocking', color: '#f1c40f' },
-            { label: 'Completed', color: '#95a5a6' }
-          ].map(s => (
-            <div key={s.label} className="flex items-center gap-3">
+          {(dockStatuses || []).filter(s => s.is_active).map(s => (
+            <div key={s.id} className="flex items-center gap-3">
               <div className="w-2.5 h-2.5 rounded-full shadow-sm" style={{ backgroundColor: s.color }} />
-              <span className="text-[11px] text-slate-600 font-semibold">{s.label}</span>
+              <span className="text-[11px] text-slate-600 font-semibold">{s.name}</span>
             </div>
           ))}
         </div>
@@ -359,14 +350,10 @@ function VesselComponent({ vessel, getSVGCoordinates, handleUpdatePosition, hand
     mvY.set(vessel.y_coordinate || 100);
   }, [vessel.x_coordinate, vessel.y_coordinate, mvX, mvY]);
 
-  const getStatusColor = (status?: string) => {
-    switch (status) {
-      case 'Docking': return '#2ecc71';
-      case 'On Dock': return '#3498db';
-      case 'Undocking': return '#f1c40f';
-      case 'Completed': return '#95a5a6';
-      default: return '#e67e22';
-    }
+  const getStatusColor = (statusName?: string) => {
+    const { dockStatuses } = useData();
+    const status = (dockStatuses || []).find(s => s.name === statusName);
+    return status?.color || '#e67e22';
   };
 
   return (

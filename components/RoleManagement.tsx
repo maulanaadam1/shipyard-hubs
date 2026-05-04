@@ -40,6 +40,7 @@ const RESOURCES = [
   { id: 'Master Configuration', type: 'menu' },
   { id: 'User Management', type: 'menu' },
   { id: 'Role Management', type: 'menu' },
+  { id: 'Master Dock Status', type: 'menu' },
 ];
 
 const ACTIONS = ['view', 'add', 'edit', 'delete', 'approve', 'import', 'export'];

@@ -10,7 +10,7 @@ import {
 import { useData } from '@/context/DataContext';
 import { api } from '@/lib/api-client';
 
-const STATUS_DOCK_OPTIONS = ['', 'Docking', 'On Dock', 'Undocking', 'Completed'];
+// Removed hardcoded STATUS_DOCK_OPTIONS, using dockStatuses from context instead
 
 function toInputDate(dateStr?: string) {
   if (!dateStr) return '';
@@ -64,7 +64,7 @@ type MovementActivity = {
 };
 
 export default function ShipDocking() {
-  const { projects, locations, fetchData, canAccess } = useData();
+  const { projects, locations, dockStatuses, fetchData, canAccess } = useData();
 
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
@@ -178,11 +178,21 @@ export default function ShipDocking() {
 
   const getDockBadge = (p: any) => {
     const s = p.status_dock || '';
-    if (s === 'On Dock')    return 'bg-blue-50 text-blue-600';
-    if (s === 'Docking')    return 'bg-amber-50 text-amber-600';
-    if (s === 'Undocking')  return 'bg-purple-50 text-purple-600';
-    if (s === 'Completed')  return 'bg-green-50 text-green-600';
-    return 'bg-slate-100 text-slate-500';
+    const statusData = (dockStatuses || []).find(ds => ds.name === s);
+    const color = statusData?.color || '#94a3b8'; // Default slate-400
+    
+    return (
+      <span 
+        className="px-2.5 py-1 rounded-full text-[10px] font-bold border uppercase tracking-wider"
+        style={{ 
+          backgroundColor: `${color}15`, // ~8% opacity
+          color: color,
+          borderColor: `${color}30` // ~18% opacity
+        }}
+      >
+        {s || 'Belum Dok'}
+      </span>
+    );
   };
 
   // --- Movement Log Functions ---
@@ -268,25 +278,36 @@ export default function ShipDocking() {
               />
             </div>
             <div className="flex gap-2 overflow-x-auto pb-1 no-scrollbar">
-              {[
-                { val: 'all', label: 'Semua' },
-                { val: 'Docking', label: 'Docking' },
-                { val: 'On Dock', label: 'On Dock' },
-                { val: 'Undocking', label: 'Undocking' },
-                { val: 'Completed', label: 'Completed' },
-                { val: 'Other', label: 'Lainnya' },
-              ].map(opt => (
+              <button
+                onClick={() => { setStatusFilter('all'); setCurrentPage(1); }}
+                className={'px-3 py-1.5 rounded-lg text-xs font-bold border transition-all whitespace-nowrap ' +
+                  (statusFilter === 'all'
+                    ? 'bg-[#FDB913] text-slate-900 border-[#FDB913]'
+                    : 'bg-white text-slate-500 border-slate-200 hover:border-slate-300')}
+              >
+                Semua
+              </button>
+              {(dockStatuses || []).filter(s => s.is_active).map(opt => (
                 <button
-                  key={opt.val}
-                  onClick={() => { setStatusFilter(opt.val); setCurrentPage(1); }}
+                  key={opt.id}
+                  onClick={() => { setStatusFilter(opt.name); setCurrentPage(1); }}
                   className={'px-3 py-1.5 rounded-lg text-xs font-bold border transition-all whitespace-nowrap ' +
-                    (statusFilter === opt.val
+                    (statusFilter === opt.name
                       ? 'bg-[#FDB913] text-slate-900 border-[#FDB913]'
                       : 'bg-white text-slate-500 border-slate-200 hover:border-slate-300')}
                 >
-                  {opt.label}
+                  {opt.name}
                 </button>
               ))}
+              <button
+                onClick={() => { setStatusFilter('Other'); setCurrentPage(1); }}
+                className={'px-3 py-1.5 rounded-lg text-xs font-bold border transition-all whitespace-nowrap ' +
+                  (statusFilter === 'Other'
+                    ? 'bg-[#FDB913] text-slate-900 border-[#FDB913]'
+                    : 'bg-white text-slate-500 border-slate-200 hover:border-slate-300')}
+              >
+                Lainnya
+              </button>
             </div>
           </div>
           <div className="flex items-center justify-between sm:justify-end gap-3">
@@ -356,9 +377,7 @@ export default function ShipDocking() {
                           </div>
                         </td>
                         <td className="px-6 py-4">
-                          <span className={'px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider ' + dockClass}>
-                            {project.status_dock || 'Belum Dok'}
-                          </span>
+                          {getDockBadge(project)}
                         </td>
                         <td className="px-6 py-4 text-xs text-slate-600">{formatDate(project.actual_start || project.est_start)}</td>
                         <td className="px-6 py-4 text-xs text-slate-600">{formatDate(project.actual_finish || project.est_finish)}</td>
@@ -592,8 +611,9 @@ export default function ShipDocking() {
                         onChange={f('status_dock')}
                         className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-[#FDB913]/30 appearance-none"
                       >
-                        {STATUS_DOCK_OPTIONS.map(o => (
-                          <option key={o} value={o}>{o || '— Pilih Status —'}</option>
+                        <option value="">— Pilih Status —</option>
+                        {(dockStatuses || []).filter(s => s.is_active).map(o => (
+                          <option key={o.id} value={o.name}>{o.name}</option>
                         ))}
                       </select>
                       <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />

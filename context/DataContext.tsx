@@ -152,6 +152,13 @@ export interface LocationMaster {
   center_y?: number;
 }
 
+export interface DockStatusMaster {
+  id: string;
+  name: string;
+  color: string;
+  is_active: boolean;
+}
+
 export interface ApprovalWorkflow {
   id: string;
   module: string;
@@ -281,6 +288,8 @@ interface DataContextType {
   markNotificationRead: (id: string) => Promise<void>;
   createNotification: (userId: string, title: string, message: string, type: string, link?: string) => Promise<void>;
   canAccess: (resource: string, action?: string) => boolean;
+  dockStatuses: DockStatusMaster[];
+  setDockStatuses: React.Dispatch<React.SetStateAction<DockStatusMaster[]>>;
 }
 
 const DataContext = createContext<DataContextType | undefined>(undefined);
@@ -304,6 +313,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
   const [releases, setReleases] = useState<ReleaseRecord[]>([]);
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [currentUser, setCurrentUser] = useState<User | null>(null);
+  const [dockStatuses, setDockStatuses] = useState<DockStatusMaster[]>([]);
   const [isAuthLoading, setIsAuthLoading] = useState(true);
   const [isLoading, setIsLoading] = useState(true);
   const [hasInitialLoaded, setHasInitialLoaded] = useState(false);
@@ -358,6 +368,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
         api.from('dropdown_configs').select('*'),
         api.from('equipment_release').select('*').order('date_released', { ascending: false }),
         api.from('approval_workflow').select('*').order('step_order', { ascending: true }),
+        api.from('master_status_dock').select('*').order('name', { ascending: true }),
         currentUserIdRef.current 
           ? api.from('notifications').select('*').eq('user_id', currentUserIdRef.current).order('created_at', { ascending: false })
           : Promise.resolve({ data: [], error: null })
@@ -383,7 +394,8 @@ export function DataProvider({ children }: { children: ReactNode }) {
             if (index === 9) setDropdownConfigs(data as DropdownConfig[]);
             if (index === 10) setReleases(data as ReleaseRecord[]);
             if (index === 11) setWorkflows(data as ApprovalWorkflow[]);
-            if (index === 12) setNotifications(data as Notification[]);
+            if (index === 12) setDockStatuses(data as DockStatusMaster[]);
+            if (index === 13) setNotifications(data as Notification[]);
           }
         }
       });
@@ -565,6 +577,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
       workflows, setWorkflows,
       notifications, markNotificationRead, createNotification,
       currentUser, setCurrentUser,
+      dockStatuses, setDockStatuses,
       isLoading, fetchData,
       isAuthLoading,
       canAccess: (resource: string, action: string = 'view') => {
