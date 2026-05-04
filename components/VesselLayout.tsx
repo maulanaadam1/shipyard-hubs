@@ -306,81 +306,16 @@ export default function VesselLayout() {
 
             {/* Vessels Layer */}
             <g id="vessels-layer">
-              {activeVessels.map(vessel => {
-                const isRect = ['BG', 'TK', 'LCT'].includes(vessel.type || '');
-                const targetWidth = (vessel.width || 10) * 3.6;
-                const targetHeight = (vessel.length || 30) * 3.2;
-                
-                return (
-                  <motion.g
-                    key={vessel.id}
-                    drag
-                    dragMomentum={false}
-                    initial={false}
-                    animate={{ 
-                      x: vessel.x_coordinate || 100, 
-                      y: vessel.y_coordinate || 100,
-                      rotate: vessel.rotation || 0
-                    }}
-                    onDragEnd={(e, info) => {
-                      const point = getSVGCoordinates(info.point.x, info.point.y);
-                      handleUpdatePosition(vessel, Math.round(point.x), Math.round(point.y));
-                    }}
-                    onMouseEnter={() => setHoveredVessel(vessel)}
-                    onMouseLeave={() => setHoveredVessel(null)}
-                    className="cursor-grab active:cursor-grabbing"
-                    whileHover={{ scale: 1.05 }}
-                  >
-                    {isRect ? (
-                      <rect 
-                        width={targetWidth}
-                        height={targetHeight}
-                        x={-targetWidth / 2}
-                        y={-targetHeight / 2}
-                        fill={getStatusColor(vessel.status_dock)}
-                        stroke="#000"
-                        strokeWidth="1"
-                        rx="4"
-                        className="transition-all duration-300"
-                      />
-                    ) : (
-                      <g transform={`scale(${targetWidth / ORIGINAL_PATH_WIDTH}, ${targetHeight / ORIGINAL_PATH_HEIGHT}) translate(-${ORIGINAL_PATH_WIDTH/2}, -${ORIGINAL_PATH_HEIGHT/2})`}>
-                        <path 
-                          d={NORMALIZED_PATH_D}
-                          fill={getStatusColor(vessel.status_dock)}
-                          stroke="#000"
-                          strokeWidth="1"
-                        />
-                      </g>
-                    )}
-                    
-                    {/* Vessel Label */}
-                    <text 
-                      textAnchor="middle" 
-                      dominantBaseline="middle"
-                      fill="white"
-                      className="text-[8px] font-bold pointer-events-none select-none uppercase"
-                      style={{ textShadow: '0 1px 2px rgba(0,0,0,0.5)' }}
-                      transform="rotate(90)"
-                    >
-                      {vessel.shipname?.substring(0, 15)}
-                    </text>
-
-                    {/* Quick Rotation Tool */}
-                    <foreignObject x={targetWidth/2} y={-targetHeight/2} width="30" height="30">
-                      <button 
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleRotate(vessel);
-                        }}
-                        className="w-6 h-6 bg-white rounded-full flex items-center justify-center shadow-lg hover:scale-110 transition-transform"
-                      >
-                        <RotateCw className="w-3 h-3 text-slate-900" />
-                      </button>
-                    </foreignObject>
-                  </motion.g>
-                );
-              })}
+              {activeVessels.map(vessel => (
+                <VesselComponent 
+                  key={vessel.id}
+                  vessel={vessel}
+                  getSVGCoordinates={getSVGCoordinates}
+                  handleUpdatePosition={handleUpdatePosition}
+                  handleRotate={handleRotate}
+                  setHoveredVessel={setHoveredVessel}
+                />
+              ))}
             </g>
           </svg>
         </motion.div>
@@ -435,5 +370,94 @@ export default function VesselLayout() {
         )}
       </AnimatePresence>
     </div>
+  );
+}
+
+// Sub-component for individual vessel to encapsulate MotionValues
+function VesselComponent({ vessel, getSVGCoordinates, handleUpdatePosition, handleRotate, setHoveredVessel }: { 
+  vessel: Project, 
+  getSVGCoordinates: (x: number, y: number) => { x: number, y: number },
+  handleUpdatePosition: (v: Project, x: number, y: number) => void,
+  handleRotate: (v: Project) => void,
+  setHoveredVessel: (v: Project | null) => void
+}) {
+  const isRect = ['BG', 'TK', 'LCT'].includes(vessel.type || '');
+  const targetWidth = (vessel.width || 10) * 3.6;
+  const targetHeight = (vessel.length || 30) * 3.2;
+
+  const getStatusColor = (status?: string) => {
+    switch (status) {
+      case 'Docking': return '#2ecc71';
+      case 'On Dock': return '#3498db';
+      case 'Undocking': return '#f1c40f';
+      case 'Completed': return '#95a5a6';
+      default: return '#e67e22';
+    }
+  };
+
+  return (
+    <motion.g
+      drag
+      dragMomentum={false}
+      initial={false}
+      animate={{ 
+        x: vessel.x_coordinate || 100, 
+        y: vessel.y_coordinate || 100,
+        rotate: vessel.rotation || 0
+      }}
+      onDragEnd={(e, info) => {
+        const point = getSVGCoordinates(info.point.x, info.point.y);
+        handleUpdatePosition(vessel, Math.round(point.x), Math.round(point.y));
+      }}
+      onMouseEnter={() => setHoveredVessel(vessel)}
+      onMouseLeave={() => setHoveredVessel(null)}
+      className="cursor-grab active:cursor-grabbing"
+      whileHover={{ scale: 1.05 }}
+    >
+      {isRect ? (
+        <rect 
+          width={targetWidth}
+          height={targetHeight}
+          x={-targetWidth / 2}
+          y={-targetHeight / 2}
+          fill={getStatusColor(vessel.status_dock)}
+          stroke="#000"
+          strokeWidth="1"
+          rx="4"
+        />
+      ) : (
+        <g transform={`scale(${targetWidth / ORIGINAL_PATH_WIDTH}, ${targetHeight / ORIGINAL_PATH_HEIGHT}) translate(-${ORIGINAL_PATH_WIDTH/2}, -${ORIGINAL_PATH_HEIGHT/2})`}>
+          <path 
+            d={NORMALIZED_PATH_D}
+            fill={getStatusColor(vessel.status_dock)}
+            stroke="#000"
+            strokeWidth="1"
+          />
+        </g>
+      )}
+      
+      <text 
+        textAnchor="middle" 
+        dominantBaseline="middle"
+        fill="white"
+        className="text-[8px] font-bold pointer-events-none select-none uppercase"
+        style={{ textShadow: '0 1px 2px rgba(0,0,0,0.5)' }}
+        transform="rotate(90)"
+      >
+        {vessel.shipname?.substring(0, 15)}
+      </text>
+
+      <foreignObject x={targetWidth/2} y={-targetHeight/2} width="30" height="30">
+        <button 
+          onClick={(e) => {
+            e.stopPropagation();
+            handleRotate(vessel);
+          }}
+          className="w-6 h-6 bg-white rounded-full flex items-center justify-center shadow-lg hover:scale-110 transition-transform"
+        >
+          <RotateCw className="w-3 h-3 text-slate-900" />
+        </button>
+      </foreignObject>
+    </motion.g>
   );
 }
