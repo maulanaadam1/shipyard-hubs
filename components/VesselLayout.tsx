@@ -22,7 +22,7 @@ const ORIGINAL_PATH_HEIGHT = 235;
 export default function VesselLayout() {
   const { projects, fetchData, canAccess } = useData();
   const [searchTerm, setSearchTerm] = useState('');
-  const [zoom, setZoom] = useState(1.2); 
+  const [zoom, setZoom] = useState(1.0); 
   const [hoveredVessel, setHoveredVessel] = useState<Project | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [offset, setOffset] = useState({ x: 0, y: 0 });
@@ -127,7 +127,7 @@ export default function VesselLayout() {
               <Minimize2 className="w-4 h-4" />
             </button>
             <button 
-              onClick={() => { setZoom(1.2); setOffset({ x: 0, y: 0 }); }}
+              onClick={() => { setZoom(1.0); setOffset({ x: 0, y: 0 }); }}
               className="p-2 hover:bg-slate-100 rounded-lg text-slate-600 transition-colors ml-1"
               title="Reset View"
             >
