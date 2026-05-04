@@ -67,7 +67,7 @@ export default function ShipDocking() {
   const { projects, locations, fetchData, canAccess } = useData();
 
   const [searchTerm, setSearchTerm] = useState('');
-  const [statusFilter, setStatusFilter] = useState('active');
+  const [statusFilter, setStatusFilter] = useState('all');
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState<number | 'all'>(10);
 
@@ -94,10 +94,9 @@ export default function ShipDocking() {
   const filtered = useMemo(() => {
     return projects
       .filter(p => {
-        const s = p.status?.toLowerCase() || '';
-        if (statusFilter === 'active') return ['active', 'in progress', 'on going', 'ongoing'].includes(s);
         if (statusFilter === 'all') return true;
-        return s === statusFilter;
+        if (statusFilter === 'Other') return !p.status_dock || p.status_dock === '';
+        return p.status_dock === statusFilter;
       })
       .filter(p => {
         const q = searchTerm.toLowerCase();
@@ -268,16 +267,19 @@ export default function ShipDocking() {
                 className="w-full pl-10 pr-4 py-2 bg-white border border-slate-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-[#FDB913]/30 focus:border-[#FDB913] transition-all"
               />
             </div>
-            <div className="flex gap-2">
+            <div className="flex gap-2 overflow-x-auto pb-1 no-scrollbar">
               {[
-                { val: 'active', label: 'Aktif' },
                 { val: 'all', label: 'Semua' },
-                { val: 'completed', label: 'Selesai' },
+                { val: 'Docking', label: 'Docking' },
+                { val: 'On Dock', label: 'On Dock' },
+                { val: 'Undocking', label: 'Undocking' },
+                { val: 'Completed', label: 'Completed' },
+                { val: 'Other', label: 'Lainnya' },
               ].map(opt => (
                 <button
                   key={opt.val}
                   onClick={() => { setStatusFilter(opt.val); setCurrentPage(1); }}
-                  className={'px-3 py-1.5 rounded-lg text-xs font-bold border transition-all ' +
+                  className={'px-3 py-1.5 rounded-lg text-xs font-bold border transition-all whitespace-nowrap ' +
                     (statusFilter === opt.val
                       ? 'bg-[#FDB913] text-slate-900 border-[#FDB913]'
                       : 'bg-white text-slate-500 border-slate-200 hover:border-slate-300')}
