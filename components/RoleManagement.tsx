@@ -38,6 +38,7 @@ const RESOURCES = [
   { id: 'Master Location', type: 'menu' },
   { id: 'Master Workflow', type: 'menu' },
   { id: 'Master Configuration', type: 'menu' },
+  { id: 'Vessel Layout', type: 'menu' },
   { id: 'User Management', type: 'menu' },
   { id: 'Role Management', type: 'menu' },
 ];

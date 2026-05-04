@@ -74,10 +74,21 @@ export default function Sidebar({ onTabChange }: { onTabChange: () => void }) {
     }
   ];
 
-  const filteredGroups = navGroups.map(group => ({
-    ...group,
-    items: group.items.filter(item => canAccess(item.resource, 'view'))
-  })).filter(group => group.items.length > 0);
+  const filteredGroups = React.useMemo(() => {
+    if (!canAccess) return [];
+    
+    return navGroups.map(group => ({
+      ...group,
+      items: group.items.filter(item => {
+        try {
+          return canAccess(item.resource, 'view');
+        } catch (e) {
+          console.error('RBAC Error for', item.resource, e);
+          return false;
+        }
+      })
+    })).filter(group => group.items.length > 0);
+  }, [canAccess, navGroups]);
 
   return (
     <aside className="w-64 bg-white border-r border-slate-200 h-full flex flex-col z-40">
