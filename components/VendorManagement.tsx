@@ -245,14 +245,23 @@ export default function VendorManagement() {
         </div>
         <div className="flex flex-wrap items-center gap-3">
           {canAccess('Master Vendor', 'add') && (
-            <button 
-              onClick={() => document.getElementById('vendor-import')?.click()}
-              disabled={importing}
-              className="flex items-center gap-2 bg-white text-slate-700 px-6 py-2.5 rounded-xl font-bold text-sm hover:bg-slate-50 transition-all border border-slate-200 shadow-sm disabled:opacity-50"
-            >
-              <Upload className="w-4 h-4" />
-              {importing ? 'Importing...' : 'Import Data'}
-            </button>
+            <>
+              <button 
+                onClick={() => document.getElementById('vendor-import')?.click()}
+                disabled={importing}
+                className="flex items-center gap-2 bg-white text-slate-700 px-6 py-2.5 rounded-xl font-bold text-sm hover:bg-slate-50 transition-all border border-slate-200 shadow-sm disabled:opacity-50"
+              >
+                <Upload className="w-4 h-4" />
+                {importing ? 'Importing...' : 'Import Data'}
+              </button>
+              <button 
+                onClick={() => handleOpenModal()}
+                className="flex items-center gap-2 bg-[#FDB913] text-slate-900 px-6 py-2.5 rounded-xl font-bold text-sm hover:bg-[#e5a611] transition-all shadow-lg shadow-[#FDB913]/20"
+              >
+                <Plus className="w-4 h-4" />
+                Add New Vendor
+              </button>
+            </>
           )}
           <input 
             id="vendor-import"
@@ -262,25 +271,6 @@ export default function VendorManagement() {
             onChange={handleImportFile} 
             disabled={importing}
           />
-          {canAccess('Master Vendor', 'add') && (
-            <button 
-              onClick={() => handleOpenModal()}
-              className="flex items-center gap-2 bg-[#FDB913] text-slate-900 px-6 py-2.5 rounded-xl font-bold text-sm hover:bg-[#e5a611] transition-all shadow-lg shadow-[#FDB913]/20"
-            >
-              <Plus className="w-4 h-4" />
-              Add New Vendor
-            </button>
-          )}
-          {canAccess('Master Vendor', 'add') && (
-            <button 
-              onClick={() => document.getElementById('vendor-import')?.click()}
-              disabled={importing}
-              className="flex items-center gap-2 bg-white text-slate-700 px-6 py-2.5 rounded-xl font-bold text-sm hover:bg-slate-50 transition-all border border-slate-200 shadow-sm disabled:opacity-50"
-            >
-              <Upload className="w-4 h-4" />
-              {importing ? 'Importing...' : 'Import Data'}
-            </button>
-          )}
         </div>
       </div>
 
