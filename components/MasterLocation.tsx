@@ -17,7 +17,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import { api } from '@/lib/api-client';
 
 export default function MasterLocation() {
-  const { locations, setLocations } = useData();
+  const { locations, setLocations, fetchData } = useData();
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingLocation, setEditingLocation] = useState<LocationMaster | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
@@ -85,7 +85,8 @@ export default function MasterLocation() {
 
         setLocations(prev => [newLocationData as LocationMaster, ...prev]);
       }
-
+      
+      await fetchData();
       setIsModalOpen(false);
     } catch (error) {
       console.error('Error saving location:', error);
@@ -100,6 +101,7 @@ export default function MasterLocation() {
       try {
         const { error } = await api.from('master_locations').delete().eq('id', id);
         if (error) throw error;
+        await fetchData();
         setLocations(prev => prev.filter(loc => loc.id !== id));
       } catch (error) {
         console.error('Error deleting location:', error);

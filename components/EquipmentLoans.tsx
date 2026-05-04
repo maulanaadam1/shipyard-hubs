@@ -141,6 +141,7 @@ export default function EquipmentLoans() {
         console.error('Error deleting loans from Supabase:', error.message);
         alert('Error deleting: ' + error.message);
       } else {
+        await fetchData();
         setSelectedIds(new Set());
       }
     }
@@ -256,6 +257,7 @@ export default function EquipmentLoans() {
         if (nextStep) {
           notifyApprover(loan.request_id, nextStep);
         }
+        await fetchData();
       }
     }
   };
@@ -344,7 +346,7 @@ export default function EquipmentLoans() {
         console.error('Error deleting loan:', error.message);
         alert('Error: ' + error.message);
       } else {
-        // Refresh handled by DataContext
+        await fetchData();
       }
     }
   };
@@ -415,13 +417,13 @@ export default function EquipmentLoans() {
       alert('Error saving: ' + error.message);
     } else {
       setIsModalOpen(false);
-      
-      // Notify the first approver if it's a new request and status is Pending
-      if (!selectedLoan && loanData.status === 'Pending') {
-        const firstStep = loanData.approval_steps.find(s => s.isCurrent);
-        if (firstStep) {
-          notifyApprover(loanData.request_id, firstStep);
+        if (!selectedLoan && loanData.status === 'Pending') {
+          const firstStep = loanData.approval_steps.find(s => s.isCurrent);
+          if (firstStep) {
+            notifyApprover(loanData.request_id, firstStep);
+          }
         }
+        await fetchData();
       }
     }
   };

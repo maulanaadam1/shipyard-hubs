@@ -26,7 +26,7 @@ import Papa from 'papaparse';
 import * as XLSX from 'xlsx';
 
 export default function VendorManagement() {
-  const { vendors, setVendors } = useData();
+  const { vendors, setVendors, fetchData } = useData();
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [showSuccessModal, setShowSuccessModal] = useState(false);
   const [editingVendor, setEditingVendor] = useState<Vendor | null>(null);
@@ -92,6 +92,7 @@ export default function VendorManagement() {
         if (error) throw error;
         setShowSuccessModal(true);
       }
+      await fetchData();
       setIsModalOpen(false);
     } catch (error: any) {
       console.error('Error saving vendor:', error.message);
@@ -110,6 +111,7 @@ export default function VendorManagement() {
         .eq('id', id);
       
       if (error) throw error;
+      await fetchData();
     } catch (error: any) {
       console.error('Error deleting vendor:', error.message);
       alert('Error: ' + error.message);
@@ -179,6 +181,7 @@ export default function VendorManagement() {
 
       if (error) throw error;
       
+      await fetchData();
       setShowSuccessModal(true);
     } catch (error: any) {
       console.error('Import error:', error);
@@ -226,6 +229,7 @@ export default function VendorManagement() {
       if (error) {
         alert('Error deleting: ' + error.message);
       } else {
+        await fetchData();
         setSelectedIds(new Set());
       }
     }

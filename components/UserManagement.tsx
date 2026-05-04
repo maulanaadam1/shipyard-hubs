@@ -19,7 +19,7 @@ import { useData, User } from '@/context/DataContext';
 import { api } from '@/lib/api-client';
 
 export default function UserManagement() {
-  const { users, setUsers, currentUser, dropdownConfigs, rolesMaster } = useData();
+  const { users, setUsers, currentUser, dropdownConfigs, rolesMaster, fetchData } = useData();
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [showSuccessModal, setShowSuccessModal] = useState(false);
   const [editingUser, setEditingUser] = useState<User | null>(null);
@@ -138,6 +138,7 @@ export default function UserManagement() {
       console.error('Error saving user:', errorMsg);
       alert('Error: ' + errorMsg);
     } else {
+      await fetchData();
       setIsModalOpen(false);
     }
   };
@@ -153,10 +154,11 @@ export default function UserManagement() {
       return;
     }
     if (confirm('Are you sure you want to delete this user profile?')) {
-      const { error } = await api.from('profiles').delete().eq('id', id);
       if (error) {
         console.error('Error deleting profile from Supabase:', error.message);
         alert('Error deleting: ' + error.message);
+      } else {
+        await fetchData();
       }
     }
   };

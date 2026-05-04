@@ -27,7 +27,7 @@ import Papa from 'papaparse';
 import * as XLSX from 'xlsx';
 
 export default function ShipManagement() {
-  const { ships, setShips, companies, dropdownConfigs } = useData();
+  const { ships, setShips, companies, dropdownConfigs, fetchData } = useData();
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [showSuccessModal, setShowSuccessModal] = useState(false);
   const [editingShip, setEditingShip] = useState<Ship | null>(null);
@@ -102,6 +102,7 @@ export default function ShipManagement() {
         if (error) throw error;
         setShowSuccessModal(true);
       }
+      await fetchData();
       setIsModalOpen(false);
     } catch (error: any) {
       console.error('Error saving ship:', error.message);
@@ -120,6 +121,7 @@ export default function ShipManagement() {
         .eq('id', id);
       
       if (error) throw error;
+      await fetchData();
     } catch (error: any) {
       console.error('Error deleting ship:', error.message);
       alert('Error: ' + error.message);
@@ -188,6 +190,7 @@ export default function ShipManagement() {
 
       if (error) throw error;
       
+      await fetchData();
       setShowSuccessModal(true);
     } catch (error: any) {
       console.error('Import error:', error);
@@ -235,6 +238,7 @@ export default function ShipManagement() {
       if (error) {
         alert('Error deleting: ' + error.message);
       } else {
+        await fetchData();
         setSelectedIds(new Set());
       }
     }
