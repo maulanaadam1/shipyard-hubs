@@ -17,7 +17,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import { api } from '@/lib/api-client';
 
 export default function MasterLocation() {
-  const { locations, setLocations, fetchData } = useData();
+  const { locations, setLocations, fetchData, canAccess } = useData();
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingLocation, setEditingLocation] = useState<LocationMaster | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
@@ -131,13 +131,15 @@ export default function MasterLocation() {
           <h1 className="text-2xl font-display font-bold text-slate-800">Master Location</h1>
           <p className="text-sm text-slate-500 mt-1">Manage all docking and shipyard locations</p>
         </div>
-        <button 
-          onClick={() => handleOpenModal()}
-          className="bg-[#FDB913] hover:bg-[#e5a812] text-slate-900 px-6 py-2.5 rounded-xl font-bold transition-all flex items-center gap-2 shadow-sm hover:shadow"
-        >
-          <Plus className="w-4 h-4 border-2 border-slate-900 rounded-full" />
-          Add Location
-        </button>
+        {canAccess('Master Location', 'add') && (
+          <button 
+            onClick={() => handleOpenModal()}
+            className="flex items-center gap-2 bg-[#FDB913] text-slate-900 px-6 py-2.5 rounded-xl font-bold text-sm hover:bg-[#e5a611] transition-all shadow-lg shadow-[#FDB913]/20"
+          >
+            <Plus className="w-4 h-4" />
+            Add Location
+          </button>
+        )}
       </div>
 
       {/* Main Content */}
@@ -212,22 +214,24 @@ export default function MasterLocation() {
                       </span>
                     </td>
                     <td className="p-4">
-                      <div className="flex items-center justify-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                      <div className="flex items-center justify-end gap-1">
+                      {canAccess('Master Location', 'edit') && (
                         <button 
                           onClick={() => handleOpenModal(loc)}
-                          className="p-2 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
-                          title="Edit"
+                          className="p-2 hover:bg-white hover:shadow-sm rounded-lg transition-all text-slate-400 hover:text-[#FDB913]"
                         >
                           <Edit2 className="w-4 h-4" />
                         </button>
+                      )}
+                      {canAccess('Master Location', 'delete') && (
                         <button 
                           onClick={() => handleDelete(loc.id)}
-                          className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-                          title="Delete"
+                          className="p-2 hover:bg-white hover:shadow-sm rounded-lg transition-all text-slate-400 hover:text-red-600"
                         >
                           <Trash2 className="w-4 h-4" />
                         </button>
-                      </div>
+                      )}
+                    </div>
                     </td>
                   </tr>
                 ))

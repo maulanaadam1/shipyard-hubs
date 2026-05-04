@@ -27,7 +27,7 @@ import Papa from 'papaparse';
 import * as XLSX from 'xlsx';
 
 export default function ProjectManagement() {
-  const { projects, setProjects, dropdownConfigs, locations, fetchData } = useData();
+  const { projects, setProjects, dropdownConfigs, locations, fetchData, canAccess } = useData();
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [showSuccessModal, setShowSuccessModal] = useState(false);
   const [editingProject, setEditingProject] = useState<Project | null>(null);
@@ -438,19 +438,34 @@ export default function ProjectManagement() {
             <input 
               id="project-import"
               type="file" 
-              accept=".csv, .xlsx, .xls, text/csv, application/vnd.openxmlformats-officedocument.spreadsheetml.sheet, application/vnd.ms-excel" 
-              className="hidden" 
-              onChange={handleImportFile} 
+        <div className="flex flex-wrap items-center gap-3">
+          {canAccess('Job Order', 'add') && (
+            <button 
+              onClick={() => handleOpenModal()}
+              className="flex items-center gap-2 bg-[#FDB913] text-slate-900 px-6 py-2.5 rounded-xl font-bold text-sm hover:bg-[#e5a611] transition-all shadow-lg shadow-[#FDB913]/20"
+            >
+              <Plus className="w-4 h-4" />
+              New Project
+            </button>
+          )}
+          {canAccess('Job Order', 'add') && (
+            <button 
+              onClick={() => document.getElementById('import-input')?.click()}
               disabled={importing}
-            />
-          </label>
-          <button 
-            onClick={() => handleOpenModal()}
-            className="flex items-center justify-center gap-2 px-6 py-2.5 bg-[#FDB913] text-slate-900 rounded-xl text-sm font-bold hover:bg-[#e5a611] transition-all shadow-lg shadow-[#FDB913]/20"
-          >
-            <Plus className="w-4 h-4" />
-            Add New Project
-          </button>
+              className="flex items-center gap-2 bg-white text-slate-700 px-6 py-2.5 rounded-xl font-bold text-sm hover:bg-slate-50 transition-all border border-slate-200 shadow-sm disabled:opacity-50"
+            >
+              <Upload className="w-4 h-4" />
+              {importing ? 'Importing...' : 'Import Data'}
+            </button>
+          )}
+          <input 
+            id="import-input"
+            type="file" 
+            accept=".csv, .xlsx, .xls, text/csv, application/vnd.openxmlformats-officedocument.spreadsheetml.sheet, application/vnd.ms-excel" 
+            className="hidden" 
+            onChange={handleImportFile} 
+            disabled={importing}
+          />
         </div>
       </div>
 
@@ -480,13 +495,15 @@ export default function ProjectManagement() {
                   <span className="text-xs font-bold text-slate-500 bg-slate-100 px-3 py-1.5 rounded-lg">
                     {selectedIds.size} selected
                   </span>
-                  <button 
-                    onClick={handleBulkDelete}
-                    className="flex items-center gap-2 px-4 py-1.5 bg-red-50 text-red-600 rounded-lg text-xs font-bold hover:bg-red-100 transition-colors"
-                  >
-                    <Trash2 className="w-3.5 h-3.5" />
-                    Delete Selected
-                  </button>
+                  {canAccess('Job Order', 'delete') && (
+                    <button 
+                      onClick={handleBulkDelete}
+                      className="p-1.5 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                      title="Delete Selected"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  )}
                 </motion.div>
               )}
             </AnimatePresence>
@@ -603,18 +620,22 @@ export default function ProjectManagement() {
                   </td>
                   <td className="px-6 py-4 text-right">
                     <div className="flex items-center justify-end gap-2">
-                      <button 
-                        onClick={() => handleOpenModal(project)}
-                        className="p-2 hover:bg-white hover:shadow-sm rounded-lg transition-all text-slate-400 hover:text-[#FDB913]"
-                      >
-                        <Edit2 className="w-4 h-4" />
-                      </button>
-                      <button 
-                        onClick={() => handleDelete(project.id)}
-                        className="p-2 hover:bg-white hover:shadow-sm rounded-lg transition-all text-slate-400 hover:text-red-600"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
+                      {canAccess('Job Order', 'edit') && (
+                        <button 
+                          onClick={() => handleOpenModal(project)}
+                          className="p-2 hover:bg-white hover:shadow-sm rounded-lg transition-all text-slate-400 hover:text-[#FDB913]"
+                        >
+                          <Edit2 className="w-4 h-4" />
+                        </button>
+                      )}
+                      {canAccess('Job Order', 'delete') && (
+                        <button 
+                          onClick={() => handleDelete(project.id)}
+                          className="p-2 hover:bg-white hover:shadow-sm rounded-lg transition-all text-slate-400 hover:text-red-600"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      )}
                     </div>
                   </td>
                 </motion.tr>

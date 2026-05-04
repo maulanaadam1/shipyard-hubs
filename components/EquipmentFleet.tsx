@@ -24,7 +24,7 @@ import { useData, Equipment } from '@/context/DataContext';
 import { api } from '@/lib/api-client';
 
 export default function EquipmentFleet() {
-  const { fleet: data, setFleet: setData, currentUser, fetchData } = useData();
+  const { fleet: data, setFleet: setData, currentUser, fetchData, canAccess } = useData();
   const [searchTerm, setSearchTerm] = useState('');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
@@ -365,40 +365,46 @@ export default function EquipmentFleet() {
             <Upload className="w-4 h-4" />
             <span className="hidden sm:inline">Export</span>
           </button>
-          <button 
-            onClick={() => {
-              if (!currentUser) {
-                alert('Please login first to import equipment.');
-                return;
-              }
-              fileInputRef.current?.click();
-            }}
-            className="flex items-center gap-2 px-3 sm:px-4 py-2 bg-white border border-slate-200 rounded-xl text-xs sm:text-sm font-medium text-slate-600 hover:bg-slate-50 transition-colors shadow-sm"
-          >
-            <Download className="w-4 h-4" />
-            <span className="hidden sm:inline">Import</span>
-          </button>
-          <button 
-            onClick={() => setIsClearAllModalOpen(true)}
-            disabled={totalItems === 0 || isSaving}
-            className="flex items-center gap-2 px-3 sm:px-4 py-2 bg-red-50 text-red-600 border border-red-100 rounded-xl text-xs sm:text-sm font-bold hover:bg-red-100 transition-colors shadow-sm disabled:opacity-50"
-          >
-            <Trash2 className="w-4 h-4" />
-            <span className="hidden md:inline">Clear All</span>
-          </button>
-          <button 
-            onClick={() => {
-              if (!currentUser) {
-                alert('Please login first to add equipment.');
-                return;
-              }
-              openAddModal();
-            }}
-            className="flex items-center gap-2 px-3 sm:px-4 py-2 bg-[#FDB913] text-slate-900 rounded-xl text-xs sm:text-sm font-bold hover:bg-[#e5a611] transition-colors shadow-sm"
-          >
-            <Plus className="w-4 h-4" />
-            <span>Add Equipment</span>
-          </button>
+          {canAccess('Master Equipment', 'add') && (
+            <button 
+              onClick={() => {
+                if (!currentUser) {
+                  alert('Please login first to import equipment.');
+                  return;
+                }
+                fileInputRef.current?.click();
+              }}
+              className="flex items-center gap-2 px-3 sm:px-4 py-2 bg-white border border-slate-200 rounded-xl text-xs sm:text-sm font-medium text-slate-600 hover:bg-slate-50 transition-colors shadow-sm"
+            >
+              <Download className="w-4 h-4" />
+              <span className="hidden sm:inline">Import</span>
+            </button>
+          )}
+          {canAccess('Master Equipment', 'delete') && (
+            <button 
+              onClick={() => setIsClearAllModalOpen(true)}
+              disabled={totalItems === 0 || isSaving}
+              className="flex items-center gap-2 px-3 sm:px-4 py-2 bg-red-50 text-red-600 border border-red-100 rounded-xl text-xs sm:text-sm font-bold hover:bg-red-100 transition-colors shadow-sm disabled:opacity-50"
+            >
+              <Trash2 className="w-4 h-4" />
+              <span className="hidden md:inline">Clear All</span>
+            </button>
+          )}
+          {canAccess('Master Equipment', 'add') && (
+            <button 
+              onClick={() => {
+                if (!currentUser) {
+                  alert('Please login first to add equipment.');
+                  return;
+                }
+                openAddModal();
+              }}
+              className="flex items-center gap-2 px-3 sm:px-4 py-2 bg-[#FDB913] text-slate-900 rounded-xl text-xs sm:text-sm font-bold hover:bg-[#e5a611] transition-colors shadow-sm"
+            >
+              <Plus className="w-4 h-4" />
+              <span>Add Equipment</span>
+            </button>
+          )}
         </div>
       </div>
 
@@ -449,13 +455,15 @@ export default function EquipmentFleet() {
                 >
                   <Download className="w-4 h-4" />
                 </button>
-                <button 
-                  onClick={handleBulkDelete}
-                  className="p-1 text-red-600 hover:bg-red-100 rounded transition-colors"
-                  title="Delete Selected"
-                >
-                  <Trash2 className="w-4 h-4" />
-                </button>
+                {canAccess('Master Equipment', 'delete') && (
+                  <button 
+                    onClick={handleBulkDelete}
+                    className="p-1 text-red-600 hover:bg-red-100 rounded transition-colors"
+                    title="Delete Selected"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </button>
+                )}
               </motion.div>
             )}
           </div>
@@ -588,20 +596,24 @@ export default function EquipmentFleet() {
                       >
                         <Eye className="w-4 h-4" />
                       </button>
-                      <button 
-                        onClick={() => { setSelectedItem(item); setIsDetailMode(false); setIsModalOpen(true); }}
-                        className="p-2 text-slate-400 hover:text-blue-600 rounded-lg hover:bg-blue-50 transition-colors"
-                        title="Edit"
-                      >
-                        <Edit2 className="w-4 h-4" />
-                      </button>
-                      <button 
-                        onClick={() => handleDelete(item.id)}
-                        className="p-2 text-slate-400 hover:text-red-600 rounded-lg hover:bg-red-50 transition-colors"
-                        title="Delete"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
+                      {canAccess('Master Equipment', 'edit') && (
+                        <button 
+                          onClick={() => { setSelectedItem(item); setIsDetailMode(false); setIsModalOpen(true); }}
+                          className="p-2 text-slate-400 hover:text-blue-600 rounded-lg hover:bg-blue-50 transition-colors"
+                          title="Edit"
+                        >
+                          <Edit2 className="w-4 h-4" />
+                        </button>
+                      )}
+                      {canAccess('Master Equipment', 'delete') && (
+                        <button 
+                          onClick={() => handleDelete(item.id)}
+                          className="p-2 text-slate-400 hover:text-red-600 rounded-lg hover:bg-red-50 transition-colors"
+                          title="Delete"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      )}
                     </div>
                   </td>
                 </motion.tr>

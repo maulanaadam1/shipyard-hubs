@@ -27,7 +27,7 @@ import Papa from 'papaparse';
 import * as XLSX from 'xlsx';
 
 export default function ShipManagement() {
-  const { ships, setShips, companies, dropdownConfigs, fetchData } = useData();
+  const { ships, setShips, companies, dropdownConfigs, fetchData, canAccess } = useData();
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [showSuccessModal, setShowSuccessModal] = useState(false);
   const [editingShip, setEditingShip] = useState<Ship | null>(null);
@@ -262,19 +262,34 @@ export default function ShipManagement() {
             <input 
               id="ship-import"
               type="file" 
-              accept=".csv, .xlsx, .xls, text/csv, application/vnd.openxmlformats-officedocument.spreadsheetml.sheet, application/vnd.ms-excel" 
-              className="hidden" 
-              onChange={handleImportFile} 
+        <div className="flex flex-wrap items-center gap-3">
+          <input 
+            id="ship-import"
+            type="file" 
+            accept=".csv, .xlsx, .xls, text/csv, application/vnd.openxmlformats-officedocument.spreadsheetml.sheet, application/vnd.ms-excel" 
+            className="hidden" 
+            onChange={handleImportFile} 
+            disabled={importing}
+          />
+          {canAccess('Master Kapal', 'add') && (
+            <button 
+              onClick={() => handleOpenModal()}
+              className="flex items-center gap-2 bg-[#FDB913] text-slate-900 px-6 py-2.5 rounded-xl font-bold text-sm hover:bg-[#e5a611] transition-all shadow-lg shadow-[#FDB913]/20"
+            >
+              <Plus className="w-4 h-4" />
+              Add Vessel
+            </button>
+          )}
+          {canAccess('Master Kapal', 'add') && (
+            <button 
+              onClick={() => document.getElementById('ship-import')?.click()}
               disabled={importing}
-            />
-          </label>
-          <button 
-            onClick={() => handleOpenModal()}
-            className="flex items-center justify-center gap-2 px-6 py-2.5 bg-[#FDB913] text-slate-900 rounded-xl text-sm font-bold hover:bg-[#e5a611] transition-all shadow-lg shadow-[#FDB913]/20"
-          >
-            <Plus className="w-4 h-4" />
-            Add New Ship
-          </button>
+              className="flex items-center gap-2 bg-white text-slate-700 px-6 py-2.5 rounded-xl font-bold text-sm hover:bg-slate-50 transition-all border border-slate-200 shadow-sm disabled:opacity-50"
+            >
+              <Upload className="w-4 h-4" />
+              {importing ? 'Importing...' : 'Import Data'}
+            </button>
+          )}
         </div>
       </div>
 
@@ -415,18 +430,22 @@ export default function ShipManagement() {
                   </td>
                   <td className="px-6 py-4 text-right">
                     <div className="flex items-center justify-end gap-1">
-                      <button 
-                        onClick={() => handleOpenModal(ship)}
-                        className="p-2 text-slate-400 hover:text-[#FDB913] rounded-lg hover:bg-[#FDB913]/10 transition-colors"
-                      >
-                        <Edit2 className="w-4 h-4" />
-                      </button>
-                      <button 
-                        onClick={() => handleDelete(ship.id)}
-                        className="p-2 text-slate-400 hover:text-red-600 rounded-lg hover:bg-red-50 transition-colors"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
+                      {canAccess('Master Kapal', 'edit') && (
+                        <button 
+                          onClick={() => handleOpenModal(ship)}
+                          className="p-2 hover:bg-white hover:shadow-sm rounded-lg transition-all text-slate-400 hover:text-[#FDB913]"
+                        >
+                          <Edit2 className="w-4 h-4" />
+                        </button>
+                      )}
+                      {canAccess('Master Kapal', 'delete') && (
+                        <button 
+                          onClick={() => handleDelete(ship.id)}
+                          className="p-2 hover:bg-white hover:shadow-sm rounded-lg transition-all text-slate-400 hover:text-red-600"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      )}
                     </div>
                   </td>
                 </motion.tr>

@@ -26,7 +26,7 @@ import Papa from 'papaparse';
 import * as XLSX from 'xlsx';
 
 export default function VendorManagement() {
-  const { vendors, setVendors, fetchData } = useData();
+  const { vendors, setVendors, fetchData, canAccess } = useData();
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [showSuccessModal, setShowSuccessModal] = useState(false);
   const [editingVendor, setEditingVendor] = useState<Vendor | null>(null);
@@ -253,19 +253,34 @@ export default function VendorManagement() {
             <input 
               id="vendor-import"
               type="file" 
-              accept=".csv, .xlsx, .xls, text/csv, application/vnd.openxmlformats-officedocument.spreadsheetml.sheet, application/vnd.ms-excel" 
-              className="hidden" 
-              onChange={handleImportFile} 
+        <input 
+          id="vendor-import"
+          type="file" 
+          accept=".csv, .xlsx, .xls, text/csv, application/vnd.openxmlformats-officedocument.spreadsheetml.sheet, application/vnd.ms-excel" 
+          className="hidden" 
+          onChange={handleImportFile} 
+          disabled={importing}
+        />
+        <div className="flex flex-wrap items-center gap-3">
+          {canAccess('Master Vendor', 'add') && (
+            <button 
+              onClick={() => handleOpenModal()}
+              className="flex items-center gap-2 bg-[#FDB913] text-slate-900 px-6 py-2.5 rounded-xl font-bold text-sm hover:bg-[#e5a611] transition-all shadow-lg shadow-[#FDB913]/20"
+            >
+              <Plus className="w-4 h-4" />
+              Add New Vendor
+            </button>
+          )}
+          {canAccess('Master Vendor', 'add') && (
+            <button 
+              onClick={() => document.getElementById('vendor-import')?.click()}
               disabled={importing}
-            />
-          </label>
-          <button 
-            onClick={() => handleOpenModal()}
-            className="flex items-center justify-center gap-2 px-6 py-2.5 bg-[#FDB913] text-slate-900 rounded-xl text-sm font-bold hover:bg-[#e5a611] transition-all shadow-lg shadow-[#FDB913]/20"
-          >
-            <Plus className="w-4 h-4" />
-            Add New Vendor
-          </button>
+              className="flex items-center gap-2 bg-white text-slate-700 px-6 py-2.5 rounded-xl font-bold text-sm hover:bg-slate-50 transition-all border border-slate-200 shadow-sm disabled:opacity-50"
+            >
+              <Upload className="w-4 h-4" />
+              {importing ? 'Importing...' : 'Import Data'}
+            </button>
+          )}
         </div>
       </div>
 
@@ -406,18 +421,22 @@ export default function VendorManagement() {
                   </td>
                   <td className="px-6 py-4 text-right">
                     <div className="flex items-center justify-end gap-1">
-                      <button 
-                        onClick={() => handleOpenModal(vendor)}
-                        className="p-2 text-slate-400 hover:text-[#FDB913] rounded-lg hover:bg-[#FDB913]/10 transition-colors"
-                      >
-                        <Edit2 className="w-4 h-4" />
-                      </button>
-                      <button 
-                        onClick={() => handleDelete(vendor.id)}
-                        className="p-2 text-slate-400 hover:text-red-600 rounded-lg hover:bg-red-50 transition-colors"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
+                      {canAccess('Master Vendor', 'edit') && (
+                        <button 
+                          onClick={() => handleOpenModal(vendor)}
+                          className="p-2 hover:bg-white hover:shadow-sm rounded-lg transition-all text-slate-400 hover:text-[#FDB913]"
+                        >
+                          <Edit2 className="w-4 h-4" />
+                        </button>
+                      )}
+                      {canAccess('Master Vendor', 'delete') && (
+                        <button 
+                          onClick={() => handleDelete(vendor.id)}
+                          className="p-2 hover:bg-white hover:shadow-sm rounded-lg transition-all text-slate-400 hover:text-red-600"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      )}
                     </div>
                   </td>
                 </motion.tr>

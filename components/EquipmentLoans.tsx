@@ -39,7 +39,20 @@ const statusColors: Record<string, string> = {
 const equipmentTypes = ['SMAW', 'FCAW', 'Blower', 'Angle Grinder', 'Forklift (3T)', 'Forklift (10T)', 'Gantry Crane'];
 
 export default function EquipmentLoans() {
-  const { loans, fetchData, vendors, ships, projects, workflows, currentUser, users, createNotification, notifications, markNotificationRead } = useData();
+  const { 
+    loans, 
+    fetchData, 
+    vendors, 
+    ships, 
+    projects, 
+    workflows, 
+    currentUser, 
+    users, 
+    createNotification, 
+    notifications, 
+    markNotificationRead,
+    canAccess 
+  } = useData();
   const [searchParams, setSearchParams] = useSearchParams();
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isApproveModalOpen, setIsApproveModalOpen] = useState(false);
@@ -434,13 +447,15 @@ export default function EquipmentLoans() {
           <h2 className="font-display font-bold text-2xl text-slate-800 tracking-tight">Equipment Loans</h2>
           <p className="text-sm text-slate-500 mt-1">Manage equipment requests and project-based tool allocation.</p>
         </div>
-        <button 
-          onClick={openAddModal}
-          className="flex items-center justify-center gap-2 px-6 py-2.5 bg-[#FDB913] text-slate-900 rounded-xl text-sm font-bold hover:bg-[#e5a611] transition-colors shadow-lg shadow-[#FDB913]/20 w-full lg:w-auto"
-        >
-          <Plus className="w-4 h-4" />
-          Request Loan
-        </button>
+        {canAccess('Request', 'add') && (
+          <button 
+            onClick={openAddModal}
+            className="flex items-center justify-center gap-2 px-6 py-2.5 bg-[#FDB913] text-slate-900 rounded-xl text-sm font-bold hover:bg-[#e5a611] transition-colors shadow-lg shadow-[#FDB913]/20 w-full lg:w-auto"
+          >
+            <Plus className="w-4 h-4" />
+            Request Loan
+          </button>
+        )}
       </div>
 
       <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
@@ -473,13 +488,15 @@ export default function EquipmentLoans() {
                   >
                     <FileText className="w-4 h-4" />
                   </button>
-                  <button 
-                    onClick={handleBulkDelete}
-                    className="p-1.5 text-red-600 hover:bg-red-100 rounded-lg transition-colors"
-                    title="Delete Selected"
-                  >
-                    <Trash2 className="w-4 h-4" />
-                  </button>
+                  {canAccess('Request', 'delete') && (
+                    <button 
+                      onClick={handleBulkDelete}
+                      className="p-1.5 text-red-600 hover:bg-red-100 rounded-lg transition-colors"
+                      title="Delete Selected"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  )}
                 </motion.div>
               )}
             </AnimatePresence>
