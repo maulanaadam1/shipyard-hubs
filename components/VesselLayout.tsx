@@ -25,6 +25,7 @@ export default function VesselLayout() {
   const [zoom, setZoom] = useState(1.0); 
   const [hoveredVessel, setHoveredVessel] = useState<Project | null>(null);
   const [isSaving, setIsSaving] = useState(false);
+  const canEdit = canAccess('Vessel Layout', 'edit');
   
   const svgRef = React.useRef<SVGSVGElement>(null);
 
@@ -261,6 +262,7 @@ export default function VesselLayout() {
                   handleRotate={handleRotate}
                   setHoveredVessel={setHoveredVessel}
                   zoom={zoom}
+                  canEdit={canEdit}
                 />
               ))}
             </g>
@@ -313,7 +315,9 @@ export default function VesselLayout() {
                   <Info className="w-3.5 h-3.5 text-[#FDB913]" />
                 </div>
                 <p className="text-[10px] text-slate-500 leading-relaxed font-medium">
-                  Drag vessel to reposition. Click <RotateCw className="inline w-2.5 h-2.5 mx-0.5" /> to rotate orientation.
+                  {canEdit 
+                    ? "Drag vessel to reposition. Click rotate icon to change orientation." 
+                    : "You are in View Only mode. Drag and rotate are disabled."}
                 </p>
               </div>
             </div>
@@ -325,13 +329,14 @@ export default function VesselLayout() {
 }
 
 // Sub-component for individual vessel to encapsulate MotionValues
-function VesselComponent({ vessel, getSVGCoordinates, handleUpdatePosition, handleRotate, setHoveredVessel, zoom }: { 
+function VesselComponent({ vessel, getSVGCoordinates, handleUpdatePosition, handleRotate, setHoveredVessel, zoom, canEdit }: { 
   vessel: Project, 
   getSVGCoordinates: (x: number, y: number) => { x: number, y: number },
   handleUpdatePosition: (v: Project, x: number, y: number) => void,
   handleRotate: (v: Project) => void,
   setHoveredVessel: (v: Project | null) => void,
-  zoom: number
+  zoom: number,
+  canEdit: boolean
 }) {
   const isRect = ['BG', 'TK', 'LCT'].includes(vessel.type || '');
   const targetWidth = (vessel.width || 10) * 3.6;
@@ -357,8 +362,9 @@ function VesselComponent({ vessel, getSVGCoordinates, handleUpdatePosition, hand
   };
 
   return (
-    <motion.g
+     <motion.g
       onPanStart={(e, info) => {
+        if (!canEdit) return;
         // Calculate the initial offset between the mouse and the vessel center
         const mouseSVG = getSVGCoordinates(info.point.x, info.point.y);
         dragOffset.current = {
@@ -367,12 +373,14 @@ function VesselComponent({ vessel, getSVGCoordinates, handleUpdatePosition, hand
         };
       }}
       onPan={(e, info) => {
+        if (!canEdit) return;
         // Use absolute mouse position minus the initial offset for 100% precision
         const mouseSVG = getSVGCoordinates(info.point.x, info.point.y);
         mvX.set(mouseSVG.x - dragOffset.current.x);
         mvY.set(mouseSVG.y - dragOffset.current.y);
       }}
       onPanEnd={(e, info) => {
+        if (!canEdit) return;
         // Save the final absolute position
         const mouseSVG = getSVGCoordinates(info.point.x, info.point.y);
         const finalX = Math.round(mouseSVG.x - dragOffset.current.x);
@@ -382,7 +390,7 @@ function VesselComponent({ vessel, getSVGCoordinates, handleUpdatePosition, hand
       style={{ 
         x: mvX, 
         y: mvY,
-        cursor: 'grab'
+        cursor: canEdit ? 'grab' : 'default'
       }}
       initial={{ 
         rotate: vessel.rotation || 0
@@ -432,17 +440,19 @@ function VesselComponent({ vessel, getSVGCoordinates, handleUpdatePosition, hand
       </g>
 
       {/* Rotation tool */}
-      <foreignObject x={targetWidth/2} y={-targetHeight/2} width="30" height="30" style={{ pointerEvents: 'auto' }}>
-        <button 
-          onClick={(e) => {
-            e.stopPropagation();
-            handleRotate(vessel);
-          }}
-          className="w-6 h-6 bg-white rounded-full flex items-center justify-center shadow-lg hover:scale-110 transition-transform"
-        >
-          <RotateCw className="w-3 h-3 text-slate-900" />
-        </button>
-      </foreignObject>
+      {canEdit && (
+        <foreignObject x={targetWidth/2} y={-targetHeight/2} width="30" height="30" style={{ pointerEvents: 'auto' }}>
+          <button 
+            onClick={(e) => {
+              e.stopPropagation();
+              handleRotate(vessel);
+            }}
+            className="w-6 h-6 bg-white rounded-full flex items-center justify-center shadow-lg hover:scale-110 transition-transform"
+          >
+            <RotateCw className="w-3 h-3 text-slate-900" />
+          </button>
+        </foreignObject>
+      )}
     </motion.g>
   );
 }
