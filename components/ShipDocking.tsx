@@ -48,6 +48,7 @@ type DockingForm = {
   docking: string;
   undocking: string;
   status_dock: string;
+  ship_visibility: string;
   location: string;
   x_coordinate: string;
   y_coordinate: string;
@@ -75,7 +76,7 @@ export default function ShipDocking() {
   const [formData, setFormData] = useState<DockingForm>({
     actual_start: '', actual_finish: '',
     act_arrival_date: '', act_trial_date: '', act_departure_date: '',
-    docking: '', undocking: '', status_dock: '',
+    docking: '', undocking: '', status_dock: '', ship_visibility: '',
     location: '', x_coordinate: '', y_coordinate: '', rotation: ''
   });
   const [saving, setSaving] = useState(false);
@@ -124,6 +125,7 @@ export default function ShipDocking() {
       docking: toInputDate(project.docking || project.est_docking_date),
       undocking: toInputDate(project.undocking || project.est_undocking_date),
       status_dock: project.status_dock || '',
+      ship_visibility: project.ship_visibility || 'active',
       location: project.location || '',
       x_coordinate: project.x_coordinate?.toString() || '',
       y_coordinate: project.y_coordinate?.toString() || '',
@@ -146,6 +148,7 @@ export default function ShipDocking() {
           docking: formData.docking || null,
           undocking: formData.undocking || null,
           status_dock: formData.status_dock || null,
+          ship_visibility: formData.ship_visibility || 'active',
           location: formData.location || null,
           x_coordinate: formData.x_coordinate ? parseFloat(formData.x_coordinate) : null,
           y_coordinate: formData.y_coordinate ? parseFloat(formData.y_coordinate) : null,
@@ -581,7 +584,7 @@ export default function ShipDocking() {
               initial={{ scale: 0.95, opacity: 0, y: 20 }}
               animate={{ scale: 1, opacity: 1, y: 0 }}
               exit={{ scale: 0.95, opacity: 0, y: 20 }}
-              className="relative w-full max-w-md bg-white rounded-3xl shadow-2xl overflow-hidden"
+              className="relative w-full max-w-2xl bg-white rounded-3xl shadow-2xl overflow-hidden"
             >
               <form onSubmit={handleSave}>
                 {/* Modal Header */}
@@ -601,141 +604,147 @@ export default function ShipDocking() {
                   </button>
                 </div>
 
-                <div className="p-6 space-y-5 max-h-[65vh] overflow-y-auto">
-                  {/* Status Dok */}
-                  <div className="space-y-1">
-                    <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Status Dok</label>
-                    <div className="relative">
-                      <select
-                        value={formData.status_dock}
-                        onChange={f('status_dock')}
-                        className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-[#FDB913]/30 appearance-none"
-                      >
-                        <option value="">— Pilih Status —</option>
-                        {(dockStatuses || []).filter(s => s.is_active).map(o => (
-                          <option key={o.id} value={o.name}>{o.name}</option>
-                        ))}
-                      </select>
-                      <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
-                    </div>
-                  </div>
-
-                  {/* Docking & Undocking */}
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="space-y-1">
-                      <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Tgl Docking</label>
-                      <input type="date" value={formData.docking} onChange={f('docking')}
-                        className="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-[#FDB913]/30" />
-                    </div>
-                    <div className="space-y-1">
-                      <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Tgl Undocking</label>
-                      <input type="date" value={formData.undocking} onChange={f('undocking')}
-                        className="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-[#FDB913]/30" />
-                    </div>
-                  </div>
-
-                  <div className="border-t border-slate-100 pt-4 space-y-1">
-                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-3">Tanggal Aktual Proyek</p>
-                    <div className="grid grid-cols-2 gap-4">
+                <div className="p-6 space-y-6 max-h-[75vh] overflow-y-auto">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    {/* Left Column: Core Status & Dates */}
+                    <div className="space-y-5">
+                      <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest border-b border-slate-100 pb-2">Status & Visibility</p>
+                      
+                      {/* Ship Visibility */}
                       <div className="space-y-1">
-                        <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Mulai Aktual</label>
-                        <input type="date" value={formData.actual_start} onChange={f('actual_start')}
+                        <label className="text-xs font-bold text-slate-500 uppercase tracking-wider flex items-center gap-2">
+                          Ship Visibility
+                          <span className="text-[10px] lowercase font-medium text-slate-400">(Muncul di Map)</span>
+                        </label>
+                        <div className="relative">
+                          <select
+                            value={formData.ship_visibility}
+                            onChange={f('ship_visibility')}
+                            className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-[#FDB913]/30 appearance-none font-bold text-slate-700"
+                          >
+                            <option value="active">Active (Visible)</option>
+                            <option value="hidden">Hidden (Invisible)</option>
+                          </select>
+                          <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
+                        </div>
+                      </div>
+
+                      {/* Status Dok */}
+                      <div className="space-y-1">
+                        <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Status Dok</label>
+                        <div className="relative">
+                          <select
+                            value={formData.status_dock}
+                            onChange={f('status_dock')}
+                            className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-[#FDB913]/30 appearance-none"
+                          >
+                            <option value="">— Pilih Status —</option>
+                            {(dockStatuses || []).filter(s => s.is_active).map(o => (
+                              <option key={o.id} value={o.name}>{o.name}</option>
+                            ))}
+                          </select>
+                          <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
+                        </div>
+                      </div>
+
+                      {/* Docking & Undocking */}
+                      <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest border-b border-slate-100 pb-2 pt-2">Docking Dates</p>
+                      <div className="grid grid-cols-2 gap-4">
+                        <div className="space-y-1">
+                          <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Tgl Docking</label>
+                          <input type="date" value={formData.docking} onChange={f('docking')}
+                            className="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-[#FDB913]/30" />
+                        </div>
+                        <div className="space-y-1">
+                          <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Tgl Undocking</label>
+                          <input type="date" value={formData.undocking} onChange={f('undocking')}
+                            className="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-[#FDB913]/30" />
+                        </div>
+                      </div>
+
+                      {/* Actual Project Dates */}
+                      <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest border-b border-slate-100 pb-2 pt-2">Actual Project Timeline</p>
+                      <div className="grid grid-cols-2 gap-4">
+                        <div className="space-y-1">
+                          <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Mulai Aktual</label>
+                          <input type="date" value={formData.actual_start} onChange={f('actual_start')}
+                            className="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-[#FDB913]/30" />
+                        </div>
+                        <div className="space-y-1">
+                          <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Selesai Aktual</label>
+                          <input type="date" value={formData.actual_finish} onChange={f('actual_finish')}
+                            className="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-[#FDB913]/30" />
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Right Column: Positional & Operational */}
+                    <div className="space-y-5">
+                      <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest border-b border-slate-100 pb-2">Position & Yard Location</p>
+                      
+                      <div className="space-y-1">
+                        <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Lokasi Galangan</label>
+                        <div className="relative">
+                          <select
+                            value={formData.location}
+                            onChange={(e) => {
+                              const locName = e.target.value;
+                              const locData = (locations || []).find(l => l.name === locName);
+                              setFormData(prev => ({
+                                ...prev,
+                                location: locName,
+                                x_coordinate: locData?.center_x ? locData.center_x.toString() : prev.x_coordinate,
+                                y_coordinate: locData?.center_y ? locData.center_y.toString() : prev.y_coordinate
+                              }));
+                            }}
+                            className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-[#FDB913]/30 appearance-none"
+                          >
+                            <option value="">— Pilih Lokasi —</option>
+                            {(locations || []).map(loc => (
+                              <option key={loc.id} value={loc.name}>{loc.name}</option>
+                            ))}
+                          </select>
+                          <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-4">
+                        <div className="space-y-1">
+                          <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Koordinat X</label>
+                          <input type="number" step="any" value={formData.x_coordinate} onChange={f('x_coordinate')}
+                            className="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-[#FDB913]/30" />
+                        </div>
+                        <div className="space-y-1">
+                          <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Koordinat Y</label>
+                          <input type="number" step="any" value={formData.y_coordinate} onChange={f('y_coordinate')}
+                            className="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-[#FDB913]/30" />
+                        </div>
+                      </div>
+
+                      <div className="space-y-1">
+                        <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Rotasi (0-360°)</label>
+                        <input type="number" step="any" value={formData.rotation} onChange={f('rotation')}
                           className="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-[#FDB913]/30" />
                       </div>
-                      <div className="space-y-1">
-                        <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Selesai Aktual</label>
-                        <input type="date" value={formData.actual_finish} onChange={f('actual_finish')}
-                          className="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-[#FDB913]/30" />
-                      </div>
-                    </div>
-                  </div>
 
-                  <div className="border-t border-slate-100 pt-4 space-y-3">
-                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Tanggal Operasional</p>
-                    <div className="space-y-1">
-                      <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Kedatangan Aktual</label>
-                      <input type="date" value={formData.act_arrival_date} onChange={f('act_arrival_date')}
-                        className="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-[#FDB913]/30" />
-                    </div>
-                    <div className="space-y-1">
-                      <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Uji Coba (Sea Trial)</label>
-                      <input type="date" value={formData.act_trial_date} onChange={f('act_trial_date')}
-                        className="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-[#FDB913]/30" />
-                    </div>
-                    <div className="space-y-1">
-                      <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Keberangkatan Aktual</label>
-                      <input type="date" value={formData.act_departure_date} onChange={f('act_departure_date')}
-                        className="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-[#FDB913]/30" />
-                    </div>
-                  </div>
-
-                  {/* Shipyard Position */}
-                  <div className="border-t border-slate-100 pt-4 space-y-3">
-                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Posisi & Lokasi Galangan</p>
-                    
-                    <div className="space-y-1">
-                      <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Lokasi Galangan</label>
-                      <div className="relative">
-                        <select
-                          value={formData.location}
-                          onChange={(e) => {
-                            const locName = e.target.value;
-                            const locData = (locations || []).find(l => l.name === locName);
-                            setFormData(prev => ({
-                              ...prev,
-                              location: locName,
-                              // Auto-fill coordinates if center point exists
-                              x_coordinate: locData?.center_x ? locData.center_x.toString() : prev.x_coordinate,
-                              y_coordinate: locData?.center_y ? locData.center_y.toString() : prev.y_coordinate
-                            }));
-                          }}
-                          className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-[#FDB913]/30 appearance-none"
-                        >
-                          <option value="">— Pilih Lokasi —</option>
-                          {(locations || []).map(loc => (
-                            <option key={loc.id} value={loc.name}>{loc.name}</option>
-                          ))}
-                        </select>
-                        <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
+                      <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest border-b border-slate-100 pb-2 pt-2">Operational Dates</p>
+                      <div className="space-y-3">
+                        <div className="space-y-1">
+                          <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Kedatangan Aktual</label>
+                          <input type="date" value={formData.act_arrival_date} onChange={f('act_arrival_date')}
+                            className="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-[#FDB913]/30" />
+                        </div>
+                        <div className="space-y-1">
+                          <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Sea Trial</label>
+                          <input type="date" value={formData.act_trial_date} onChange={f('act_trial_date')}
+                            className="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-[#FDB913]/30" />
+                        </div>
+                        <div className="space-y-1">
+                          <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Keberangkatan Aktual</label>
+                          <input type="date" value={formData.act_departure_date} onChange={f('act_departure_date')}
+                            className="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-[#FDB913]/30" />
+                        </div>
                       </div>
-                    </div>
-
-                    <div className="grid grid-cols-2 gap-4">
-                      <div className="space-y-1">
-                        <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Koordinat X</label>
-                        <input 
-                          type="number" 
-                          step="any"
-                          value={formData.x_coordinate} 
-                          onChange={f('x_coordinate')}
-                          placeholder="X"
-                          className="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-[#FDB913]/30" 
-                        />
-                      </div>
-                      <div className="space-y-1">
-                        <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Koordinat Y</label>
-                        <input 
-                          type="number" 
-                          step="any"
-                          value={formData.y_coordinate} 
-                          onChange={f('y_coordinate')}
-                          placeholder="Y"
-                          className="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-[#FDB913]/30" 
-                        />
-                      </div>
-                    </div>
-                    <div className="space-y-1">
-                      <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Rotasi (Derajat)</label>
-                      <input 
-                        type="number" 
-                        step="any"
-                        min="0"
-                        max="360"
-                        value={formData.rotation} 
-                        onChange={f('rotation')}
-                        placeholder="0 - 360"
-                        className="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-[#FDB913]/30" 
-                      />
                     </div>
                   </div>
                 </div>
