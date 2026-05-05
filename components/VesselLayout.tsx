@@ -408,6 +408,24 @@ function VesselComponent({ vessel, getSVGCoordinates, handleUpdatePosition, hand
   // Store the drag offset in SVG units
   const dragOffset = React.useRef({ x: 0, y: 0 });
 
+  const vesselRef = React.useRef<SVGGElement>(null);
+
+  // Hard-block background scrolling on touchstart to ensure drag works on mobile
+  React.useEffect(() => {
+    const el = vesselRef.current;
+    if (!el || !canEdit) return;
+    
+    const handleTouchStart = (e: TouchEvent) => {
+      // If editing is enabled, prevent the browser from starting a scroll gesture
+      if (e.cancelable) {
+        e.preventDefault();
+      }
+    };
+    
+    el.addEventListener('touchstart', handleTouchStart, { passive: false });
+    return () => el.removeEventListener('touchstart', handleTouchStart);
+  }, [canEdit]);
+
   // Sync MotionValues when vessel props change (e.g. after DB update or project reload)
   React.useEffect(() => {
     mvX.set(vessel.x_coordinate || 100);
@@ -415,13 +433,13 @@ function VesselComponent({ vessel, getSVGCoordinates, handleUpdatePosition, hand
   }, [vessel.x_coordinate, vessel.y_coordinate, mvX, mvY]);
 
   const getStatusColor = (statusName?: string) => {
-    const { dockStatuses } = useData();
     const status = (dockStatuses || []).find(s => s.name === statusName);
     return status?.color || '#e67e22';
   };
 
   return (
      <motion.g
+      ref={vesselRef}
       drag={canEdit}
       dragMomentum={false}
       dragElastic={0}
