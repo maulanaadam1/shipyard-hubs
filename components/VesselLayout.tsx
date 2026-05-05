@@ -444,12 +444,13 @@ function VesselComponent({ vessel, getSVGCoordinates, handleUpdatePosition, hand
       }}
       onMouseEnter={() => setHoveredVessel(vessel)}
       onMouseLeave={() => setHoveredVessel(null)}
+      onTap={() => setHoveredVessel(vessel)}
       className="active:cursor-grabbing"
       whileHover={{ scale: 1.05 }}
       whileTap={{ scale: 1.1, opacity: 0.9 }}
     >
       {/* Visual content centered at 0,0 */}
-      <g style={{ pointerEvents: 'auto' }}>
+      <g style={{ pointerEvents: 'auto', touchAction: 'none' }}>
         {isRect ? (
           <rect 
             width={targetWidth}
@@ -460,14 +461,16 @@ function VesselComponent({ vessel, getSVGCoordinates, handleUpdatePosition, hand
             stroke="#000"
             strokeWidth="1"
             rx="4"
+            style={{ touchAction: 'none' }}
           />
         ) : (
-          <g transform={`scale(${targetWidth / ORIGINAL_PATH_WIDTH}, ${targetHeight / ORIGINAL_PATH_HEIGHT}) translate(-${ORIGINAL_PATH_WIDTH/2}, -${ORIGINAL_PATH_HEIGHT/2})`}>
+          <g transform={`scale(${targetWidth / ORIGINAL_PATH_WIDTH}, ${targetHeight / ORIGINAL_PATH_HEIGHT}) translate(-${ORIGINAL_PATH_WIDTH/2}, -${ORIGINAL_PATH_HEIGHT/2})`} style={{ touchAction: 'none' }}>
             <path 
               d={NORMALIZED_PATH_D}
               fill={getStatusColor(vessel.status_dock)}
               stroke="#000"
               strokeWidth="1"
+              style={{ touchAction: 'none' }}
             />
           </g>
         )}
