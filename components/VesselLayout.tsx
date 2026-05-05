@@ -107,28 +107,35 @@ export default function VesselLayout() {
     }, 3000);
   }, [projects]);
 
-  const handleRotate = async (project: Project) => {
-    const currentRotation = project.rotation || 0;
+  const handleRotate = useCallback(async (vessel: Project) => {
+    const currentRotation = vessel.rotation || 0;
     const nextRotation = (currentRotation + 45) % 360;
     
-    // Optimistic Update
-    setLocalProjects(prev => prev.map(p => p.id === project.id ? { ...p, rotation: nextRotation } : p));
+    // 1. Instant Optimistic UI Update
+    setLocalProjects(prev => prev.map(p => 
+      p.id === vessel.id ? { ...p, rotation: nextRotation } : p
+    ));
 
-    setIsSaving(true);
-    try {
-      const { error } = await api.from('projects')
-        .update({ rotation: nextRotation })
-        .eq('id', project.id);
-      
-      if (error) throw error;
-      await fetchData();
-    } catch (err: any) {
-      console.error('Error rotating vessel:', err.message);
-      await fetchData();
-    } finally {
-      setIsSaving(false);
-    }
-  };
+    // 2. Debounced API Sync (3 seconds) - share the same ref as position
+    if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
+
+    saveTimeoutRef.current = setTimeout(async () => {
+      setIsSaving(true);
+      try {
+        const { error } = await api.from('projects')
+          .update({ rotation: nextRotation })
+          .eq('id', vessel.id);
+        
+        if (error) throw error;
+      } catch (err) {
+        console.error("Failed to save rotation:", err);
+        setLocalProjects(projects);
+      } finally {
+        setIsSaving(false);
+        saveTimeoutRef.current = null;
+      }
+    }, 3000);
+  }, [projects, setIsSaving]);
 
   const getStatusColor = (statusName?: string) => {
     const status = (dockStatuses || []).find(s => s.name === statusName);
