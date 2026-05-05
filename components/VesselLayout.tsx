@@ -151,18 +151,18 @@ export default function VesselLayout() {
       )}
 
       {/* SVG Layout Area */}
-      <div className="flex-1 w-full h-full overflow-auto md:overflow-hidden select-none flex items-start md:items-center justify-start md:justify-center bg-[#f1f5f9] custom-scrollbar">
+      <div className="flex-1 w-full h-full overflow-auto md:overflow-hidden select-none bg-[#f1f5f9] custom-scrollbar flex items-start md:items-center justify-start md:justify-center">
         <motion.div 
           animate={{ 
             scale: zoom
           }}
           transition={{ type: 'spring', damping: 25, stiffness: 200 }}
-          className="origin-top-left md:origin-center min-w-full min-h-full flex items-center justify-center"
+          className="origin-top-left md:origin-center h-full w-auto md:w-full md:h-full flex items-start justify-start md:items-center md:justify-center"
         >
           <svg 
             ref={svgRef}
             viewBox="0 0 1234.961 649.739" 
-            className="w-[200%] h-full md:w-full md:h-full max-w-none drop-shadow-sm"
+            className="h-full w-auto md:w-full md:h-full max-w-none drop-shadow-sm"
             xmlns="http://www.w3.org/2000/svg"
             preserveAspectRatio="xMidYMid slice"
           >
@@ -312,7 +312,7 @@ export default function VesselLayout() {
               x: 0 
             }}
             exit={{ opacity: 0, scale: 0.9, x: 20 }}
-            className="fixed md:absolute top-4 right-4 md:top-6 md:right-6 z-50 w-60 md:w-72 bg-white border border-slate-200 rounded-[1.5rem] md:rounded-[2rem] p-4 md:p-6 shadow-2xl"
+            className="fixed md:absolute top-20 right-4 md:top-6 md:right-6 z-50 w-60 md:w-72 bg-white border border-slate-200 rounded-[1.5rem] md:rounded-[2rem] p-4 md:p-6 shadow-2xl"
           >
             <div className="flex items-center gap-3 md:gap-4 mb-4 md:mb-6">
               <div className="w-10 h-10 md:w-12 md:h-12 rounded-xl md:rounded-2xl flex items-center justify-center text-white shadow-lg" style={{ backgroundColor: getStatusColor(hoveredVessel.status_dock) }}>
