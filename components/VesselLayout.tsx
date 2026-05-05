@@ -502,8 +502,7 @@ function VesselComponent({ vessel, getSVGCoordinates, handleUpdatePosition, hand
         >
           {vessel.shipname?.substring(0, 15)}
         </text>
-      </g>
-
+      
       {/* Rotation tool */}
       {canEdit && (
         <foreignObject x={targetWidth/2} y={-targetHeight/2} width="30" height="30" style={{ pointerEvents: 'auto' }}>
