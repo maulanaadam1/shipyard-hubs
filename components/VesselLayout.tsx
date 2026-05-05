@@ -433,6 +433,7 @@ function VesselComponent({ vessel, getSVGCoordinates, handleUpdatePosition, hand
   }, [vessel.x_coordinate, vessel.y_coordinate, mvX, mvY]);
 
   const getStatusColor = (statusName?: string) => {
+    const { dockStatuses } = useData();
     const status = (dockStatuses || []).find(s => s.name === statusName);
     return status?.color || '#e67e22';
   };
