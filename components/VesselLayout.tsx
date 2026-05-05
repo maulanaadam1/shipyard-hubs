@@ -27,9 +27,15 @@ export default function VesselLayout() {
   const [zoom, setZoom] = useState(1.0); 
   const [hoveredVessel, setHoveredVessel] = useState<Project | null>(null);
   const [isSaving, setIsSaving] = useState(false);
+  const [localProjects, setLocalProjects] = useState<Project[]>([]);
   const canView = canAccess('Vessel Layout', 'view');
   const canEdit = canAccess('Vessel Layout', 'edit');
   const [isLegendExpanded, setIsLegendExpanded] = useState(false);
+
+  // Sync local projects with context projects
+  React.useEffect(() => {
+    setLocalProjects(projects);
+  }, [projects]);
 
   if (!canView) {
     return (
@@ -58,18 +64,21 @@ export default function VesselLayout() {
     return { x: transformed.x, y: transformed.y };
   };
 
-  // Filter only active vessels (status_dock or ship_visibility)
+  // Filter only active vessels (status_dock or ship_visibility) using local state for immediate feedback
   const activeVessels = useMemo(() => {
     const activeStatusNames = (dockStatuses || []).filter(s => s.is_active).map(s => s.name);
-    return projects.filter(p => {
+    return localProjects.filter(p => {
       const isVisible = p.ship_visibility === 'active' || 
                        activeStatusNames.includes(p.status_dock || '');
       const matchesSearch = p.shipname?.toLowerCase().includes(searchTerm.toLowerCase());
       return isVisible && matchesSearch;
     });
-  }, [projects, searchTerm, dockStatuses]);
+  }, [localProjects, searchTerm, dockStatuses]);
 
   const handleUpdatePosition = async (project: Project, x: number, y: number) => {
+    // Optimistic Update: Change local state immediately
+    setLocalProjects(prev => prev.map(p => p.id === project.id ? { ...p, x_coordinate: x, y_coordinate: y } : p));
+    
     setIsSaving(true);
     try {
       const { error } = await api.from('projects')
@@ -80,9 +89,12 @@ export default function VesselLayout() {
         .eq('id', project.id);
       
       if (error) throw error;
+      // Fetch data in background, but don't clear local state unless error
       await fetchData();
     } catch (err: any) {
       console.error('Error updating position:', err.message);
+      // Rollback on error
+      await fetchData();
     } finally {
       setIsSaving(false);
     }
@@ -92,6 +104,9 @@ export default function VesselLayout() {
     const currentRotation = project.rotation || 0;
     const nextRotation = (currentRotation + 45) % 360;
     
+    // Optimistic Update
+    setLocalProjects(prev => prev.map(p => p.id === project.id ? { ...p, rotation: nextRotation } : p));
+
     setIsSaving(true);
     try {
       const { error } = await api.from('projects')
@@ -102,6 +117,7 @@ export default function VesselLayout() {
       await fetchData();
     } catch (err: any) {
       console.error('Error rotating vessel:', err.message);
+      await fetchData();
     } finally {
       setIsSaving(false);
     }
@@ -440,11 +456,19 @@ function VesselComponent({ vessel, getSVGCoordinates, handleUpdatePosition, hand
       onMouseLeave={() => setHoveredVessel(null)}
       onTap={() => setHoveredVessel(vessel)}
       className="active:cursor-grabbing"
-      whileHover={{ scale: 1.05 }}
-      whileTap={{ scale: 1.1, opacity: 0.9 }}
     >
+      {/* Invisible larger hit area for easier mobile dragging */}
+      <rect 
+        width={Math.max(targetWidth, 40)} 
+        height={Math.max(targetHeight, 40)}
+        x={-Math.max(targetWidth, 40) / 2}
+        y={-Math.max(targetHeight, 40) / 2}
+        fill="transparent"
+        style={{ pointerEvents: 'auto', touchAction: 'none' }}
+      />
+
       {/* Visual content centered at 0,0 */}
-      <g style={{ pointerEvents: 'auto', touchAction: 'none' }}>
+      <g style={{ pointerEvents: 'none' }}>
         {isRect ? (
           <rect 
             width={targetWidth}
@@ -455,19 +479,18 @@ function VesselComponent({ vessel, getSVGCoordinates, handleUpdatePosition, hand
             stroke="#000"
             strokeWidth="1"
             rx="4"
-            style={{ touchAction: 'none' }}
           />
         ) : (
-          <g transform={`scale(${targetWidth / ORIGINAL_PATH_WIDTH}, ${targetHeight / ORIGINAL_PATH_HEIGHT}) translate(-${ORIGINAL_PATH_WIDTH/2}, -${ORIGINAL_PATH_HEIGHT/2})`} style={{ touchAction: 'none' }}>
+          <g transform={`scale(${targetWidth / ORIGINAL_PATH_WIDTH}, ${targetHeight / ORIGINAL_PATH_HEIGHT}) translate(-${ORIGINAL_PATH_WIDTH/2}, -${ORIGINAL_PATH_HEIGHT/2})`}>
             <path 
               d={NORMALIZED_PATH_D}
               fill={getStatusColor(vessel.status_dock)}
               stroke="#000"
               strokeWidth="1"
-              style={{ touchAction: 'none' }}
             />
           </g>
         )}
+      </g>
         
         <text 
           textAnchor="middle" 
