@@ -167,7 +167,10 @@ export default function VesselLayout() {
       )}
 
       {/* SVG Layout Area */}
-      <div className="flex-1 w-full h-full overflow-auto md:overflow-hidden select-none bg-[#f1f5f9] custom-scrollbar flex items-start md:items-center justify-start md:justify-center">
+      <div 
+        onClick={() => setHoveredVessel(null)}
+        className="flex-1 w-full h-full overflow-auto md:overflow-hidden select-none bg-[#f1f5f9] custom-scrollbar flex items-start md:items-center justify-start md:justify-center"
+      >
         <motion.div 
           animate={{ 
             scale: zoom
@@ -328,6 +331,7 @@ export default function VesselLayout() {
               x: 0 
             }}
             exit={{ opacity: 0, scale: 0.9, x: 20 }}
+            onClick={(e) => e.stopPropagation()}
             className="fixed md:absolute top-20 right-4 md:top-6 md:right-6 z-50 w-60 md:w-72 bg-white border border-slate-200 rounded-[1.5rem] md:rounded-[2rem] p-4 md:p-6 shadow-2xl"
           >
             <div className="flex items-center gap-3 md:gap-4 mb-4 md:mb-6">
@@ -442,6 +446,7 @@ function VesselComponent({ vessel, getSVGCoordinates, handleUpdatePosition, hand
   return (
      <motion.g
       ref={vesselRef}
+      onClick={(e) => e.stopPropagation()}
       drag={canEdit}
       dragMomentum={false}
       dragElastic={0}
