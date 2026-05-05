@@ -407,6 +407,7 @@ function VesselComponent({ vessel, getSVGCoordinates, handleUpdatePosition, hand
 
   // Store the drag offset in SVG units
   const dragOffset = React.useRef({ x: 0, y: 0 });
+  const lastTapTime = React.useRef(0);
 
   const vesselRef = React.useRef<SVGGElement>(null);
 
@@ -473,7 +474,13 @@ function VesselComponent({ vessel, getSVGCoordinates, handleUpdatePosition, hand
       }}
       onMouseEnter={() => setHoveredVessel(vessel)}
       onMouseLeave={() => setHoveredVessel(null)}
-      onTap={() => setHoveredVessel(vessel)}
+      onTap={() => {
+        const now = Date.now();
+        if (now - lastTapTime.current < 300) {
+          setHoveredVessel(vessel);
+        }
+        lastTapTime.current = now;
+      }}
       className="active:cursor-grabbing"
     >
       {/* Invisible larger hit area for easier mobile dragging */}
