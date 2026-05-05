@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useCallback } from 'react';
 import { motion, AnimatePresence, useMotionValue } from 'motion/react';
 import { 
   Search, 
@@ -28,6 +28,7 @@ export default function VesselLayout() {
   const [hoveredVessel, setHoveredVessel] = useState<Project | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [localProjects, setLocalProjects] = useState<Project[]>([]);
+  const saveTimeoutRef = React.useRef<NodeJS.Timeout | null>(null);
   const canView = canAccess('Vessel Layout', 'view');
   const canEdit = canAccess('Vessel Layout', 'edit');
   const [isLegendExpanded, setIsLegendExpanded] = useState(false);
@@ -75,30 +76,36 @@ export default function VesselLayout() {
     });
   }, [localProjects, searchTerm, dockStatuses]);
 
-  const handleUpdatePosition = async (project: Project, x: number, y: number) => {
-    // Optimistic Update: Change local state immediately
-    setLocalProjects(prev => prev.map(p => p.id === project.id ? { ...p, x_coordinate: x, y_coordinate: y } : p));
-    
-    setIsSaving(true);
-    try {
-      const { error } = await api.from('projects')
-        .update({ 
-          x_coordinate: x, 
-          y_coordinate: y 
-        })
-        .eq('id', project.id);
-      
-      if (error) throw error;
-      // Fetch data in background, but don't clear local state unless error
-      await fetchData();
-    } catch (err: any) {
-      console.error('Error updating position:', err.message);
-      // Rollback on error
-      await fetchData();
-    } finally {
-      setIsSaving(false);
-    }
-  };
+  const handleUpdatePosition = useCallback(async (vessel: Project, x: number, y: number) => {
+    // 1. Instant Optimistic UI Update
+    setLocalProjects(prev => prev.map(p => 
+      p.id === vessel.id ? { ...p, x_coordinate: x, y_coordinate: y } : p
+    ));
+
+    // 2. Debounced API Sync (3 seconds)
+    if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
+
+    saveTimeoutRef.current = setTimeout(async () => {
+      setIsSaving(true);
+      try {
+        const { error } = await api.from('projects')
+          .update({ x_coordinate: x, y_coordinate: y })
+          .eq('id', vessel.id);
+        
+        if (error) throw error;
+        
+        // After successful save, we could fetch, but optimistic UI is already correct
+        // fetchData(); 
+      } catch (err) {
+        console.error("Failed to save position:", err);
+        // Rollback on error
+        setLocalProjects(projects);
+      } finally {
+        setIsSaving(false);
+        saveTimeoutRef.current = null;
+      }
+    }, 3000);
+  }, [projects]);
 
   const handleRotate = async (project: Project) => {
     const currentRotation = project.rotation || 0;
