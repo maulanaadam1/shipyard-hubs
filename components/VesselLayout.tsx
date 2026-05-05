@@ -537,21 +537,21 @@ function VesselComponent({ vessel, getSVGCoordinates, handleUpdatePosition, hand
       {/* Rotation tool */}
       {canEdit && (
         <foreignObject 
-          x={targetWidth/2} 
-          y={-targetHeight/2 - 20} 
-          width="48" 
-          height="48" 
+          x={targetWidth/2 - 10} 
+          y={-targetHeight/2 - 15} 
+          width="32" 
+          height="32" 
           style={{ pointerEvents: 'auto' }}
         >
           <button 
-            onClick={(e) => {
+            onPointerDown={(e) => {
               e.stopPropagation();
               handleRotate(vessel);
             }}
-            className="w-10 h-10 bg-white border border-slate-200 rounded-full flex items-center justify-center shadow-xl hover:scale-110 active:scale-95 transition-all"
+            className="w-7 h-7 bg-white border border-slate-200 rounded-full flex items-center justify-center shadow-lg active:scale-90 transition-all"
             title="Rotate Vessel"
           >
-            <RotateCw className="w-5 h-5 text-slate-700" />
+            <RotateCw className="w-3.5 h-3.5 text-slate-700" />
           </button>
         </foreignObject>
       )}
