@@ -151,20 +151,20 @@ export default function VesselLayout() {
       )}
 
       {/* SVG Layout Area */}
-      <div className="flex-1 w-full h-full overflow-hidden select-none flex items-center justify-center bg-[#f1f5f9]">
+      <div className="flex-1 w-full h-full overflow-auto md:overflow-hidden select-none flex items-start md:items-center justify-start md:justify-center bg-[#f1f5f9] custom-scrollbar">
         <motion.div 
           animate={{ 
             scale: zoom
           }}
           transition={{ type: 'spring', damping: 25, stiffness: 200 }}
-          className="origin-center w-full h-full flex items-center justify-center"
+          className="origin-top-left md:origin-center min-w-full min-h-full flex items-center justify-center"
         >
           <svg 
             ref={svgRef}
             viewBox="0 0 1234.961 649.739" 
-            className="w-full h-full max-w-none drop-shadow-sm"
+            className="w-[200%] h-full md:w-full md:h-full max-w-none drop-shadow-sm"
             xmlns="http://www.w3.org/2000/svg"
-            preserveAspectRatio="xMidYMid meet"
+            preserveAspectRatio="xMidYMid slice"
           >
             {/* Full Original Port Background Elements from Reference */}
             <g id="layer15" transform="translate(-1170.8034,-52.171147)">
@@ -305,52 +305,51 @@ export default function VesselLayout() {
       <AnimatePresence>
         {hoveredVessel && (
           <motion.div 
-            initial={{ opacity: 0, scale: 0.9, y: 20 }}
+            initial={{ opacity: 0, scale: 0.9, x: 20 }}
             animate={{ 
               opacity: 1, 
               scale: 1, 
-              y: 0,
               x: 0 
             }}
-            exit={{ opacity: 0, scale: 0.9, y: 20 }}
-            className="fixed md:absolute md:top-6 md:right-6 top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 md:translate-x-0 md:translate-y-0 z-50 w-[90%] max-w-[320px] md:w-72 bg-white border border-slate-200 rounded-[2rem] p-6 shadow-2xl"
+            exit={{ opacity: 0, scale: 0.9, x: 20 }}
+            className="fixed md:absolute top-4 right-4 md:top-6 md:right-6 z-50 w-60 md:w-72 bg-white border border-slate-200 rounded-[1.5rem] md:rounded-[2rem] p-4 md:p-6 shadow-2xl"
           >
-            <div className="flex items-center gap-4 mb-6">
-              <div className="w-12 h-12 rounded-2xl flex items-center justify-center text-white shadow-lg" style={{ backgroundColor: getStatusColor(hoveredVessel.status_dock) }}>
-                <Ship className="w-6 h-6" />
+            <div className="flex items-center gap-3 md:gap-4 mb-4 md:mb-6">
+              <div className="w-10 h-10 md:w-12 md:h-12 rounded-xl md:rounded-2xl flex items-center justify-center text-white shadow-lg" style={{ backgroundColor: getStatusColor(hoveredVessel.status_dock) }}>
+                <Ship className="w-5 h-5 md:w-6 md:h-6" />
               </div>
               <div className="overflow-hidden">
-                <h3 className="text-slate-800 font-bold text-base leading-tight truncate">{hoveredVessel.shipname}</h3>
-                <span className="inline-block mt-1 px-2 py-0.5 bg-slate-100 rounded-full text-[9px] font-bold text-slate-500 uppercase tracking-widest border border-slate-200">
+                <h3 className="text-slate-800 font-bold text-sm md:text-base leading-tight truncate">{hoveredVessel.shipname}</h3>
+                <span className="inline-block mt-1 px-2 py-0.5 bg-slate-100 rounded-full text-[8px] md:text-[9px] font-bold text-slate-500 uppercase tracking-widest border border-slate-200">
                   {hoveredVessel.type || 'Standard'}
                 </span>
               </div>
             </div>
 
-            <div className="space-y-4">
-              <div className="flex justify-between items-center py-2 border-b border-slate-100">
-                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Status</span>
+            <div className="space-y-3 md:space-y-4">
+              <div className="flex justify-between items-center py-1.5 md:py-2 border-b border-slate-100">
+                <span className="text-[9px] md:text-[10px] font-bold text-slate-400 uppercase tracking-wider">Status</span>
                 <span className="text-xs font-bold" style={{ color: getStatusColor(hoveredVessel.status_dock) }}>
                   {hoveredVessel.status_dock || 'Unknown'}
                 </span>
               </div>
               
-              <div className="grid grid-cols-2 gap-3">
-                <div className="p-3 bg-slate-50 rounded-2xl border border-slate-100">
-                  <span className="block text-[9px] font-bold text-slate-400 uppercase mb-1">Width</span>
-                  <span className="text-sm font-bold text-slate-700">{hoveredVessel.width || '-'} m</span>
+              <div className="grid grid-cols-2 gap-2 md:gap-3">
+                <div className="p-2.5 md:p-3 bg-slate-50 rounded-xl md:rounded-2xl border border-slate-100">
+                  <span className="block text-[8px] md:text-[9px] font-bold text-slate-400 uppercase mb-0.5 md:mb-1">Width</span>
+                  <span className="text-xs md:text-sm font-bold text-slate-700">{hoveredVessel.width || '-'} m</span>
                 </div>
-                <div className="p-3 bg-slate-50 rounded-2xl border border-slate-100">
-                  <span className="block text-[9px] font-bold text-slate-400 uppercase mb-1">Length</span>
-                  <span className="text-sm font-bold text-slate-700">{hoveredVessel.length || '-'} m</span>
+                <div className="p-2.5 md:p-3 bg-slate-50 rounded-xl md:rounded-2xl border border-slate-100">
+                  <span className="block text-[8px] md:text-[9px] font-bold text-slate-400 uppercase mb-0.5 md:mb-1">Length</span>
+                  <span className="text-xs md:text-sm font-bold text-slate-700">{hoveredVessel.length || '-'} m</span>
                 </div>
               </div>
 
-              <div className="p-4 bg-[#FDB913]/5 border border-[#FDB913]/20 rounded-2xl flex gap-3">
-                <div className="w-6 h-6 bg-[#FDB913]/20 rounded-lg flex items-center justify-center shrink-0">
-                  <Info className="w-3.5 h-3.5 text-[#FDB913]" />
+              <div className="p-3 md:p-4 bg-[#FDB913]/5 border border-[#FDB913]/20 rounded-xl md:rounded-2xl flex gap-2 md:gap-3">
+                <div className="w-5 h-5 md:w-6 md:h-6 bg-[#FDB913]/20 rounded-lg flex items-center justify-center shrink-0">
+                  <Info className="w-3 md:w-3.5 h-3 md:h-3.5 text-[#FDB913]" />
                 </div>
-                <p className="text-[10px] text-slate-500 leading-relaxed font-medium">
+                <p className="text-[9px] md:text-[10px] text-slate-500 leading-relaxed font-medium">
                   {canEdit 
                     ? "Drag vessel to reposition. Click rotate icon to change orientation." 
                     : "You are in View Only mode. Drag and rotate are disabled."}
@@ -434,7 +433,8 @@ function VesselComponent({ vessel, getSVGCoordinates, handleUpdatePosition, hand
       style={{ 
         x: mvX, 
         y: mvY,
-        cursor: canEdit ? 'grab' : 'default'
+        cursor: canEdit ? 'grab' : 'default',
+        touchAction: 'none' // Prevents browser scroll interference
       }}
       initial={{ 
         rotate: vessel.rotation || 0
@@ -446,6 +446,7 @@ function VesselComponent({ vessel, getSVGCoordinates, handleUpdatePosition, hand
       onMouseLeave={() => setHoveredVessel(null)}
       className="active:cursor-grabbing"
       whileHover={{ scale: 1.05 }}
+      whileTap={{ scale: 1.1, opacity: 0.9 }}
     >
       {/* Visual content centered at 0,0 */}
       <g style={{ pointerEvents: 'auto' }}>
