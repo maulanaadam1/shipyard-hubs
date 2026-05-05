@@ -406,25 +406,19 @@ function VesselComponent({ vessel, getSVGCoordinates, handleUpdatePosition, hand
 
   return (
      <motion.g
-      onPanStart={(e, info) => {
+      drag={canEdit}
+      dragMomentum={false}
+      dragElastic={0}
+      onDragStart={(e, info) => {
         if (!canEdit) return;
-        // Calculate the initial offset between the mouse and the vessel center
         const mouseSVG = getSVGCoordinates(info.point.x, info.point.y);
         dragOffset.current = {
           x: mouseSVG.x - mvX.get(),
           y: mouseSVG.y - mvY.get()
         };
       }}
-      onPan={(e, info) => {
+      onDragEnd={(e, info) => {
         if (!canEdit) return;
-        // Use absolute mouse position minus the initial offset for 100% precision
-        const mouseSVG = getSVGCoordinates(info.point.x, info.point.y);
-        mvX.set(mouseSVG.x - dragOffset.current.x);
-        mvY.set(mouseSVG.y - dragOffset.current.y);
-      }}
-      onPanEnd={(e, info) => {
-        if (!canEdit) return;
-        // Save the final absolute position
         const mouseSVG = getSVGCoordinates(info.point.x, info.point.y);
         const finalX = Math.round(mouseSVG.x - dragOffset.current.x);
         const finalY = Math.round(mouseSVG.y - dragOffset.current.y);
@@ -434,7 +428,7 @@ function VesselComponent({ vessel, getSVGCoordinates, handleUpdatePosition, hand
         x: mvX, 
         y: mvY,
         cursor: canEdit ? 'grab' : 'default',
-        touchAction: 'none' // Prevents browser scroll interference
+        touchAction: 'none'
       }}
       initial={{ 
         rotate: vessel.rotation || 0
