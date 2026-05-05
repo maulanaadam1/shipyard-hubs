@@ -477,8 +477,6 @@ function VesselComponent({ vessel, getSVGCoordinates, handleUpdatePosition, hand
       animate={{ 
         rotate: vessel.rotation || 0
       }}
-      onMouseEnter={() => setHoveredVessel(vessel)}
-      onMouseLeave={() => setHoveredVessel(null)}
       onTap={() => {
         const now = Date.now();
         if (now - lastTapTime.current < 300) {
