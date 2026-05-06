@@ -758,7 +758,7 @@ export default function EquipmentRelease() {
             </>
           )}
         </div>
-      </div>      </div>
+      </div>
 
       {/* Release Modal */}
       <AnimatePresence>
