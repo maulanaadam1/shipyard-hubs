@@ -69,8 +69,14 @@ export default function VesselLayout() {
   const activeVessels = useMemo(() => {
     const activeStatusNames = (dockStatuses || []).filter(s => s.is_active).map(s => s.name);
     return localProjects.filter(p => {
+      // 1. If explicitly hidden, always hide
+      if (p.ship_visibility === 'hidden') return false;
+
+      // 2. If explicitly active, always show
+      // 3. Otherwise, show if the dock status is one of the active statuses
       const isVisible = p.ship_visibility === 'active' || 
                        activeStatusNames.includes(p.status_dock || '');
+
       const matchesSearch = p.shipname?.toLowerCase().includes(searchTerm.toLowerCase());
       return isVisible && matchesSearch;
     });
