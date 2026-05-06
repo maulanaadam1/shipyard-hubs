@@ -230,7 +230,7 @@ export default function VesselLayout() {
             viewBox={currentLayout?.viewbox || "0 0 1234.961 649.739"} 
             className="h-full w-auto md:w-full md:h-full max-w-none drop-shadow-sm"
             xmlns="http://www.w3.org/2000/svg"
-            preserveAspectRatio="xMidYMid slice"
+            preserveAspectRatio="xMidYMid meet"
           >
             {/* Dynamic Background or Hardcoded Fallback */}
             {currentLayout ? (
