@@ -488,8 +488,12 @@ export default function CompanyManagement() {
                       value={formData.company_type}
                       onChange={(e) => setFormData({ ...formData, company_type: e.target.value })}
                       className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-[#FDB913]/30 focus:border-[#FDB913] transition-all"
-                      placeholder="e.g. PT"
-                    />
+                    >
+                      <option value="">Select Type</option>
+                      {dropdownConfigs?.filter(c => c.category === 'company_types' && c.is_active).map(c => (
+                        <option key={c.id} value={c.value}>{c.label}</option>
+                      ))}
+                    </select>
                   </div>
                   <div className="space-y-1">
                     <label className="text-xs font-bold text-slate-500 uppercase">Status</label>
