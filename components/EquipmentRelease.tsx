@@ -31,7 +31,8 @@ export default function EquipmentRelease() {
   const [searchTerm, setSearchTerm] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [activeTab, setActiveTab] = useState<'pending' | 'history'>('history');
-  const [currentPage, setCurrentPage] = useState(1);
+  const [currentPagePending, setCurrentPagePending] = useState(1);
+  const [currentPageHistory, setCurrentPageHistory] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState<number | 'all'>(10);
 
   const generateHexId = () => {
@@ -440,18 +441,28 @@ export default function EquipmentRelease() {
     (r.loan_id || '').toLowerCase().includes(searchTerm.toLowerCase())
   );
 
-  // Pagination Logic
-  const totalItems = filteredHistory.length;
-  const effectiveItemsPerPage = itemsPerPage === 'all' ? totalItems : itemsPerPage;
-  const totalPages = Math.ceil(totalItems / (effectiveItemsPerPage || 1));
-  const startIndex = (currentPage - 1) * (effectiveItemsPerPage as number);
+  // Pagination Logic for History
+  const totalHistory = filteredHistory.length;
+  const historyItemsPerPage = itemsPerPage === 'all' ? totalHistory : (itemsPerPage as number);
+  const totalPagesHistory = Math.ceil(totalHistory / (historyItemsPerPage || 1));
+  const startIdxHistory = (currentPageHistory - 1) * historyItemsPerPage;
   const paginatedHistory = itemsPerPage === 'all' 
     ? filteredHistory 
-    : filteredHistory.slice(startIndex, startIndex + (effectiveItemsPerPage as number));
+    : filteredHistory.slice(startIdxHistory, startIdxHistory + historyItemsPerPage);
+
+  // Pagination Logic for Pending
+  const totalPending = filteredLoans.length;
+  const pendingItemsPerPage = itemsPerPage === 'all' ? totalPending : (itemsPerPage as number);
+  const totalPagesPending = Math.ceil(totalPending / (pendingItemsPerPage || 1));
+  const startIdxPending = (currentPagePending - 1) * pendingItemsPerPage;
+  const paginatedPending = itemsPerPage === 'all' 
+    ? filteredLoans 
+    : filteredLoans.slice(startIdxPending, startIdxPending + pendingItemsPerPage);
 
   // Reset page when searching
   React.useEffect(() => {
-    setCurrentPage(1);
+    setCurrentPagePending(1);
+    setCurrentPageHistory(1);
   }, [searchTerm]);
 
   const getItemsList = (items: any) => {
@@ -491,7 +502,7 @@ export default function EquipmentRelease() {
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
             <input 
               type="text" 
-              placeholder="Search release history..." 
+              placeholder="Search data..." 
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               className="w-full pl-10 pr-4 py-2.5 bg-white border border-slate-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-[#FDB913]/30 shadow-sm"
@@ -529,221 +540,225 @@ export default function EquipmentRelease() {
       </div>
 
       <div className="space-y-6">
-        {activeTab === 'pending' ? (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            <AnimatePresence>
-              {filteredLoans.map((loan) => (
-                <motion.div 
-                  key={loan.id}
-                  layout
-                  initial={{ opacity: 0, scale: 0.95 }}
-                  animate={{ opacity: 1, scale: 1 }}
-                  className="bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden hover:shadow-md transition-all group"
-                >
-                  <div className="p-6 border-b border-slate-100 flex justify-between items-start">
-                    <div>
-                      <div className="flex items-center gap-2 mb-1">
-                        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Request ID</span>
-                        <span className="text-xs font-mono font-bold text-[#e5a611] bg-[#FDB913]/10 px-2 py-0.5 rounded-md">
-                          {loan.id}
-                        </span>
-                      </div>
-                      <h3 className="font-bold text-slate-800 text-lg">{loan.shipname}</h3>
-                    </div>
-                    <div className="p-2 bg-blue-50 text-blue-600 rounded-xl">
-                      <Package className="w-5 h-5" />
-                    </div>
-                  </div>
-                  
-                  <div className="p-6 space-y-4">
-                    <div className="flex items-center gap-3">
-                      <div className="w-8 h-8 rounded-lg bg-slate-50 flex items-center justify-center shrink-0">
-                        <User className="w-4 h-4 text-slate-400" />
-                      </div>
-                      <div>
-                        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Vendor</p>
-                        <p className="text-sm font-semibold text-slate-700">{loan.vendor}</p>
-                      </div>
-                    </div>
-
-                    <div className="bg-slate-50 rounded-2xl p-4 space-y-2">
-                      <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">Requested Items</p>
-                      {loan.items.map((item, idx) => (
-                        <div key={idx} className="flex justify-between items-center text-sm">
-                          <span className="text-slate-600">{item.type}</span>
-                          <span className="font-bold text-slate-800">x{item.quantity}</span>
-                        </div>
-                      ))}
-                    </div>
-
-                    <button 
-                      onClick={() => openReleaseModal(loan)}
-                      className="w-full flex items-center justify-center gap-2 px-6 py-3 bg-[#FDB913] text-slate-900 rounded-2xl text-sm font-bold hover:bg-[#e5a611] transition-all"
-                    >
-                      Process Release <ArrowRight className="w-4 h-4" />
-                    </button>
-                  </div>
-                </motion.div>
-              ))}
-            </AnimatePresence>
-          </div>
-        ) : (
-          /* Release History Table */
-          <div className="bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden">
-            <div className="overflow-x-auto">
-              <table className="w-full text-left border-collapse">
-                <thead>
-                  <tr className="bg-slate-50 border-b border-slate-100">
-                    <th className="px-6 py-4 text-[10px] font-bold text-slate-400 uppercase tracking-widest">Release No</th>
-                    <th className="px-6 py-4 text-[10px] font-bold text-slate-400 uppercase tracking-widest">Date</th>
-                    <th className="px-6 py-4 text-[10px] font-bold text-slate-400 uppercase tracking-widest">Vendor / Receiver</th>
-                    <th className="px-6 py-4 text-[10px] font-bold text-slate-400 uppercase tracking-widest">Items Deployed</th>
-                    <th className="px-6 py-4 text-[10px] font-bold text-slate-400 uppercase tracking-widest text-center">Actions</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100">
-                  {paginatedHistory.map((release) => (
-                    <tr 
-                      key={release.id} 
-                      onClick={() => setSelectedHistory(release)}
-                      className="hover:bg-slate-50/80 transition-colors group cursor-pointer"
-                    >
-                      <td className="px-6 py-4">
-                        <div className="flex flex-col">
-                          <span className="text-sm font-bold text-slate-800">{release.release_no}</span>
-                          <span className="text-[10px] text-slate-400 font-mono">
-                            LOAN REF: {loans.find(l => l.id === release.loan_id)?.request_id || release.loan_id}
-                          </span>
-                        </div>
-                      </td>
-                      <td className="px-6 py-4">
-                        <div className="flex items-center gap-2 text-slate-600">
-                          <Calendar className="w-3.5 h-3.5" />
-                          <span className="text-sm">{new Date(release.date_released).toLocaleDateString()}</span>
-                        </div>
-                      </td>
-                      <td className="px-6 py-4">
-                        <div className="flex flex-col">
-                          <span className="text-sm font-semibold text-slate-700">{release.received_by}</span>
-                          <span className="text-[10px] text-slate-400">Released by: {release.released_by}</span>
-                        </div>
-                      </td>
-                      <td className="px-6 py-4">
-                        <div className="flex flex-wrap gap-2">
-                          {getItemsList(release.items_released).slice(0, 3).map((item: any, idx: number) => (
-                            <span key={idx} className="px-2 py-1 bg-[#FDB913]/10 text-[#e5a611] rounded-md text-[10px] font-bold border border-[#FDB913]/20">
-                              {item.alias || item.equipment_id}
-                            </span>
-                          ))}
-                          {getItemsList(release.items_released).length > 3 && (
-                            <span className="text-[10px] text-slate-400 font-bold self-center">
-                              +{getItemsList(release.items_released).length - 3} more
-                            </span>
-                          )}
-                        </div>
-                      </td>
-                      <td className="px-6 py-4">
-                        <div className="flex items-center justify-center gap-2">
-                          <button 
-                            onClick={(e) => { e.stopPropagation(); setSelectedHistory(release); }}
-                            className="p-2 text-slate-400 hover:text-[#e5a611] hover:bg-[#FDB913]/10 rounded-lg transition-all"
-                          >
-                            <FileText className="w-4 h-4" />
-                          </button>
-                        </div>
-                      </td>
+        <div className="bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden">
+          {activeTab === 'pending' ? (
+            /* Pending Release Table */
+            <>
+              <div className="overflow-x-auto">
+                <table className="w-full text-left border-collapse">
+                  <thead>
+                    <tr className="bg-slate-50 border-b border-slate-100">
+                      <th className="px-6 py-4 w-12 text-center text-[10px] font-bold text-slate-400 uppercase tracking-widest">No</th>
+                      <th className="px-6 py-4 text-[10px] font-bold text-slate-400 uppercase tracking-widest">Ship / Project</th>
+                      <th className="px-6 py-4 text-[10px] font-bold text-slate-400 uppercase tracking-widest">Vendor</th>
+                      <th className="px-6 py-4 text-[10px] font-bold text-slate-400 uppercase tracking-widest">Items Requested</th>
+                      <th className="px-6 py-4 text-[10px] font-bold text-slate-400 uppercase tracking-widest text-center">Actions</th>
                     </tr>
-                  ))}
-                  {filteredHistory.length === 0 && (
-                    <tr>
-                      <td colSpan={5} className="px-6 py-20 text-center">
-                        <div className="flex flex-col items-center gap-3">
-                          <div className="w-12 h-12 bg-slate-50 rounded-full flex items-center justify-center">
-                            <History className="w-6 h-6 text-slate-200" />
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {paginatedPending.map((loan, idx) => (
+                      <tr key={loan.id} className="hover:bg-slate-50/80 transition-colors group">
+                        <td className="px-6 py-4 text-center">
+                          <span className="text-xs font-bold text-slate-400">{startIdxPending + idx + 1}</span>
+                        </td>
+                        <td className="px-6 py-4">
+                          <div className="flex flex-col">
+                            <span className="text-sm font-bold text-slate-800">{loan.shipname}</span>
+                            <span className="text-[10px] text-slate-400 font-mono">REQ ID: {loan.id}</span>
                           </div>
-                          <p className="text-slate-400 text-sm">No release history found.</p>
-                        </div>
-                      </td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
-            </div>
-
-            {/* Pagination Controls */}
-            {totalPages > 1 && (
-              <div className="px-6 py-4 bg-slate-50 border-t border-slate-100 flex flex-col sm:flex-row items-center justify-between gap-4">
+                        </td>
+                        <td className="px-6 py-4">
+                          <span className="text-sm font-semibold text-slate-700">{loan.vendor}</span>
+                        </td>
+                        <td className="px-6 py-4">
+                          <div className="flex flex-wrap gap-2">
+                            {loan.items.map((item, i) => (
+                              <span key={i} className="px-2 py-0.5 bg-blue-50 text-blue-600 rounded text-[10px] font-bold border border-blue-100">
+                                {item.type} x{item.quantity}
+                              </span>
+                            ))}
+                          </div>
+                        </td>
+                        <td className="px-6 py-4">
+                          <div className="flex justify-center">
+                            <button 
+                              onClick={() => openReleaseModal(loan)}
+                              className="flex items-center gap-2 px-4 py-2 bg-[#FDB913] text-slate-900 rounded-xl text-xs font-bold hover:bg-[#e5a611] transition-all shadow-sm"
+                            >
+                              Release <ArrowRight className="w-3 h-3" />
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                    {filteredLoans.length === 0 && (
+                      <tr>
+                        <td colSpan={5} className="px-6 py-20 text-center">
+                          <p className="text-slate-400 text-sm">No pending release requests found.</p>
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+              
+              {/* Pagination Footer for Pending */}
+              <div className="px-6 py-4 bg-slate-50 border-t border-slate-100 flex items-center justify-between">
                 <div className="flex items-center gap-4">
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs text-slate-500">Show</span>
-                    <select 
-                      value={itemsPerPage}
-                      onChange={(e) => {
-                        const val = e.target.value;
-                        setItemsPerPage(val === 'all' ? 'all' : parseInt(val));
-                        setCurrentPage(1);
-                      }}
-                      className="bg-white border border-slate-200 text-slate-700 text-xs rounded-lg px-2 py-1 outline-none focus:ring-2 focus:ring-[#FDB913]/20"
-                    >
-                      <option value={10}>10</option>
-                      <option value={25}>25</option>
-                      <option value={50}>50</option>
-                      <option value={100}>100</option>
-                      <option value="all">All</option>
-                    </select>
-                  </div>
+                  <select 
+                    value={itemsPerPage}
+                    onChange={(e) => { setItemsPerPage(e.target.value === 'all' ? 'all' : parseInt(e.target.value)); setCurrentPagePending(1); }}
+                    className="bg-white border border-slate-200 text-xs rounded-lg px-2 py-1"
+                  >
+                    <option value={10}>10</option>
+                    <option value={25}>25</option>
+                    <option value={50}>50</option>
+                    <option value="all">All</option>
+                  </select>
                   <p className="text-xs text-slate-500">
-                    Showing <span className="font-bold text-slate-700">{startIndex + 1}</span> to <span className="font-bold text-slate-700">{Math.min(startIndex + (effectiveItemsPerPage as number), totalItems)}</span> of <span className="font-bold text-slate-700">{totalItems}</span> results
+                    Showing <span className="font-bold text-slate-700">{paginatedPending.length}</span> of <span className="font-bold text-slate-700">{totalPending}</span> entries
                   </p>
                 </div>
-
                 <div className="flex items-center gap-2">
                   <button 
-                    onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
-                    disabled={currentPage === 1}
-                    className="p-2 bg-white border border-slate-200 rounded-xl text-slate-600 disabled:opacity-40 disabled:cursor-not-allowed hover:bg-slate-50 transition-all shadow-sm"
+                    onClick={() => setCurrentPagePending(prev => Math.max(1, prev - 1))}
+                    disabled={currentPagePending === 1}
+                    className="p-1.5 border border-slate-200 rounded-lg disabled:opacity-30"
                   >
                     <ChevronRight className="w-4 h-4 rotate-180" />
                   </button>
-                  
-                  <div className="flex items-center gap-1">
-                    {[...Array(Math.min(5, totalPages))].map((_, i) => {
-                      let pageNum = currentPage;
-                      if (currentPage <= 3) pageNum = i + 1;
-                      else if (currentPage >= totalPages - 2) pageNum = totalPages - 4 + i;
-                      else pageNum = currentPage - 2 + i;
-
-                      if (pageNum <= 0 || pageNum > totalPages) return null;
-
-                      return (
-                        <button
-                          key={pageNum}
-                          onClick={() => setCurrentPage(pageNum)}
-                          className={`w-8 h-8 rounded-lg text-xs font-bold transition-all ${
-                            currentPage === pageNum 
-                              ? 'bg-[#FDB913] text-slate-900 shadow-md' 
-                              : 'bg-white border border-slate-200 text-slate-500 hover:bg-slate-50'
-                          }`}
-                        >
-                          {pageNum}
-                        </button>
-                      );
-                    })}
-                  </div>
-
+                  <span className="text-xs font-bold text-slate-600">{currentPagePending} / {totalPagesPending || 1}</span>
                   <button 
-                    onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
-                    disabled={currentPage === totalPages}
-                    className="p-2 bg-white border border-slate-200 rounded-xl text-slate-600 disabled:opacity-40 disabled:cursor-not-allowed hover:bg-slate-50 transition-all shadow-sm"
+                    onClick={() => setCurrentPagePending(prev => Math.min(totalPagesPending, prev + 1))}
+                    disabled={currentPagePending === totalPagesPending || totalPagesPending === 0}
+                    className="p-1.5 border border-slate-200 rounded-lg disabled:opacity-30"
                   >
                     <ChevronRight className="w-4 h-4" />
                   </button>
                 </div>
               </div>
-            )}
-          </div>
-        )}
-      </div>
+            </>
+          ) : (
+            /* Release History Table */
+            <>
+              <div className="overflow-x-auto">
+                <table className="w-full text-left border-collapse">
+                  <thead>
+                    <tr className="bg-slate-50 border-b border-slate-100">
+                      <th className="px-6 py-4 w-12 text-center text-[10px] font-bold text-slate-400 uppercase tracking-widest">No</th>
+                      <th className="px-6 py-4 text-[10px] font-bold text-slate-400 uppercase tracking-widest">Release No</th>
+                      <th className="px-6 py-4 text-[10px] font-bold text-slate-400 uppercase tracking-widest">Date</th>
+                      <th className="px-6 py-4 text-[10px] font-bold text-slate-400 uppercase tracking-widest">Vendor / Receiver</th>
+                      <th className="px-6 py-4 text-[10px] font-bold text-slate-400 uppercase tracking-widest">Items Deployed</th>
+                      <th className="px-6 py-4 text-[10px] font-bold text-slate-400 uppercase tracking-widest text-center">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {paginatedHistory.map((release, idx) => (
+                      <tr 
+                        key={release.id} 
+                        onClick={() => setSelectedHistory(release)}
+                        className="hover:bg-slate-50/80 transition-colors group cursor-pointer"
+                      >
+                        <td className="px-6 py-4 text-center">
+                          <span className="text-xs font-bold text-slate-400">{startIdxHistory + idx + 1}</span>
+                        </td>
+                        <td className="px-6 py-4">
+                          <div className="flex flex-col">
+                            <span className="text-sm font-bold text-slate-800">{release.release_no}</span>
+                            <span className="text-[10px] text-slate-400 font-mono">
+                              LOAN REF: {loans.find(l => l.id === release.loan_id)?.request_id || release.loan_id}
+                            </span>
+                          </div>
+                        </td>
+                        <td className="px-6 py-4">
+                          <div className="flex items-center gap-2 text-slate-600">
+                            <Calendar className="w-3.5 h-3.5" />
+                            <span className="text-sm">{new Date(release.date_released).toLocaleDateString()}</span>
+                          </div>
+                        </td>
+                        <td className="px-6 py-4">
+                          <div className="flex flex-col">
+                            <span className="text-sm font-semibold text-slate-700">{release.received_by}</span>
+                            <span className="text-[10px] text-slate-400">Released by: {release.released_by}</span>
+                          </div>
+                        </td>
+                        <td className="px-6 py-4">
+                          <div className="flex flex-wrap gap-2">
+                            {getItemsList(release.items_released).slice(0, 3).map((item: any, i: number) => (
+                              <span key={i} className="px-2 py-1 bg-[#FDB913]/10 text-[#e5a611] rounded-md text-[10px] font-bold border border-[#FDB913]/20">
+                                {item.alias || item.equipment_id}
+                              </span>
+                            ))}
+                            {getItemsList(release.items_released).length > 3 && (
+                              <span className="text-[10px] text-slate-400 font-bold self-center">
+                                +{getItemsList(release.items_released).length - 3} more
+                              </span>
+                            )}
+                          </div>
+                        </td>
+                        <td className="px-6 py-4">
+                          <div className="flex items-center justify-center gap-2">
+                            <button 
+                              onClick={(e) => { e.stopPropagation(); setSelectedHistory(release); }}
+                              className="p-2 text-slate-400 hover:text-[#e5a611] hover:bg-[#FDB913]/10 rounded-lg transition-all"
+                            >
+                              <FileText className="w-4 h-4" />
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                    {filteredHistory.length === 0 && (
+                      <tr>
+                        <td colSpan={6} className="px-6 py-20 text-center">
+                          <p className="text-slate-400 text-sm">No release history found.</p>
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* Pagination Footer for History */}
+              <div className="px-6 py-4 bg-slate-50 border-t border-slate-100 flex items-center justify-between">
+                <div className="flex items-center gap-4">
+                  <select 
+                    value={itemsPerPage}
+                    onChange={(e) => { setItemsPerPage(e.target.value === 'all' ? 'all' : parseInt(e.target.value)); setCurrentPageHistory(1); }}
+                    className="bg-white border border-slate-200 text-xs rounded-lg px-2 py-1"
+                  >
+                    <option value={10}>10</option>
+                    <option value={25}>25</option>
+                    <option value={50}>50</option>
+                    <option value="all">All</option>
+                  </select>
+                  <p className="text-xs text-slate-500">
+                    Showing <span className="font-bold text-slate-700">{paginatedHistory.length}</span> of <span className="font-bold text-slate-700">{totalHistory}</span> entries
+                  </p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <button 
+                    onClick={() => setCurrentPageHistory(prev => Math.max(1, prev - 1))}
+                    disabled={currentPageHistory === 1}
+                    className="p-1.5 border border-slate-200 rounded-lg disabled:opacity-30"
+                  >
+                    <ChevronRight className="w-4 h-4 rotate-180" />
+                  </button>
+                  <span className="text-xs font-bold text-slate-600">{currentPageHistory} / {totalPagesHistory || 1}</span>
+                  <button 
+                    onClick={() => setCurrentPageHistory(prev => Math.min(totalPagesHistory, prev + 1))}
+                    disabled={currentPageHistory === totalPagesHistory || totalPagesHistory === 0}
+                    className="p-1.5 border border-slate-200 rounded-lg disabled:opacity-30"
+                  >
+                    <ChevronRight className="w-4 h-4" />
+                  </button>
+                </div>
+              </div>
+            </>
+          )}
+        </div>
+      </div>      </div>
 
       {/* Release Modal */}
       <AnimatePresence>
