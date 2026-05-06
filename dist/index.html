@@ -7,8 +7,26 @@
     <link rel="manifest" href="/manifest.json" />
     <meta name="theme-color" content="#FDB913" />
     <link rel="icon" type="image/svg+xml" href="/app_icon.svg" />
-    <script type="module" crossorigin src="/assets/index-Dr8S5X2J.js"></script>
-    <link rel="stylesheet" crossorigin href="/assets/index-D6qesnWQ.css">
+    <script>
+      // Auto-recovery for stale assets (blank screen fix)
+      window.addEventListener('error', function(e) {
+        if (e.target.tagName === 'SCRIPT' || e.target.tagName === 'LINK') {
+          if (e.target.src?.includes('/assets/') || e.target.href?.includes('/assets/')) {
+            console.warn('Asset failed to load. Clearing SW and reloading...');
+            if ('serviceWorker' in navigator) {
+              navigator.serviceWorker.getRegistrations().then(registrations => {
+                for(let registration of registrations) registration.unregister();
+                window.location.reload(true);
+              });
+            } else {
+              window.location.reload(true);
+            }
+          }
+        }
+      }, true);
+    </script>
+    <script type="module" crossorigin src="/assets/index-B7fGcPoH.js"></script>
+    <link rel="stylesheet" crossorigin href="/assets/index-Cp425VZM.css">
   </head>
   <body>
     <div id="root"></div>

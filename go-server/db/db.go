@@ -200,7 +200,17 @@ func createTables() {
 		name TEXT,
 		size TEXT,
 		description TEXT,
-		status TEXT DEFAULT 'Active'
+		status TEXT DEFAULT 'Active',
+		layout_id TEXT
+	);
+
+	CREATE TABLE IF NOT EXISTS vessel_layouts (
+		id TEXT PRIMARY KEY,
+		name TEXT,
+		svg_content TEXT,
+		viewbox TEXT,
+		is_default BOOLEAN DEFAULT 0,
+		created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 	);
 
 	CREATE TABLE IF NOT EXISTS master_status_dock (
@@ -217,6 +227,7 @@ func createTables() {
 	}
 
 	// Simple migrations for existing tables
+	DB.Exec("ALTER TABLE master_locations ADD COLUMN layout_id TEXT")
 	DB.Exec("ALTER TABLE companies ADD COLUMN status TEXT DEFAULT 'Active'")
 	DB.Exec("ALTER TABLE vendors ADD COLUMN status TEXT DEFAULT 'Active'")
 	DB.Exec("ALTER TABLE profiles ADD COLUMN jabatan TEXT")

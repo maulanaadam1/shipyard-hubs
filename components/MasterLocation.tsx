@@ -10,7 +10,8 @@ import {
   X, 
   MapPin,
   ChevronLeft,
-  ChevronRight
+  ChevronRight,
+  Layout as LayoutIcon
 } from 'lucide-react';
 import { useData, LocationMaster } from '@/context/DataContext';
 import { motion, AnimatePresence } from 'motion/react';
@@ -22,6 +23,16 @@ export default function MasterLocation() {
   const [editingLocation, setEditingLocation] = useState<LocationMaster | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [layouts, setLayouts] = useState<any[]>([]);
+
+  // Fetch layouts for dropdown
+  React.useEffect(() => {
+    const fetchLayouts = async () => {
+      const { data } = await api.from('vessel_layouts').select('id, name');
+      if (data) setLayouts(data);
+    };
+    fetchLayouts();
+  }, []);
 
   // Pagination States
   const [currentPage, setCurrentPage] = useState(1);
@@ -33,7 +44,8 @@ export default function MasterLocation() {
     description: '',
     status: 'Active',
     center_x: '',
-    center_y: ''
+    center_y: '',
+    layout_id: ''
   });
 
   const handleOpenModal = (location: LocationMaster | null = null) => {
@@ -45,7 +57,8 @@ export default function MasterLocation() {
         description: location.description || '',
         status: location.status || 'Active',
         center_x: location.center_x?.toString() || '',
-        center_y: location.center_y?.toString() || ''
+        center_y: location.center_y?.toString() || '',
+        layout_id: location.layout_id || ''
       });
     } else {
       setEditingLocation(null);
@@ -55,7 +68,8 @@ export default function MasterLocation() {
         description: '',
         status: 'Active',
         center_x: '',
-        center_y: ''
+        center_y: '',
+        layout_id: ''
       });
     }
     setIsModalOpen(true);
@@ -182,6 +196,7 @@ export default function MasterLocation() {
                 <th className="px-6 py-4">Location Name</th>
                 <th className="px-6 py-4">Size / Dimensions</th>
                 <th className="px-6 py-4 text-center">Center Point</th>
+                <th className="px-6 py-4">Linked Layout</th>
                 <th className="px-6 py-4 text-center">Status</th>
                 <th className="px-6 py-4 text-right">Actions</th>
               </tr>
@@ -226,6 +241,18 @@ export default function MasterLocation() {
                         </span>
                       ) : (
                         <span className="text-slate-300">-</span>
+                      )}
+                    </td>
+                    <td className="px-6 py-4">
+                      {loc.layout_id ? (
+                        <div className="flex items-center gap-2">
+                          <LayoutIcon className="w-3.5 h-3.5 text-[#FDB913]" />
+                          <span className="text-[10px] font-bold text-slate-600 truncate max-w-[120px]">
+                            {layouts.find(l => l.id === loc.layout_id)?.name || 'Linked Layout'}
+                          </span>
+                        </div>
+                      ) : (
+                        <span className="text-[10px] text-slate-300 italic">No layout linked</span>
                       )}
                     </td>
                     <td className="px-6 py-4 text-center">
@@ -362,6 +389,20 @@ export default function MasterLocation() {
                   >
                     <option value="Active">Active</option>
                     <option value="Inactive">Inactive</option>
+                  </select>
+                </div>
+
+                <div className="space-y-2">
+                  <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Bind to Layout</label>
+                  <select 
+                    value={formData.layout_id}
+                    onChange={(e) => setFormData({ ...formData, layout_id: e.target.value })}
+                    className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-[#FDB913]/30 focus:border-[#FDB913] transition-all"
+                  >
+                    <option value="">No layout binding (Use default)</option>
+                    {layouts.map(layout => (
+                      <option key={layout.id} value={layout.id}>{layout.name}</option>
+                    ))}
                   </select>
                 </div>
 

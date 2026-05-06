@@ -59,6 +59,7 @@ import RoleManagement from '../components/RoleManagement';
 import ShipDocking from '../components/ShipDocking';
 import VesselLayout from '../components/VesselLayout';
 import MasterDockStatus from '../components/MasterDockStatus';
+import MasterLayout from '../components/MasterLayout';
 
 function PlaceholderPage({ title }: { title: string }) {
   return (
@@ -237,6 +238,11 @@ createRoot(document.getElementById('root')!).render(
             <Route path="master-dock-status" element={
               <ProtectedRoute resource="Master Dock Status">
                 <MasterDockStatus />
+              </ProtectedRoute>
+            } />
+            <Route path="master-layout" element={
+              <ProtectedRoute resource="Master Layout">
+                <MasterLayout />
               </ProtectedRoute>
             } />
             <Route path="master-workflow" element={

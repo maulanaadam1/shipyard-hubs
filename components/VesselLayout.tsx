@@ -16,6 +16,15 @@ import {
 import { useData, Project } from '@/context/DataContext';
 import { api } from '@/lib/api-client';
 
+interface VesselLayoutData {
+  id: string;
+  name: string;
+  svg_content: string;
+  viewbox: string;
+  is_default: boolean;
+  location_id?: string;
+}
+
 // Normalized vessel path from reference
 const NORMALIZED_PATH_D = "M0 115 L 0 235 110 235 110 115 Q 110 15 55 0 0 15 0 115";
 const ORIGINAL_PATH_WIDTH = 110;
@@ -28,10 +37,26 @@ export default function VesselLayout() {
   const [hoveredVessel, setHoveredVessel] = useState<Project | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [localProjects, setLocalProjects] = useState<Project[]>([]);
+  const [layouts, setLayouts] = useState<VesselLayoutData[]>([]);
+  const [currentLayout, setCurrentLayout] = useState<VesselLayoutData | null>(null);
+  const [isLayoutSelectorOpen, setIsLayoutSelectorOpen] = useState(false);
   const saveTimeoutRef = React.useRef<NodeJS.Timeout | null>(null);
   const canView = canAccess('Vessel Layout', 'view');
   const canEdit = canAccess('Vessel Layout', 'edit');
   const [isLegendExpanded, setIsLegendExpanded] = useState(false);
+
+  // Fetch layouts
+  React.useEffect(() => {
+    const fetchLayouts = async () => {
+      const { data } = await api.from('vessel_layouts').select('*');
+      if (data && data.length > 0) {
+        setLayouts(data);
+        const defaultLayout = data.find((l: any) => l.is_default) || data[0];
+        setCurrentLayout(defaultLayout);
+      }
+    };
+    fetchLayouts();
+  }, []);
 
   // Sync local projects with context projects
   React.useEffect(() => {
@@ -72,15 +97,21 @@ export default function VesselLayout() {
       // 1. If explicitly hidden, always hide
       if (p.ship_visibility === 'hidden') return false;
 
-      // 2. If explicitly active, always show
-      // 3. Otherwise, show if the dock status is one of the active statuses
+      // 2. Filter by location if layout is bound to one
+      if (currentLayout?.location_id) {
+        // If the project doesn't match the layout's location, hide it
+        if (p.location !== currentLayout.location_id) return false;
+      }
+
+      // 3. If explicitly active, always show
+      // 4. Otherwise, show if the dock status is one of the active statuses
       const isVisible = p.ship_visibility === 'active' || 
                        activeStatusNames.includes(p.status_dock || '');
 
       const matchesSearch = p.shipname?.toLowerCase().includes(searchTerm.toLowerCase());
       return isVisible && matchesSearch;
     });
-  }, [localProjects, searchTerm, dockStatuses]);
+  }, [localProjects, searchTerm, dockStatuses, currentLayout]);
 
   const handleUpdatePosition = useCallback(async (vessel: Project, x: number, y: number) => {
     // 1. Instant Optimistic UI Update
@@ -200,13 +231,16 @@ export default function VesselLayout() {
         >
           <svg 
             ref={svgRef}
-            viewBox="0 0 1234.961 649.739" 
+            viewBox={currentLayout?.viewbox || "0 0 1234.961 649.739"} 
             className="h-full w-auto md:w-full md:h-full max-w-none drop-shadow-sm"
             xmlns="http://www.w3.org/2000/svg"
             preserveAspectRatio="xMidYMid slice"
           >
-            {/* Full Original Port Background Elements from Reference */}
-            <g id="layer15" transform="translate(-1170.8034,-52.171147)">
+            {/* Dynamic Background or Hardcoded Fallback */}
+            {currentLayout ? (
+              <g dangerouslySetInnerHTML={{ __html: currentLayout.svg_content.replace(/<svg[^>]*>/, '').replace(/<\/svg>/, '') }} />
+            ) : (
+              <g id="layer15" transform="translate(-1170.8034,-52.171147)">
                 <path style={{ display: 'inline', fill: '#c7af92', fillOpacity: 1, stroke: '#28170b', strokeWidth: '.274439' }} d="m1799.299 530.643-81.455 1.917-17.25-245.802 48.874.479 1.916 27.311 37.853 14.374z"/>
                 <path style={{ display: 'inline', fill: '#c7af92', fillOpacity: 1, stroke: '#28170b', strokeWidth: '.274439' }} d="m1799.299 530.643-81.455 1.917-17.25-245.802 48.874.479 1.916 27.311 37.853 14.374z"/>
                 <path style={{ display: 'inline', fill: '#c7af92', fillOpacity: 1, stroke: '#28170b', strokeWidth: '.274439' }} transform="rotate(-90)" d="M-304.486 1345.068h133.921v106.131h-133.921z"/>
@@ -320,6 +354,7 @@ export default function VesselLayout() {
                 <text xmlSpace="preserve" style={{ fontWeight: 700, fontSize: '10.9276px', fontFamily: 'Arial', textAlign: 'end', textAnchor: 'end', display: 'inline', fill: 'none', fillOpacity: 1, stroke: '#000', strokeWidth: '.666584', strokeOpacity: 1 }} x="1862.513" y="462.831"><tspan style={{ textAlign: 'center', textAnchor: 'middle', fill: 'none', fillOpacity: 1, stroke: '#000', strokeWidth: '.666584', strokeOpacity: 1 }} x="1862.513" y="462.831">OFFICE</tspan></text>
                 <text xmlSpace="preserve" style={{ fontWeight: 700, fontSize: '46.7788px', fontFamily: 'Arial', textAlign: 'end', textAnchor: 'end', display: 'inline', fill: 'none', fillOpacity: 1, stroke: '#000', strokeWidth: 2.85351, strokeOpacity: 1 }} x="1786.056" y="108.399"><tspan style={{ textAlign: 'center', textAnchor: 'middle', fill: '#000', fillOpacity: 1, stroke: 'none', strokeWidth: 2.85351, strokeOpacity: 1 }} x="1786.056" y="108.399">AREA DOCKING DAN FLOATING</tspan></text>
             </g>
+            )}
 
             {/* Vessels Layer */}
             <g id="vessels-layer">
@@ -338,6 +373,73 @@ export default function VesselLayout() {
             </g>
           </svg>
         </motion.div>
+      </div>
+
+      {/* Layout Switcher (Floating) */}
+      {layouts.length > 0 && (
+        <div className="absolute top-6 left-6 z-30">
+          <button 
+            onClick={() => setIsLayoutSelectorOpen(!isLayoutSelectorOpen)}
+            className="flex items-center gap-3 px-5 py-3 bg-white/90 backdrop-blur-md border border-slate-200 rounded-2xl shadow-xl hover:bg-white transition-all group"
+          >
+            <div className="w-8 h-8 bg-[#FDB913]/10 rounded-xl flex items-center justify-center text-[#e5a611]">
+              <LayoutGrid className="w-4 h-4" />
+            </div>
+            <div className="text-left">
+              <span className="block text-[8px] font-bold text-slate-400 uppercase tracking-widest leading-none mb-1">Current Layout</span>
+              <span className="block text-sm font-bold text-slate-700 leading-none">{currentLayout?.name || 'Default View'}</span>
+            </div>
+            <RotateCw className={`w-4 h-4 text-slate-300 group-hover:text-slate-500 transition-transform ${isLayoutSelectorOpen ? 'rotate-180' : ''}`} />
+          </button>
+
+          <AnimatePresence>
+            {isLayoutSelectorOpen && (
+              <motion.div 
+                initial={{ opacity: 0, y: 10, scale: 0.95 }}
+                animate={{ opacity: 1, y: 0, scale: 1 }}
+                exit={{ opacity: 0, y: 10, scale: 0.95 }}
+                className="absolute top-full left-0 mt-3 w-64 bg-white border border-slate-200 rounded-3xl shadow-2xl overflow-hidden py-2"
+              >
+                <div className="px-4 py-2 border-b border-slate-100 mb-2">
+                   <span className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">Select Layout</span>
+                </div>
+                {/* Add Default option */}
+                <button 
+                  onClick={() => { setCurrentLayout(null); setIsLayoutSelectorOpen(false); }}
+                  className={`w-full px-4 py-3 text-left hover:bg-slate-50 transition-colors flex items-center justify-between ${!currentLayout ? 'bg-slate-50 border-l-4 border-[#FDB913]' : ''}`}
+                >
+                  <div>
+                    <span className="block text-sm font-bold text-slate-700">Default View</span>
+                    <span className="block text-[10px] text-slate-400 italic">Static fallback layout</span>
+                  </div>
+                  {!currentLayout && <div className="w-2 h-2 rounded-full bg-[#FDB913]" />}
+                </button>
+                {layouts.map(layout => (
+                  <button 
+                    key={layout.id}
+                    onClick={() => { setCurrentLayout(layout); setIsLayoutSelectorOpen(false); }}
+                    className={`w-full px-4 py-3 text-left hover:bg-slate-50 transition-colors flex items-center justify-between ${currentLayout?.id === layout.id ? 'bg-slate-50 border-l-4 border-[#FDB913]' : ''}`}
+                  >
+                    <div>
+                      <span className="block text-sm font-bold text-slate-700">{layout.name}</span>
+                      <span className="block text-[10px] text-slate-400">
+                        {layout.location_id ? 'Bound to specific location' : 'Global view'}
+                      </span>
+                    </div>
+                    {currentLayout?.id === layout.id && <div className="w-2 h-2 rounded-full bg-[#FDB913]" />}
+                  </button>
+                ))}
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </div>
+      )}
+
+      {/* Zoom Controls */}
+      <div className="absolute top-6 right-6 md:right-auto md:left-1/2 md:-translate-x-1/2 z-30 flex items-center gap-2 p-2 bg-white/90 backdrop-blur-md border border-slate-200 rounded-2xl shadow-xl">
+         <button onClick={() => setZoom(Math.max(0.5, zoom - 0.1))} className="p-2 text-slate-400 hover:text-slate-900 hover:bg-slate-50 rounded-xl transition-all"><Minimize2 className="w-4 h-4" /></button>
+         <div className="w-12 text-center text-[10px] font-bold text-slate-600 tabular-nums">{Math.round(zoom * 100)}%</div>
+         <button onClick={() => setZoom(Math.min(3, zoom + 0.1))} className="p-2 text-slate-400 hover:text-slate-900 hover:bg-slate-50 rounded-xl transition-all"><Maximize2 className="w-4 h-4" /></button>
       </div>
 
       {/* Vessel Callout / Info Panel */}

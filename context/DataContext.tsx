@@ -150,6 +150,7 @@ export interface LocationMaster {
   status: 'Active' | 'Inactive';
   center_x?: number;
   center_y?: number;
+  layout_id?: string;
 }
 
 export interface DockStatusMaster {

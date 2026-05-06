@@ -11,6 +11,7 @@ import {
   Clock, 
   AlertCircle,
   ChevronRight,
+  ChevronLeft,
   RotateCcw,
   Check,
   CheckCircle2,
@@ -376,42 +377,32 @@ export default function EquipmentReturn() {
         </div>
 
         {/* Global Standardized Pagination Footer */}
-        {totalPages > 1 && (
-          <div className="px-6 py-4 bg-slate-50 border-t border-slate-100 rounded-3xl border border-slate-200 flex items-center justify-between">
-            <div className="flex items-center gap-4">
-              <select 
-                value={itemsPerPage}
-                onChange={(e) => { setItemsPerPage(e.target.value === 'all' ? 'all' : parseInt(e.target.value)); setCurrentPage(1); }}
-                className="bg-white border border-slate-200 text-xs rounded-lg px-2 py-1"
-              >
-                <option value={10}>10</option>
-                <option value={25}>25</option>
-                <option value={50}>50</option>
-                <option value="all">All</option>
-              </select>
-              <p className="text-xs text-slate-500">
-                Showing <span className="font-bold text-slate-700">{paginatedList.length}</span> of <span className="font-bold text-slate-700">{totalItems}</span> entries
-              </p>
+        <div className="p-4 border-t border-slate-100 bg-slate-50/30 flex items-center justify-between">
+          <p className="text-xs text-slate-500">
+            Showing <span className="font-bold text-slate-700">{paginatedList.length}</span> of <span className="font-bold text-slate-700">{totalItems}</span> entries
+          </p>
+          <div className="flex items-center gap-2">
+            <button 
+              onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+              disabled={currentPage === 1}
+              className="p-1.5 border border-slate-200 rounded-lg text-slate-400 hover:text-[#FDB913] hover:border-[#FDB913]/30 disabled:opacity-50 transition-colors"
+            >
+              <ChevronLeft className="w-4 h-4" />
+            </button>
+            <div className="flex items-center gap-2 px-3">
+              <span className="text-xs font-bold text-slate-600">
+                {currentPage} <span className="text-slate-400 font-medium mx-1">/</span> {totalPages || 1}
+              </span>
             </div>
-            <div className="flex items-center gap-2">
-              <button 
-                onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
-                disabled={currentPage === 1}
-                className="p-1.5 border border-slate-200 rounded-lg disabled:opacity-30"
-              >
-                <ChevronRight className="w-4 h-4 rotate-180" />
-              </button>
-              <span className="text-xs font-bold text-slate-600">{currentPage} / {totalPages || 1}</span>
-              <button 
-                onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
-                disabled={currentPage === totalPages || totalPages === 0}
-                className="p-1.5 border border-slate-200 rounded-lg disabled:opacity-30"
-              >
-                <ChevronRight className="w-4 h-4" />
-              </button>
-            </div>
+            <button 
+              onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
+              disabled={currentPage === totalPages || totalPages === 0}
+              className="p-1.5 border border-slate-200 rounded-lg text-slate-400 hover:text-[#FDB913] hover:border-[#FDB913]/30 disabled:opacity-50 transition-colors"
+            >
+              <ChevronRight className="w-4 h-4" />
+            </button>
           </div>
-        )}
+        </div>
       </div>
 
       {/* Return Modal */}

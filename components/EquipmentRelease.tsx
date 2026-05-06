@@ -18,7 +18,8 @@ import {
   Calendar,
   ShieldCheck,
   AlertCircle,
-  X
+  X,
+  ChevronLeft
 } from 'lucide-react';
 import { useData, LoanRequest, Equipment, ReleaseRecord, ReleaseItem } from '@/context/DataContext';
 import { api } from '@/lib/api-client';
@@ -603,35 +604,27 @@ export default function EquipmentRelease() {
               </div>
               
               {/* Pagination Footer for Pending */}
-              <div className="px-6 py-4 bg-slate-50 border-t border-slate-100 flex items-center justify-between">
-                <div className="flex items-center gap-4">
-                  <select 
-                    value={itemsPerPage}
-                    onChange={(e) => { setItemsPerPage(e.target.value === 'all' ? 'all' : parseInt(e.target.value)); setCurrentPagePending(1); }}
-                    className="bg-white border border-slate-200 text-xs rounded-lg px-2 py-1"
-                  >
-                    <option value={10}>10</option>
-                    <option value={25}>25</option>
-                    <option value={50}>50</option>
-                    <option value="all">All</option>
-                  </select>
-                  <p className="text-xs text-slate-500">
-                    Showing <span className="font-bold text-slate-700">{paginatedPending.length}</span> of <span className="font-bold text-slate-700">{totalPending}</span> entries
-                  </p>
-                </div>
+              <div className="p-4 border-t border-slate-100 bg-slate-50/30 flex items-center justify-between">
+                <p className="text-xs text-slate-500">
+                  Showing <span className="font-bold text-slate-700">{paginatedPending.length}</span> of <span className="font-bold text-slate-700">{totalPending}</span> entries
+                </p>
                 <div className="flex items-center gap-2">
                   <button 
                     onClick={() => setCurrentPagePending(prev => Math.max(1, prev - 1))}
                     disabled={currentPagePending === 1}
-                    className="p-1.5 border border-slate-200 rounded-lg disabled:opacity-30"
+                    className="p-1.5 border border-slate-200 rounded-lg text-slate-400 hover:text-[#FDB913] hover:border-[#FDB913]/30 disabled:opacity-50 transition-colors"
                   >
-                    <ChevronRight className="w-4 h-4 rotate-180" />
+                    <ChevronLeft className="w-4 h-4" />
                   </button>
-                  <span className="text-xs font-bold text-slate-600">{currentPagePending} / {totalPagesPending || 1}</span>
+                  <div className="flex items-center gap-2 px-3">
+                    <span className="text-xs font-bold text-slate-600">
+                      {currentPagePending} <span className="text-slate-400 font-medium mx-1">/</span> {totalPagesPending || 1}
+                    </span>
+                  </div>
                   <button 
                     onClick={() => setCurrentPagePending(prev => Math.min(totalPagesPending, prev + 1))}
                     disabled={currentPagePending === totalPagesPending || totalPagesPending === 0}
-                    className="p-1.5 border border-slate-200 rounded-lg disabled:opacity-30"
+                    className="p-1.5 border border-slate-200 rounded-lg text-slate-400 hover:text-[#FDB913] hover:border-[#FDB913]/30 disabled:opacity-50 transition-colors"
                   >
                     <ChevronRight className="w-4 h-4" />
                   </button>
@@ -721,35 +714,27 @@ export default function EquipmentRelease() {
               </div>
 
               {/* Pagination Footer for History */}
-              <div className="px-6 py-4 bg-slate-50 border-t border-slate-100 flex items-center justify-between">
-                <div className="flex items-center gap-4">
-                  <select 
-                    value={itemsPerPage}
-                    onChange={(e) => { setItemsPerPage(e.target.value === 'all' ? 'all' : parseInt(e.target.value)); setCurrentPageHistory(1); }}
-                    className="bg-white border border-slate-200 text-xs rounded-lg px-2 py-1"
-                  >
-                    <option value={10}>10</option>
-                    <option value={25}>25</option>
-                    <option value={50}>50</option>
-                    <option value="all">All</option>
-                  </select>
-                  <p className="text-xs text-slate-500">
-                    Showing <span className="font-bold text-slate-700">{paginatedHistory.length}</span> of <span className="font-bold text-slate-700">{totalHistory}</span> entries
-                  </p>
-                </div>
+              <div className="p-4 border-t border-slate-100 bg-slate-50/30 flex items-center justify-between">
+                <p className="text-xs text-slate-500">
+                  Showing <span className="font-bold text-slate-700">{paginatedHistory.length}</span> of <span className="font-bold text-slate-700">{totalHistory}</span> entries
+                </p>
                 <div className="flex items-center gap-2">
                   <button 
                     onClick={() => setCurrentPageHistory(prev => Math.max(1, prev - 1))}
                     disabled={currentPageHistory === 1}
-                    className="p-1.5 border border-slate-200 rounded-lg disabled:opacity-30"
+                    className="p-1.5 border border-slate-200 rounded-lg text-slate-400 hover:text-[#FDB913] hover:border-[#FDB913]/30 disabled:opacity-50 transition-colors"
                   >
-                    <ChevronRight className="w-4 h-4 rotate-180" />
+                    <ChevronLeft className="w-4 h-4" />
                   </button>
-                  <span className="text-xs font-bold text-slate-600">{currentPageHistory} / {totalPagesHistory || 1}</span>
+                  <div className="flex items-center gap-2 px-3">
+                    <span className="text-xs font-bold text-slate-600">
+                      {currentPageHistory} <span className="text-slate-400 font-medium mx-1">/</span> {totalPagesHistory || 1}
+                    </span>
+                  </div>
                   <button 
                     onClick={() => setCurrentPageHistory(prev => Math.min(totalPagesHistory, prev + 1))}
                     disabled={currentPageHistory === totalPagesHistory || totalPagesHistory === 0}
-                    className="p-1.5 border border-slate-200 rounded-lg disabled:opacity-30"
+                    className="p-1.5 border border-slate-200 rounded-lg text-slate-400 hover:text-[#FDB913] hover:border-[#FDB913]/30 disabled:opacity-50 transition-colors"
                   >
                     <ChevronRight className="w-4 h-4" />
                   </button>
