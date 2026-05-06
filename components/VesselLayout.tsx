@@ -377,28 +377,22 @@ export default function VesselLayout() {
 
       {/* Layout Switcher (Floating) */}
       {layouts.length > 0 && (
-        <div className="absolute top-6 left-6 z-30">
+        <div className="absolute bottom-6 right-6 z-30">
           <button 
             onClick={() => setIsLayoutSelectorOpen(!isLayoutSelectorOpen)}
-            className="flex items-center gap-3 px-5 py-3 bg-white/90 backdrop-blur-md border border-slate-200 rounded-2xl shadow-xl hover:bg-white transition-all group"
+            title="Switch Layout"
+            className="w-12 h-12 flex items-center justify-center bg-white/95 backdrop-blur-xl border border-slate-200 rounded-full shadow-xl hover:shadow-2xl hover:bg-white transition-all group"
           >
-            <div className="w-8 h-8 bg-[#FDB913]/10 rounded-xl flex items-center justify-center text-[#e5a611]">
-              <LayoutGrid className="w-4 h-4" />
-            </div>
-            <div className="text-left">
-              <span className="block text-[8px] font-bold text-slate-400 uppercase tracking-widest leading-none mb-1">Current Layout</span>
-              <span className="block text-sm font-bold text-slate-700 leading-none">{currentLayout?.name || 'Default View'}</span>
-            </div>
-            <RotateCw className={`w-4 h-4 text-slate-300 group-hover:text-slate-500 transition-transform ${isLayoutSelectorOpen ? 'rotate-180' : ''}`} />
+            <MapIcon className={`w-5 h-5 transition-colors ${isLayoutSelectorOpen ? 'text-[#FDB913]' : 'text-slate-500 group-hover:text-[#FDB913]'}`} />
           </button>
 
           <AnimatePresence>
             {isLayoutSelectorOpen && (
               <motion.div 
-                initial={{ opacity: 0, y: 10, scale: 0.95 }}
+                initial={{ opacity: 0, y: -10, scale: 0.95 }}
                 animate={{ opacity: 1, y: 0, scale: 1 }}
-                exit={{ opacity: 0, y: 10, scale: 0.95 }}
-                className="absolute top-full left-0 mt-3 w-64 bg-white border border-slate-200 rounded-3xl shadow-2xl overflow-hidden py-2"
+                exit={{ opacity: 0, y: -10, scale: 0.95 }}
+                className="absolute bottom-full right-0 mb-3 w-64 bg-white border border-slate-200 rounded-3xl shadow-2xl overflow-hidden py-2"
               >
                 <div className="px-4 py-2 border-b border-slate-100 mb-2">
                    <span className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">Select Layout</span>
