@@ -14,7 +14,8 @@ import {
   Maximize2,
   Layout,
   AlertCircle,
-  Edit2
+  Edit2,
+  MapPin
 } from 'lucide-react';
 import { api } from '@/lib/api-client';
 
@@ -24,7 +25,6 @@ interface VesselLayout {
   svg_content: string;
   viewbox: string;
   is_default: boolean;
-  location_id?: string;
   scale_x: number;
   scale_y: number;
   default_zoom: number;
@@ -33,7 +33,6 @@ interface VesselLayout {
 
 export default function MasterLayout() {
   const [layouts, setLayouts] = useState<VesselLayout[]>([]);
-  const [locations, setLocations] = useState<any[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [isLoading, setIsLoading] = useState(true);
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -55,7 +54,6 @@ export default function MasterLayout() {
 
   useEffect(() => {
     fetchLayouts();
-    fetchLocations();
   }, []);
 
   const fetchLayouts = async () => {
@@ -65,11 +63,6 @@ export default function MasterLayout() {
       setLayouts(data);
     }
     setIsLoading(false);
-  };
-
-  const fetchLocations = async () => {
-    const { data } = await api.from('master_locations').select('*');
-    if (data) setLocations(data);
   };
 
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -110,7 +103,6 @@ export default function MasterLayout() {
       svg_content: svgContent,
       viewbox,
       is_default: isDefault ? 1 : 0,
-      location_id: locationId || null,
       scale_x: parseFloat(scaleX.toString()) || 3.6,
       scale_y: parseFloat(scaleY.toString()) || 3.2,
       default_zoom: parseFloat(defaultZoom.toString()) || 1.0
@@ -148,7 +140,6 @@ export default function MasterLayout() {
     setSvgContent('');
     setViewbox('0 0 1200 800');
     setIsDefault(false);
-    setLocationId('');
     setScaleX(3.6);
     setScaleY(3.2);
     setDefaultZoom(1.0);
@@ -172,7 +163,6 @@ export default function MasterLayout() {
     setSvgContent(layout.svg_content);
     setViewbox(layout.viewbox);
     setIsDefault(layout.is_default);
-    setLocationId(layout.location_id || '');
     setScaleX(layout.scale_x);
     setScaleY(layout.scale_y);
     setDefaultZoom(layout.default_zoom || 1.0);
@@ -259,7 +249,7 @@ export default function MasterLayout() {
                     <Maximize2 className="w-3 h-3" /> Preview Full
                   </button>
                </div>
-               {layout.is_default && (
+               {!!layout.is_default && (
                  <div className="absolute top-4 right-4 px-2 py-1 bg-teal-500 text-white rounded-lg text-[9px] font-bold uppercase tracking-widest flex items-center gap-1 shadow-sm">
                    <CheckCircle2 className="w-3 h-3" /> Default
                  </div>
@@ -269,15 +259,7 @@ export default function MasterLayout() {
             <div className="p-6 flex-1 flex flex-col">
               <h3 className="font-bold text-slate-800 mb-1 truncate">{layout.name}</h3>
               <p className="text-[10px] text-slate-400 font-mono mb-2">Viewbox: {layout.viewbox}</p>
-              {layout.location_id && (
-                <div className="flex items-center gap-1.5 text-slate-500 mb-4">
-                  <MapPin className="w-3 h-3" />
-                  <span className="text-[10px] font-medium">{locations.find(l => l.id === layout.location_id)?.name || 'Unknown Location'}</span>
-                </div>
-              )}
-              {!layout.location_id && (
-                <div className="h-4 mb-4" /> // Spacer
-              )}
+              <div className="h-4 mb-4" /> {/* Spacer */}
               
               <div className="mt-auto flex items-center justify-between gap-2">
                 <div className="flex items-center gap-2">
@@ -303,14 +285,14 @@ export default function MasterLayout() {
                     <Trash2 className="w-4 h-4" />
                   </button>
                 </div>
-                {!layout.is_default && (
-                  <button 
-                    onClick={() => handleSetDefault(layout)}
-                    className="px-4 py-2 bg-slate-50 text-slate-600 rounded-xl text-[10px] font-bold hover:bg-slate-100 transition-all uppercase tracking-wider"
-                  >
-                    Set Default
-                  </button>
-                )}
+                 {!layout.is_default && (
+                   <button 
+                     onClick={() => handleSetDefault(layout)}
+                     className="px-4 py-2 bg-slate-50 text-slate-600 rounded-xl text-[10px] font-bold hover:bg-slate-100 transition-all uppercase tracking-wider"
+                   >
+                     Set Default
+                   </button>
+                 )}
               </div>
             </div>
           </motion.div>
@@ -389,7 +371,7 @@ export default function MasterLayout() {
                       </div>
 
                       <div className="space-y-4">
-                        <div>
+                         <div>
                           <label className="text-xs font-bold text-slate-500 uppercase tracking-widest mb-2 block px-1">Layout Name</label>
                           <input 
                             type="text" 
@@ -399,19 +381,6 @@ export default function MasterLayout() {
                             placeholder="e.g. Workshop Area West"
                             className="w-full px-5 py-4 bg-slate-50 border border-slate-200 rounded-2xl text-sm outline-none focus:ring-4 focus:ring-[#FDB913]/10 focus:border-[#FDB913] transition-all"
                           />
-                        </div>
-                        <div>
-                          <label className="text-xs font-bold text-slate-500 uppercase tracking-widest mb-2 block px-1">Bind to Location (Optional)</label>
-                          <select 
-                            value={locationId}
-                            onChange={(e) => setLocationId(e.target.value)}
-                            className="w-full px-5 py-4 bg-slate-50 border border-slate-200 rounded-2xl text-sm outline-none focus:ring-4 focus:ring-[#FDB913]/10 focus:border-[#FDB913] transition-all appearance-none"
-                          >
-                            <option value="">No location binding (Global)</option>
-                            {locations.map(loc => (
-                              <option key={loc.id} value={loc.id}>{loc.name}</option>
-                            ))}
-                          </select>
                         </div>
                         <div className="grid grid-cols-2 gap-4">
                           <div>
