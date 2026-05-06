@@ -395,15 +395,44 @@ func PutData(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// ID can come from query param or body
-	id := r.URL.Query().Get("id")
+	// Identify which rows to update
+	q := r.URL.Query()
+	var conditions []string
+	var params []any
+
+	// 1. Check for single ID in query or body
+	id := q.Get("id")
 	if id == "" {
 		if v, ok := body[pkCol]; ok {
 			id = fmt.Sprintf("%v", v)
 		}
 	}
-	if id == "" {
-		writeJSON(w, 400, map[string]string{"error": "ID required for PUT"})
+	if id != "" {
+		conditions = append(conditions, fmt.Sprintf("%s = ?", pkCol))
+		params = append(params, id)
+	}
+
+	// 2. Check for 'IN' clause (bulk update)
+	if inStr := q.Get("in"); inStr != "" {
+		ids := strings.Split(inStr, ",")
+		var inPlaceholders []string
+		for _, rowID := range ids {
+			inPlaceholders = append(inPlaceholders, "?")
+			params = append(params, strings.TrimSpace(rowID))
+		}
+		conditions = append(conditions, fmt.Sprintf("%s IN (%s)", pkCol, strings.Join(inPlaceholders, ", ")))
+	}
+
+	// 3. Check for generic filters
+	filterCol := q.Get("filter_col")
+	filterVal := q.Get("filter_val")
+	if filterCol != "" && filterVal != "" {
+		conditions = append(conditions, fmt.Sprintf("%s = ?", filterCol))
+		params = append(params, filterVal)
+	}
+
+	if len(conditions) == 0 {
+		writeJSON(w, 400, map[string]string{"error": "ID or filter required for PUT"})
 		return
 	}
 
@@ -417,12 +446,13 @@ func PutData(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	// Build the SET clause
 	keys := make([]string, 0, len(body))
-	vals := make([]any, 0, len(body))
+	setVals := make([]any, 0, len(body))
 	for k, v := range body {
 		if k != pkCol {
 			keys = append(keys, k)
-			vals = append(vals, v)
+			setVals = append(setVals, v)
 		}
 	}
 
@@ -431,21 +461,31 @@ func PutData(w http.ResponseWriter, r *http.Request) {
 		for i, k := range keys {
 			sets[i] = k + " = ?"
 		}
-		vals = append(vals, id)
-		query := fmt.Sprintf("UPDATE %s SET %s WHERE %s = ?", table, strings.Join(sets, ", "), pkCol)
-		if _, err := db.DB.Exec(query, vals...); err != nil {
+		
+		whereClause := strings.Join(conditions, " OR ")
+		if len(conditions) > 1 {
+			whereClause = strings.Join(conditions, " AND ")
+		}
+
+		query := fmt.Sprintf("UPDATE %s SET %s WHERE %s", table, strings.Join(sets, ", "), whereClause)
+		finalParams := append(setVals, params...)
+		
+		if _, err := db.DB.Exec(query, finalParams...); err != nil {
 			writeJSON(w, 500, map[string]string{"error": err.Error()})
 			return
 		}
 	}
 
-	result, err := fetchRow(table, pkCol, id)
-	if err != nil {
-		writeJSON(w, 500, map[string]string{"error": err.Error()})
-		return
+	// If it was a single ID update, return the updated record
+	if id != "" {
+		result, err := fetchRow(table, pkCol, id)
+		if err == nil {
+			writeJSON(w, 200, map[string]any{"data": result, "error": nil})
+			return
+		}
 	}
 
-	writeJSON(w, 200, map[string]any{"data": result, "error": nil})
+	writeJSON(w, 200, map[string]any{"data": map[string]any{"success": true}, "error": nil})
 }
 
 // DeleteData handles DELETE /api/data/:table
