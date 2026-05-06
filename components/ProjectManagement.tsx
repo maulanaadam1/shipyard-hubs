@@ -752,10 +752,19 @@ export default function ProjectManagement() {
                       onChange={(e) => setFormData({ ...formData, status: e.target.value })}
                       className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-[#FDB913]/30 focus:border-[#FDB913] transition-all"
                     >
-                      <option value="Active">Active</option>
-                      <option value="Completed">Completed</option>
-                      <option value="On Going">On Going</option>
-                      <option value="Pending">Pending</option>
+                      <option value="">Select Status</option>
+                      {dropdownConfigs?.filter(c => c.category === 'project_statuses' && c.is_active).map(c => (
+                        <option key={c.id} value={c.value}>{c.label}</option>
+                      ))}
+                      {/* Fallbacks if DB is completely empty */}
+                      {(!dropdownConfigs || dropdownConfigs.filter(c => c.category === 'project_statuses').length === 0) && (
+                        <>
+                          <option value="Active">Active</option>
+                          <option value="Completed">Completed</option>
+                          <option value="On Going">On Going</option>
+                          <option value="Pending">Pending</option>
+                        </>
+                      )}
                     </select>
                   </div>
                   <div className="space-y-2">
