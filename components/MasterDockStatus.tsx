@@ -160,18 +160,19 @@ export default function MasterDockStatus() {
         <div className="overflow-x-auto">
           <table className="w-full text-left border-collapse">
             <thead>
-              <tr className="bg-slate-50 text-slate-500 text-xs uppercase tracking-wider border-b border-slate-200">
-                <th className="p-4 font-bold">Status Name</th>
-                <th className="p-4 font-bold text-center">Color Code</th>
-                <th className="p-4 font-bold text-center">Preview</th>
-                <th className="p-4 font-bold text-center">Status</th>
-                <th className="p-4 font-bold text-right">Actions</th>
+              <tr className="bg-slate-50 text-slate-500 text-[10px] uppercase font-bold tracking-wider border-b border-slate-200">
+                <th className="px-6 py-4 w-12 text-center">No</th>
+                <th className="px-6 py-4">Status Name</th>
+                <th className="px-6 py-4 text-center">Color Code</th>
+                <th className="px-6 py-4 text-center">Preview</th>
+                <th className="px-6 py-4 text-center">Status</th>
+                <th className="px-6 py-4 text-right">Actions</th>
               </tr>
             </thead>
             <tbody className="text-sm text-slate-700 divide-y divide-slate-100">
               {currentStatuses.length === 0 ? (
                 <tr>
-                  <td colSpan={5} className="p-8 text-center text-slate-500">
+                  <td colSpan={6} className="p-8 text-center text-slate-500">
                     <div className="flex flex-col items-center justify-center">
                       <Settings className="w-12 h-12 text-slate-200 mb-3" />
                       <p className="font-medium">No statuses found</p>
@@ -180,17 +181,22 @@ export default function MasterDockStatus() {
                   </td>
                 </tr>
               ) : (
-                currentStatuses.map((status) => (
+                currentStatuses.map((status, idx) => (
                   <tr key={status.id} className="hover:bg-slate-50/80 transition-colors group">
-                    <td className="p-4 font-bold text-slate-800">
+                    <td className="px-6 py-4 text-center">
+                      <span className="text-xs font-bold text-slate-400">
+                        {(currentPage - 1) * itemsPerPage + idx + 1}
+                      </span>
+                    </td>
+                    <td className="px-6 py-4 font-bold text-slate-800">
                       {status.name}
                     </td>
-                    <td className="p-4 text-center">
+                    <td className="px-6 py-4 text-center">
                       <code className="text-[10px] font-mono bg-slate-100 px-2 py-1 rounded text-slate-500 uppercase tracking-wider">
                         {status.color}
                       </code>
                     </td>
-                    <td className="p-4 text-center">
+                    <td className="px-6 py-4 text-center">
                       <div className="flex justify-center">
                         <div 
                           className="w-8 h-4 rounded-full shadow-sm"
@@ -198,16 +204,16 @@ export default function MasterDockStatus() {
                         />
                       </div>
                     </td>
-                    <td className="p-4 text-center">
-                      <span className={'px-3 py-1 text-xs font-bold rounded-full ' + (
+                    <td className="px-6 py-4 text-center">
+                      <span className={'px-3 py-1 text-[10px] font-bold rounded-full uppercase border transition-all ' + (
                         status.is_active 
-                          ? 'bg-emerald-100 text-emerald-700' 
-                          : 'bg-slate-100 text-slate-600'
+                          ? 'bg-emerald-50 text-emerald-700 border-emerald-100' 
+                          : 'bg-slate-100 text-slate-600 border-slate-200'
                       )}>
                         {status.is_active ? 'Active' : 'Inactive'}
                       </span>
                     </td>
-                    <td className="p-4 text-right">
+                    <td className="px-6 py-4 text-right">
                       <div className="flex items-center justify-end gap-1">
                       {canAccess('Master Dock Status', 'edit') && (
                         <button 
@@ -234,30 +240,33 @@ export default function MasterDockStatus() {
           </table>
         </div>
 
-        {/* Pagination */}
-        {totalPages > 1 && (
-          <div className="p-4 border-t border-slate-100 flex items-center justify-between bg-slate-50/30">
-            <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">
-              Showing {(currentPage - 1) * itemsPerPage + 1} to {Math.min(currentPage * itemsPerPage, filteredStatuses.length)} of {filteredStatuses.length} entries
-            </p>
-            <div className="flex items-center gap-2">
-              <button 
-                onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
-                disabled={currentPage === 1}
-                className="p-2 border border-slate-200 rounded-lg hover:bg-white disabled:opacity-30 transition-all shadow-sm"
-              >
-                <ChevronLeft className="w-4 h-4" />
-              </button>
-              <button 
-                onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
-                disabled={currentPage === totalPages}
-                className="p-2 border border-slate-200 rounded-lg hover:bg-white disabled:opacity-30 transition-all shadow-sm"
-              >
-                <ChevronRight className="w-4 h-4" />
-              </button>
+        {/* Pagination Footer */}
+        <div className="p-4 border-t border-slate-100 bg-slate-50/30 flex items-center justify-between">
+          <p className="text-xs text-slate-500">
+            Showing <span className="font-bold text-slate-700">{currentStatuses.length}</span> of <span className="font-bold text-slate-700">{filteredStatuses.length}</span> entries
+          </p>
+          <div className="flex items-center gap-2">
+            <button 
+              onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+              disabled={currentPage === 1}
+              className="p-1.5 border border-slate-200 rounded-lg text-slate-400 hover:text-[#FDB913] hover:border-[#FDB913]/30 disabled:opacity-50 transition-colors"
+            >
+              <ChevronLeft className="w-4 h-4" />
+            </button>
+            <div className="flex items-center gap-2 px-3">
+              <span className="text-xs font-bold text-slate-600">
+                {currentPage} <span className="text-slate-400 font-medium mx-1">/</span> {totalPages || 1}
+              </span>
             </div>
+            <button 
+              onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
+              disabled={currentPage === totalPages || totalPages === 0}
+              className="p-1.5 border border-slate-200 rounded-lg text-slate-400 hover:text-[#FDB913] hover:border-[#FDB913]/30 disabled:opacity-50 transition-colors"
+            >
+              <ChevronRight className="w-4 h-4" />
+            </button>
           </div>
-        )}
+        </div>
       </div>
 
       {/* Add/Edit Modal */}
