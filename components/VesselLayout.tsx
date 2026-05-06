@@ -25,6 +25,7 @@ interface VesselLayoutData {
   location_id?: string;
   scale_x: number;
   scale_y: number;
+  default_zoom: number;
 }
 
 // Normalized vessel path from reference
@@ -223,6 +224,9 @@ export default function VesselLayout() {
         className="flex-1 w-full h-full overflow-auto md:overflow-hidden select-none bg-[#f1f5f9] custom-scrollbar flex items-start md:items-center justify-start md:justify-center"
       >
         <motion.div 
+          animate={{ 
+            scale: currentLayout?.default_zoom || 1.0
+          }}
           className="origin-top-left md:origin-center h-full w-auto md:w-full md:h-full flex items-start justify-start md:items-center md:justify-center"
         >
           <svg 

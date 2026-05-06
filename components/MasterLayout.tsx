@@ -13,7 +13,8 @@ import {
   X,
   Maximize2,
   Layout,
-  AlertCircle
+  AlertCircle,
+  Edit2
 } from 'lucide-react';
 import { api } from '@/lib/api-client';
 
@@ -26,6 +27,7 @@ interface VesselLayout {
   location_id?: string;
   scale_x: number;
   scale_y: number;
+  default_zoom: number;
   created_at: string;
 }
 
@@ -46,6 +48,8 @@ export default function MasterLayout() {
   const [locationId, setLocationId] = useState('');
   const [scaleX, setScaleX] = useState(3.6);
   const [scaleY, setScaleY] = useState(3.2);
+  const [defaultZoom, setDefaultZoom] = useState(1.0);
+  const [editingLayoutId, setEditingLayoutId] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -101,17 +105,25 @@ export default function MasterLayout() {
 
     setIsSubmitting(true);
     const payload = {
-      id: crypto.randomUUID(),
+      id: editingLayoutId || crypto.randomUUID(),
       name,
       svg_content: svgContent,
       viewbox,
       is_default: isDefault ? 1 : 0,
       location_id: locationId || null,
       scale_x: parseFloat(scaleX.toString()) || 3.6,
-      scale_y: parseFloat(scaleY.toString()) || 3.2
+      scale_y: parseFloat(scaleY.toString()) || 3.2,
+      default_zoom: parseFloat(defaultZoom.toString()) || 1.0
     };
 
-    const { error } = await api.from('vessel_layouts').insert(payload);
+    let error;
+    if (editingLayoutId) {
+      const { error: updateError } = await api.from('vessel_layouts').update(payload).eq('id', editingLayoutId);
+      error = updateError;
+    } else {
+      const { error: insertError } = await api.from('vessel_layouts').insert(payload);
+      error = insertError;
+    }
     
     if (error) {
       alert('Error saving layout: ' + error.message);
@@ -139,6 +151,8 @@ export default function MasterLayout() {
     setLocationId('');
     setScaleX(3.6);
     setScaleY(3.2);
+    setDefaultZoom(1.0);
+    setEditingLayoutId(null);
   };
 
   const handleDelete = async (id: string) => {
@@ -150,6 +164,19 @@ export default function MasterLayout() {
     } else {
       fetchLayouts();
     }
+  };
+
+  const handleEdit = (layout: VesselLayout) => {
+    setEditingLayoutId(layout.id);
+    setName(layout.name);
+    setSvgContent(layout.svg_content);
+    setViewbox(layout.viewbox);
+    setIsDefault(layout.is_default);
+    setLocationId(layout.location_id || '');
+    setScaleX(layout.scale_x);
+    setScaleY(layout.scale_y);
+    setDefaultZoom(layout.default_zoom || 1.0);
+    setIsModalOpen(true);
   };
 
   const handleSetDefault = async (layout: VesselLayout) => {
@@ -262,6 +289,13 @@ export default function MasterLayout() {
                     <Download className="w-4 h-4" />
                   </button>
                   <button 
+                    onClick={() => handleEdit(layout)}
+                    title="Edit Layout"
+                    className="p-2.5 bg-slate-50 text-slate-400 hover:text-[#FDB913] hover:bg-[#FDB913]/5 rounded-xl transition-all"
+                  >
+                    <Edit2 className="w-4 h-4" />
+                  </button>
+                  <button 
                     onClick={() => handleDelete(layout.id)}
                     title="Delete Layout"
                     className="p-2.5 bg-slate-50 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-xl transition-all"
@@ -317,8 +351,8 @@ export default function MasterLayout() {
                       <FileUp className="w-6 h-6" />
                     </div>
                     <div>
-                      <h3 className="font-bold text-2xl text-slate-800 tracking-tight">Upload SVG Layout</h3>
-                      <p className="text-xs text-slate-500">Add a new floor plan for vessel positioning.</p>
+                      <h3 className="font-bold text-2xl text-slate-800 tracking-tight">{editingLayoutId ? 'Edit SVG Layout' : 'Upload SVG Layout'}</h3>
+                      <p className="text-xs text-slate-500">{editingLayoutId ? 'Modify layout properties and visual settings.' : 'Add a new floor plan for vessel positioning.'}</p>
                     </div>
                   </div>
                   <button type="button" onClick={() => setIsModalOpen(false)} className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-full transition-all">
@@ -427,6 +461,25 @@ export default function MasterLayout() {
                             />
                             <p className="text-[10px] text-slate-400 mt-1 px-1">Default: 3.2</p>
                           </div>
+                        </div>
+
+                        <div>
+                          <label className="text-xs font-bold text-slate-500 uppercase tracking-widest mb-2 block px-1">Initial Zoom Level</label>
+                          <div className="flex items-center gap-4">
+                            <input 
+                              type="range" 
+                              min="0.5" 
+                              max="3.0" 
+                              step="0.1"
+                              value={defaultZoom}
+                              onChange={(e) => setDefaultZoom(parseFloat(e.target.value))}
+                              className="flex-1 accent-[#FDB913]"
+                            />
+                            <div className="w-16 px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-center text-sm font-bold text-slate-700">
+                              {Math.round(defaultZoom * 100)}%
+                            </div>
+                          </div>
+                          <p className="text-[10px] text-slate-400 mt-1 px-1">Sets the initial zoom level when this layout is loaded.</p>
                         </div>
                       </div>
                     </div>

@@ -213,6 +213,7 @@ func createTables() {
 		location_id TEXT,
 		scale_x REAL DEFAULT 3.6,
 		scale_y REAL DEFAULT 3.2,
+		default_zoom REAL DEFAULT 1.0,
 		created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 	);
 
@@ -244,6 +245,7 @@ func createTables() {
 	DB.Exec("ALTER TABLE vessel_layouts ADD COLUMN scale_x REAL DEFAULT 3.6")
 	DB.Exec("ALTER TABLE vessel_layouts ADD COLUMN scale_y REAL DEFAULT 3.2")
 	DB.Exec("ALTER TABLE vessel_layouts ADD COLUMN location_id TEXT")
+	DB.Exec("ALTER TABLE vessel_layouts ADD COLUMN default_zoom REAL DEFAULT 1.0")
 	
 	DB.Exec(`CREATE TABLE IF NOT EXISTS roles_master (
 		id TEXT PRIMARY KEY,
