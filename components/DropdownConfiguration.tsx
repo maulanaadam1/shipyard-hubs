@@ -24,6 +24,7 @@ const CATEGORIES = [
   { id: 'docking_types', label: 'Docking Types', icon: 'Anchor' },
   { id: 'equipment_types', label: 'Equipment Types', icon: 'Tool' },
   { id: 'extra_permissions', label: 'Extra Permissions', icon: 'Lock' },
+  { id: 'project_statuses', label: 'Project Statuses', icon: 'Activity' },
 ];
 
 export default function DropdownConfiguration() {
