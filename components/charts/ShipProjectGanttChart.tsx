@@ -110,7 +110,7 @@ export default function ShipProjectGanttChart({ fullPage = false }: { fullPage?:
 
     const activeProjects = projects.filter(p => {
       const s = p.status?.toLowerCase() || '';
-      if (!['active', 'in progress', 'on going', 'ongoing'].includes(s)) return false;
+      if (!['on going', 'ongoing'].includes(s)) return false;
       const sd = p.est_start || p.actual_start;
       const ed = p.est_finish || p.actual_finish;
       if (!sd || !ed) return false;
