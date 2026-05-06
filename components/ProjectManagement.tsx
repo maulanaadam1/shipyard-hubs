@@ -27,7 +27,7 @@ import Papa from 'papaparse';
 import * as XLSX from 'xlsx';
 
 export default function ProjectManagement() {
-  const { projects, setProjects, dropdownConfigs, locations, fetchData, canAccess } = useData();
+  const { projects, setProjects, dropdownConfigs, locations, ships, fetchData, canAccess } = useData();
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [showSuccessModal, setShowSuccessModal] = useState(false);
   const [editingProject, setEditingProject] = useState<Project | null>(null);
@@ -757,24 +757,34 @@ export default function ProjectManagement() {
                   </div>
                   <div className="space-y-2">
                     <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Vessel Name</label>
-                    <input 
+                    <select 
                       required
-                      type="text"
                       value={formData.shipname}
-                      onChange={(e) => setFormData({ ...formData, shipname: e.target.value })}
+                      onChange={(e) => {
+                        const selectedShipname = e.target.value;
+                        const shipData = ships.find(s => s.shipname === selectedShipname);
+                        setFormData({ 
+                          ...formData, 
+                          shipname: selectedShipname,
+                          cust_company: shipData?.company || ''
+                        });
+                      }}
                       className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-[#FDB913]/30 focus:border-[#FDB913] transition-all"
-                      placeholder="e.g. MDI-8"
-                    />
+                    >
+                      <option value="">Select Vessel</option>
+                      {ships?.map(s => (
+                        <option key={s.id} value={s.shipname}>{s.shipname}</option>
+                      ))}
+                    </select>
                   </div>
                   <div className="space-y-2">
                     <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Customer Company</label>
                     <input 
-                      required
+                      readOnly
                       type="text"
                       value={formData.cust_company}
-                      onChange={(e) => setFormData({ ...formData, cust_company: e.target.value })}
-                      className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-[#FDB913]/30 focus:border-[#FDB913] transition-all"
-                      placeholder="e.g. PT. McConnell Dowell Indonesia"
+                      className="w-full px-4 py-2.5 bg-slate-100 border border-slate-200 rounded-xl text-sm outline-none cursor-not-allowed text-slate-500"
+                      placeholder="Auto-populated from vessel"
                     />
                   </div>
                   <div className="space-y-2">

@@ -44,13 +44,21 @@ export default function ShipManagement() {
     type: '',
     shipname: '',
     company: '',
-    loa: 0,
-    breadth: 0,
-    depth: 0,
-    draft: 0,
-    gt: 0,
+    loa: '',
+    breadth: '',
+    depth: '',
+    draft: '',
+    gt: '',
     buid: ''
   });
+
+  const handleNumericInput = (value: string) => {
+    // Only allow digits and one dot
+    const cleanValue = value.replace(/[^0-9.]/g, '');
+    const dotCount = (cleanValue.match(/\./g) || []).length;
+    if (dotCount > 1) return null; // Don't allow multiple dots
+    return cleanValue;
+  };
 
   const handleOpenModal = (ship: Ship | null = null) => {
     if (ship) {
@@ -59,11 +67,11 @@ export default function ShipManagement() {
         type: ship.type || '', 
         shipname: ship.shipname,
         company: ship.company || '',
-        loa: ship.loa || 0,
-        breadth: ship.breadth || 0,
-        depth: ship.depth || 0,
-        draft: ship.draft || 0,
-        gt: ship.gt || 0,
+        loa: ship.loa?.toString() || '',
+        breadth: ship.breadth?.toString() || '',
+        depth: ship.depth?.toString() || '',
+        draft: ship.draft?.toString() || '',
+        gt: ship.gt?.toString() || '',
         buid: ship.buid || ''
       });
     } else {
@@ -72,11 +80,11 @@ export default function ShipManagement() {
         type: '', 
         shipname: '',
         company: '',
-        loa: 0,
-        breadth: 0,
-        depth: 0,
-        draft: 0,
-        gt: 0,
+        loa: '',
+        breadth: '',
+        depth: '',
+        draft: '',
+        gt: '',
         buid: ''
       });
     }
@@ -88,16 +96,25 @@ export default function ShipManagement() {
     setIsLoading(true);
     
     try {
+      const payload = {
+        ...formData,
+        loa: parseFloat(formData.loa) || 0,
+        breadth: parseFloat(formData.breadth) || 0,
+        depth: parseFloat(formData.depth) || 0,
+        draft: parseFloat(formData.draft) || 0,
+        gt: parseFloat(formData.gt) || 0
+      };
+
       if (editingShip) {
         const { error } = await api.from('ships')
-          .update(formData)
+          .update(payload)
           .eq('id', editingShip.id);
         
         if (error) throw error;
       } else {
         const newId = Math.random().toString(16).substring(2, 10);
         const { error } = await api.from('ships')
-          .insert([{ id: newId, ...formData }]);
+          .insert([{ id: newId, ...payload }]);
         
         if (error) throw error;
         setShowSuccessModal(true);
@@ -557,10 +574,14 @@ export default function ShipManagement() {
                   <div className="space-y-1">
                     <label className="text-xs font-bold text-slate-500 uppercase">Gross Tonnage (GT)</label>
                     <input 
-                      type="number"
+                      type="text"
                       value={formData.gt}
-                      onChange={(e) => setFormData({ ...formData, gt: parseFloat(e.target.value) || 0 })}
+                      onChange={(e) => {
+                        const val = handleNumericInput(e.target.value);
+                        if (val !== null) setFormData({ ...formData, gt: val });
+                      }}
                       className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-[#FDB913]/30 focus:border-[#FDB913] transition-all"
+                      placeholder="0.00"
                     />
                   </div>
                 </div>
@@ -569,41 +590,53 @@ export default function ShipManagement() {
                   <div className="space-y-1">
                     <label className="text-[10px] font-bold text-slate-400 uppercase">LOA</label>
                     <input 
-                      type="number"
-                      step="0.01"
+                      type="text"
                       value={formData.loa}
-                      onChange={(e) => setFormData({ ...formData, loa: parseFloat(e.target.value) || 0 })}
+                      onChange={(e) => {
+                        const val = handleNumericInput(e.target.value);
+                        if (val !== null) setFormData({ ...formData, loa: val });
+                      }}
                       className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-xs outline-none focus:ring-2 focus:ring-[#FDB913]/30 focus:border-[#FDB913] transition-all"
+                      placeholder="0.00"
                     />
                   </div>
                   <div className="space-y-1">
                     <label className="text-[10px] font-bold text-slate-400 uppercase">Breadth</label>
                     <input 
-                      type="number"
-                      step="0.01"
+                      type="text"
                       value={formData.breadth}
-                      onChange={(e) => setFormData({ ...formData, breadth: parseFloat(e.target.value) || 0 })}
+                      onChange={(e) => {
+                        const val = handleNumericInput(e.target.value);
+                        if (val !== null) setFormData({ ...formData, breadth: val });
+                      }}
                       className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-xs outline-none focus:ring-2 focus:ring-[#FDB913]/30 focus:border-[#FDB913] transition-all"
+                      placeholder="0.00"
                     />
                   </div>
                   <div className="space-y-1">
                     <label className="text-[10px] font-bold text-slate-400 uppercase">Depth</label>
                     <input 
-                      type="number"
-                      step="0.01"
+                      type="text"
                       value={formData.depth}
-                      onChange={(e) => setFormData({ ...formData, depth: parseFloat(e.target.value) || 0 })}
+                      onChange={(e) => {
+                        const val = handleNumericInput(e.target.value);
+                        if (val !== null) setFormData({ ...formData, depth: val });
+                      }}
                       className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-xs outline-none focus:ring-2 focus:ring-[#FDB913]/30 focus:border-[#FDB913] transition-all"
+                      placeholder="0.00"
                     />
                   </div>
                   <div className="space-y-1">
                     <label className="text-[10px] font-bold text-slate-400 uppercase">Draft</label>
                     <input 
-                      type="number"
-                      step="0.01"
+                      type="text"
                       value={formData.draft}
-                      onChange={(e) => setFormData({ ...formData, draft: parseFloat(e.target.value) || 0 })}
+                      onChange={(e) => {
+                        const val = handleNumericInput(e.target.value);
+                        if (val !== null) setFormData({ ...formData, draft: val });
+                      }}
                       className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-xs outline-none focus:ring-2 focus:ring-[#FDB913]/30 focus:border-[#FDB913] transition-all"
+                      placeholder="0.00"
                     />
                   </div>
                 </div>

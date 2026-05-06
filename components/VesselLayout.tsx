@@ -523,9 +523,21 @@ function VesselComponent({ vessel, getSVGCoordinates, handleUpdatePosition, hand
   zoom: number,
   canEdit: boolean
 }) {
-  const isRect = ['BG', 'TK', 'LCT'].includes(vessel.type || '');
-  const targetWidth = (vessel.width || 10) * 3.6;
-  const targetHeight = (vessel.length || 30) * 3.2;
+  const { ships, dockStatuses } = useData();
+  
+  // Try to find ship dimensions from Master Ship first
+  const shipMaster = (ships || []).find(s => s.shipname === vessel.shipname);
+  
+  // Priority: 
+  // 1. LOA/Breadth from Master Ship (if shipmaster exists)
+  // 2. width/length from Project (if explicitly set)
+  // 3. default (10 / 30)
+  const actualBreadth = shipMaster?.breadth || vessel.width || 10;
+  const actualLOA = shipMaster?.loa || vessel.length || 30;
+
+  const isRect = ['BG', 'TK', 'LCT'].includes(vessel.type || shipMaster?.type || '');
+  const targetWidth = actualBreadth * 3.6;
+  const targetHeight = actualLOA * 3.2;
 
   // Use MotionValues for smooth position updates
   const mvX = useMotionValue(vessel.x_coordinate || 100);
@@ -560,7 +572,6 @@ function VesselComponent({ vessel, getSVGCoordinates, handleUpdatePosition, hand
   }, [vessel.x_coordinate, vessel.y_coordinate, mvX, mvY]);
 
   const getStatusColor = (statusName?: string) => {
-    const { dockStatuses } = useData();
     const status = (dockStatuses || []).find(s => s.name === statusName);
     return status?.color || '#e67e22';
   };
