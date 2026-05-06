@@ -23,6 +23,8 @@ interface VesselLayoutData {
   viewbox: string;
   is_default: boolean;
   location_id?: string;
+  scale_x: number;
+  scale_y: number;
 }
 
 // Normalized vessel path from reference
@@ -32,9 +34,7 @@ const ORIGINAL_PATH_HEIGHT = 235;
 
 export default function VesselLayout() {
   const { projects, dockStatuses, fetchData, canAccess } = useData();
-  const [searchTerm, setSearchTerm] = useState('');
-  const [zoom, setZoom] = useState(1.0); 
-  const [hoveredVessel, setHoveredVessel] = useState<Project | null>(null);
+  const [searchTerm, setSearchTerm] = useState('');  const [hoveredVessel, setHoveredVessel] = useState<Project | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [localProjects, setLocalProjects] = useState<Project[]>([]);
   const [layouts, setLayouts] = useState<VesselLayoutData[]>([]);
@@ -223,10 +223,6 @@ export default function VesselLayout() {
         className="flex-1 w-full h-full overflow-auto md:overflow-hidden select-none bg-[#f1f5f9] custom-scrollbar flex items-start md:items-center justify-start md:justify-center"
       >
         <motion.div 
-          animate={{ 
-            scale: zoom
-          }}
-          transition={{ type: 'spring', damping: 25, stiffness: 200 }}
           className="origin-top-left md:origin-center h-full w-auto md:w-full md:h-full flex items-start justify-start md:items-center md:justify-center"
         >
           <svg 
@@ -366,7 +362,7 @@ export default function VesselLayout() {
                   handleUpdatePosition={handleUpdatePosition}
                   handleRotate={handleRotate}
                   setHoveredVessel={setHoveredVessel}
-                  zoom={zoom}
+                  currentLayout={currentLayout}
                   canEdit={canEdit}
                 />
               ))}
@@ -435,12 +431,7 @@ export default function VesselLayout() {
         </div>
       )}
 
-      {/* Zoom Controls */}
-      <div className="absolute top-6 right-6 md:right-auto md:left-1/2 md:-translate-x-1/2 z-30 flex items-center gap-2 p-2 bg-white/90 backdrop-blur-md border border-slate-200 rounded-2xl shadow-xl">
-         <button onClick={() => setZoom(Math.max(0.5, zoom - 0.1))} className="p-2 text-slate-400 hover:text-slate-900 hover:bg-slate-50 rounded-xl transition-all"><Minimize2 className="w-4 h-4" /></button>
-         <div className="w-12 text-center text-[10px] font-bold text-slate-600 tabular-nums">{Math.round(zoom * 100)}%</div>
-         <button onClick={() => setZoom(Math.min(3, zoom + 0.1))} className="p-2 text-slate-400 hover:text-slate-900 hover:bg-slate-50 rounded-xl transition-all"><Maximize2 className="w-4 h-4" /></button>
-      </div>
+
 
       {/* Vessel Callout / Info Panel */}
       <AnimatePresence>
@@ -514,13 +505,13 @@ export default function VesselLayout() {
 }
 
 // Sub-component for individual vessel to encapsulate MotionValues
-function VesselComponent({ vessel, getSVGCoordinates, handleUpdatePosition, handleRotate, setHoveredVessel, zoom, canEdit }: { 
+function VesselComponent({ vessel, getSVGCoordinates, handleUpdatePosition, handleRotate, setHoveredVessel, currentLayout, canEdit }: { 
   vessel: Project, 
   getSVGCoordinates: (x: number, y: number) => { x: number, y: number },
   handleUpdatePosition: (v: Project, x: number, y: number) => void,
   handleRotate: (v: Project) => void,
   setHoveredVessel: (v: Project | null) => void,
-  zoom: number,
+  currentLayout: VesselLayoutData | null,
   canEdit: boolean
 }) {
   const { ships, dockStatuses } = useData();
@@ -536,8 +527,13 @@ function VesselComponent({ vessel, getSVGCoordinates, handleUpdatePosition, hand
   const actualLOA = shipMaster?.loa || vessel.length || 30;
 
   const isRect = ['BG', 'TK', 'LCT'].includes(vessel.type || shipMaster?.type || '');
-  const targetWidth = actualBreadth * 3.6;
-  const targetHeight = actualLOA * 3.2;
+  
+  // Use scale from layout or default
+  const scaleX = currentLayout?.scale_x || 3.6;
+  const scaleY = currentLayout?.scale_y || 3.2;
+
+  const targetWidth = actualBreadth * scaleX;
+  const targetHeight = actualLOA * scaleY;
 
   // Use MotionValues for smooth position updates
   const mvX = useMotionValue(vessel.x_coordinate || 100);

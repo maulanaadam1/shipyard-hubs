@@ -24,6 +24,8 @@ interface VesselLayout {
   viewbox: string;
   is_default: boolean;
   location_id?: string;
+  scale_x: number;
+  scale_y: number;
   created_at: string;
 }
 
@@ -42,6 +44,8 @@ export default function MasterLayout() {
   const [viewbox, setViewbox] = useState('0 0 1200 800');
   const [isDefault, setIsDefault] = useState(false);
   const [locationId, setLocationId] = useState('');
+  const [scaleX, setScaleX] = useState(3.6);
+  const [scaleY, setScaleY] = useState(3.2);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -102,7 +106,9 @@ export default function MasterLayout() {
       svg_content: svgContent,
       viewbox,
       is_default: isDefault ? 1 : 0,
-      location_id: locationId || null
+      location_id: locationId || null,
+      scale_x: parseFloat(scaleX.toString()) || 3.6,
+      scale_y: parseFloat(scaleY.toString()) || 3.2
     };
 
     const { error } = await api.from('vessel_layouts').insert(payload);
@@ -131,6 +137,8 @@ export default function MasterLayout() {
     setViewbox('0 0 1200 800');
     setIsDefault(false);
     setLocationId('');
+    setScaleX(3.6);
+    setScaleY(3.2);
   };
 
   const handleDelete = async (id: string) => {
@@ -391,6 +399,33 @@ export default function MasterLayout() {
                               className="w-5 h-5 rounded-lg border-slate-300 text-[#FDB913] focus:ring-[#FDB913]"
                             />
                             <label htmlFor="is_default" className="text-sm font-bold text-slate-700">Set as Default</label>
+                          </div>
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-4">
+                          <div>
+                            <label className="text-xs font-bold text-slate-500 uppercase tracking-widest mb-2 block px-1">Visual Scale X (Width)</label>
+                            <input 
+                              type="number" 
+                              step="0.1"
+                              required
+                              value={scaleX}
+                              onChange={(e) => setScaleX(parseFloat(e.target.value) || 0)}
+                              className="w-full px-5 py-4 bg-slate-50 border border-slate-200 rounded-2xl text-sm outline-none focus:ring-4 focus:ring-[#FDB913]/10 focus:border-[#FDB913]"
+                            />
+                            <p className="text-[10px] text-slate-400 mt-1 px-1">Default: 3.6</p>
+                          </div>
+                          <div>
+                            <label className="text-xs font-bold text-slate-500 uppercase tracking-widest mb-2 block px-1">Visual Scale Y (Length)</label>
+                            <input 
+                              type="number" 
+                              step="0.1"
+                              required
+                              value={scaleY}
+                              onChange={(e) => setScaleY(parseFloat(e.target.value) || 0)}
+                              className="w-full px-5 py-4 bg-slate-50 border border-slate-200 rounded-2xl text-sm outline-none focus:ring-4 focus:ring-[#FDB913]/10 focus:border-[#FDB913]"
+                            />
+                            <p className="text-[10px] text-slate-400 mt-1 px-1">Default: 3.2</p>
                           </div>
                         </div>
                       </div>

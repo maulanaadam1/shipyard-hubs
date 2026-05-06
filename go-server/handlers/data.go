@@ -34,6 +34,7 @@ var allowedTables = map[string]bool{
 	"master_locations":   true,
 	"ship_movements":     true,
 	"master_status_dock": true,
+	"vessel_layouts":     true,
 }
 
 // getPKCol returns the primary key column name for a given table
@@ -63,6 +64,7 @@ var tableToResource = map[string]string{
 	"master_locations":   "Master Location",
 	"ship_movements":     "Ship Docking",
 	"master_status_dock": "Master Dock Status",
+	"vessel_layouts":     "Master Layout",
 }
 
 // CheckTablePermission verifies if the user from context has permission for table and action
