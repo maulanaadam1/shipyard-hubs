@@ -338,6 +338,7 @@ export default function ShipDocking() {
                 <th className="px-6 py-4 text-[10px] font-bold text-slate-400 uppercase tracking-widest">No</th>
                 <th className="px-6 py-4 text-[10px] font-bold text-slate-400 uppercase tracking-widest">Nama Kapal</th>
                 <th className="px-6 py-4 text-[10px] font-bold text-slate-400 uppercase tracking-widest">Status Dok</th>
+                <th className="px-6 py-4 text-[10px] font-bold text-slate-400 uppercase tracking-widest">Visibility</th>
                 <th className="px-6 py-4 text-[10px] font-bold text-slate-400 uppercase tracking-widest">Mulai Aktual</th>
                 <th className="px-6 py-4 text-[10px] font-bold text-slate-400 uppercase tracking-widest">Selesai Aktual</th>
                 <th className="px-6 py-4 text-[10px] font-bold text-slate-400 uppercase tracking-widest">Tgl Docking</th>
@@ -382,6 +383,19 @@ export default function ShipDocking() {
                         <td className="px-6 py-4">
                           {getDockBadge(project)}
                         </td>
+                        <td className="px-6 py-4">
+                          {project.ship_visibility === 'active' ? (
+                            <div className="flex items-center gap-1.5 px-2.5 py-1 bg-emerald-50 text-emerald-600 rounded-full border border-emerald-100 w-fit">
+                              <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                              <span className="text-[10px] font-bold uppercase tracking-wider">Active</span>
+                            </div>
+                          ) : (
+                            <div className="flex items-center gap-1.5 px-2.5 py-1 bg-amber-50 text-amber-600 rounded-full border border-amber-100 w-fit">
+                              <div className="w-1.5 h-1.5 rounded-full bg-amber-400" />
+                              <span className="text-[10px] font-bold uppercase tracking-wider">Hidden</span>
+                            </div>
+                          )}
+                        </td>
                         <td className="px-6 py-4 text-xs text-slate-600">{formatDate(project.actual_start || project.est_start)}</td>
                         <td className="px-6 py-4 text-xs text-slate-600">{formatDate(project.actual_finish || project.est_finish)}</td>
                         <td className="px-6 py-4 text-xs text-slate-600">{formatDate(project.docking || project.est_docking_date)}</td>
@@ -417,7 +431,7 @@ export default function ShipDocking() {
                             exit={{ opacity: 0, height: 0 }}
                             className="bg-slate-50/30"
                           >
-                            <td colSpan={8} className="p-0">
+                            <td colSpan={9} className="p-0">
                               <div className="px-20 py-6 space-y-6">
                                 <div className="flex items-center justify-between border-b border-slate-200 pb-3">
                                   <div className="flex items-center gap-2">
