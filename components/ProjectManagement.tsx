@@ -363,6 +363,26 @@ export default function ProjectManagement() {
     }
   };
 
+  const handleBulkUpdateStatus = async (newStatus: string) => {
+    if (!newStatus) return;
+    if (confirm(`Update status to "${newStatus}" for ${selectedIds.size} projects?`)) {
+      setIsLoading(true);
+      try {
+        const { error } = await api.from('projects')
+          .update({ status: newStatus })
+          .in('id', Array.from(selectedIds));
+        
+        if (error) throw error;
+        await fetchData();
+        setSelectedIds(new Set());
+      } catch (error: any) {
+        alert('Error: ' + error.message);
+      } finally {
+        setIsLoading(false);
+      }
+    }
+  };
+
   const renderPaginationButtons = () => {
     const buttons = [];
     let startPage = Math.max(1, currentPage - 2);
@@ -484,10 +504,32 @@ export default function ProjectManagement() {
                   <span className="text-xs font-bold text-slate-500 bg-slate-100 px-3 py-1.5 rounded-lg">
                     {selectedIds.size} selected
                   </span>
+                  {canAccess('Job Order', 'edit') && (
+                    <div className="flex items-center gap-2 border-l border-slate-200 pl-3 ml-1">
+                      <span className="text-[10px] font-bold text-slate-400 uppercase">Bulk Update:</span>
+                      <select 
+                        onChange={(e) => handleBulkUpdateStatus(e.target.value)}
+                        className="bg-white border border-slate-200 rounded-lg px-2 py-1 text-[10px] font-bold text-slate-600 outline-none focus:ring-2 focus:ring-[#FDB913]/30"
+                      >
+                        <option value="">Select Status</option>
+                        {dropdownConfigs?.filter(c => c.category === 'project_statuses' && c.is_active).map(c => (
+                          <option key={c.id} value={c.value}>{c.label}</option>
+                        ))}
+                        {(!dropdownConfigs || dropdownConfigs.filter(c => c.category === 'project_statuses').length === 0) && (
+                          <>
+                            <option value="Active">Active</option>
+                            <option value="Completed">Completed</option>
+                            <option value="On Going">On Going</option>
+                            <option value="Pending">Pending</option>
+                          </>
+                        )}
+                      </select>
+                    </div>
+                  )}
                   {canAccess('Job Order', 'delete') && (
                     <button 
                       onClick={handleBulkDelete}
-                      className="p-1.5 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                      className="p-1.5 text-red-600 hover:bg-red-50 rounded-lg transition-colors ml-1"
                       title="Delete Selected"
                     >
                       <Trash2 className="w-4 h-4" />
