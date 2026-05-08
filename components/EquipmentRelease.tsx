@@ -31,7 +31,7 @@ export default function EquipmentRelease() {
   const [selectedLoan, setSelectedLoan] = useState<LoanRequest | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [isLoading, setIsLoading] = useState(false);
-  const [activeTab, setActiveTab] = useState<'pending' | 'history'>('history');
+  const [activeTab, setActiveTab] = useState<'pending' | 'history'>('pending');
   const [currentPagePending, setCurrentPagePending] = useState(1);
   const [currentPageHistory, setCurrentPageHistory] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState<number | 'all'>(10);
@@ -894,7 +894,7 @@ export default function EquipmentRelease() {
                       .filter(u => u.item_id === item.id);
                     const totalProcessed = previouslyFulfilled + assignedInThisSession.length;
                     const isFullyMet = totalProcessed >= item.quantity;
-                    const remainingNeeded = item.quantity - previouslyFulfilled;
+                    const remainingNeeded = item.quantity - totalProcessed;
 
                     return (
                       <div key={idx} className="bg-slate-50 p-6 rounded-3xl border border-slate-200 space-y-4">

@@ -984,7 +984,7 @@ export default function EquipmentLoans() {
                       min={dateStart}
                       max={dateStart ? (() => {
                         const d = new Date(dateStart);
-                        d.setDate(d.getDate() + 10); // 10 calendar days max (approx 7-8 working days)
+                        d.setDate(d.getDate() + 7); // 7 days max
                         return d.toISOString().split('T')[0];
                       })() : undefined}
                       onChange={(e) => setDateFinish(e.target.value)}
@@ -993,7 +993,7 @@ export default function EquipmentLoans() {
                       className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-[#FDB913]/30 focus:border-[#FDB913] disabled:opacity-60 disabled:cursor-not-allowed"
                     />
                     {dateStart && (
-                      <p className="text-[10px] text-slate-400 mt-1">Max 7-10 days loan period allowed.</p>
+                      <p className="text-[10px] text-slate-400 mt-1">Max 7 days loan period allowed.</p>
                     )}
                   </div>
                 </div>
@@ -1003,7 +1003,7 @@ export default function EquipmentLoans() {
                   const days = (dateStart && dateFinish) 
                     ? Math.max(1, Math.ceil((new Date(dateFinish).getTime() - new Date(dateStart).getTime()) / (1000 * 60 * 60 * 24)) + 1)
                     : 1;
-                  const isTooLong = days > 10;
+                  const isTooLong = days > 7;
                   return (
                     <div className={`p-4 rounded-2xl flex items-center justify-between transition-colors ${isTooLong ? 'bg-red-50 border border-red-100' : 'bg-slate-900'}`}>
                       <div className="flex items-center gap-3">
@@ -1021,7 +1021,7 @@ export default function EquipmentLoans() {
                       {isTooLong && (
                         <div className="flex items-center gap-1.5 text-red-600">
                           <AlertCircle className="w-4 h-4" />
-                          <span className="text-[10px] font-bold uppercase tracking-tight">Max 7 Working Days</span>
+                          <span className="text-[10px] font-bold uppercase tracking-tight">Max 7 Days</span>
                         </div>
                       )}
                     </div>
