@@ -100,6 +100,26 @@ export interface User {
   avatar_url?: string;
 }
 
+export interface ReleaseItem {
+  item_id: string;
+  type: string;
+  equipment_id: string;
+  condition: string;
+  alias?: string;
+}
+
+export interface ReleaseRecord {
+  id: string;
+  loan_id: string;
+  release_no: string;
+  date_released: string;
+  released_by: string;
+  received_by: string;
+  items_released: string; // JSON string of ReleaseItem[]
+  status: string;
+  notes?: string;
+}
+
 export interface Notification {
   id: string;
   user_id: string;
