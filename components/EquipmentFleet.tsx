@@ -878,7 +878,6 @@ export default function EquipmentFleet() {
           </div>
         )}
       </AnimatePresence>
-      </AnimatePresence>
 
       {/* Bulk Assign PIC Modal */}
       <AnimatePresence>
