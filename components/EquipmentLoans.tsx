@@ -1024,7 +1024,7 @@ export default function EquipmentLoans() {
                       min={dateStart}
                       max={dateStart ? (() => {
                         const d = new Date(dateStart);
-                        d.setDate(d.getDate() + 7); // 7 days max
+                        d.setDate(d.getDate() + 6); // 7 days max (inclusive of start date)
                         return d.toISOString().split('T')[0];
                       })() : undefined}
                       onChange={(e) => setDateFinish(e.target.value)}
