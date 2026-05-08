@@ -832,13 +832,13 @@ export default function EquipmentRelease() {
                 {/* Deployment Metadata */}
                 <div className="grid grid-cols-2 gap-6">
                   <div className="space-y-1.5">
-                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">WORK ORDER / PROJECT</p>
+                    <p className="text-xs font-bold text-slate-500 uppercase tracking-wider">WORK ORDER / PROJECT</p>
                     <div className="px-4 py-3 bg-slate-50 border border-slate-200 rounded-2xl text-sm font-bold text-slate-700">
                       {selectedLoan.work_order || 'N/A'} - {selectedLoan.shipname}
                     </div>
                   </div>
                   <div className="space-y-1.5">
-                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">VENDOR</p>
+                    <p className="text-xs font-bold text-slate-500 uppercase tracking-wider">VENDOR</p>
                     <div className="px-4 py-3 bg-slate-50 border border-slate-200 rounded-2xl text-sm font-bold text-slate-700">
                       {selectedLoan.vendor}
                     </div>
@@ -851,7 +851,7 @@ export default function EquipmentRelease() {
                     <Clock className="w-5 h-5" />
                   </div>
                   <div>
-                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Loan Duration</p>
+                    <p className="text-xs font-bold text-slate-500 uppercase tracking-wider">Loan Duration</p>
                     <p className="text-lg font-bold">{selectedLoan.duration} Days</p>
                   </div>
                 </div>
@@ -859,7 +859,7 @@ export default function EquipmentRelease() {
                 {/* Receiver & Notes */}
                 <div className="grid grid-cols-2 gap-6">
                   <div className="space-y-1.5">
-                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">RECEIVED BY (PERSON NAME)</p>
+                    <p className="text-xs font-bold text-slate-500 uppercase tracking-wider">RECEIVED BY (PERSON NAME)</p>
                     <input 
                       type="text"
                       value={releaseForm.received_by}
@@ -869,7 +869,7 @@ export default function EquipmentRelease() {
                     />
                   </div>
                   <div className="space-y-1.5">
-                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">INTERNAL NOTES</p>
+                    <p className="text-xs font-bold text-slate-500 uppercase tracking-wider">INTERNAL NOTES</p>
                     <input 
                       type="text"
                       value={releaseForm.notes}
@@ -884,7 +884,7 @@ export default function EquipmentRelease() {
                 <div className="space-y-4 pt-4 border-t border-slate-100">
                   <div className="flex justify-between items-center">
                     <h4 className="font-bold text-slate-800">Deployment Items</h4>
-                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Assign physical units</span>
+                    <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">Assign physical units</span>
                   </div>
 
                   {selectedLoan.items.map((item, idx) => {
@@ -901,11 +901,11 @@ export default function EquipmentRelease() {
                         <div className="flex justify-between items-center">
                           <div className="flex items-center gap-3">
                             <span className="font-bold text-slate-700">{item.type}</span>
-                            <span className="px-2 py-0.5 bg-blue-100 text-blue-600 text-[10px] font-black rounded-md">
+                            <span className="px-2 py-0.5 bg-blue-100 text-blue-600 text-[10px] font-bold rounded-md">
                               QTY: {item.quantity}
                             </span>
                             {previouslyFulfilled > 0 && (
-                              <span className="px-2 py-0.5 bg-green-100 text-green-600 text-[10px] font-black rounded-md">
+                              <span className="px-2 py-0.5 bg-green-100 text-green-600 text-[10px] font-bold rounded-md">
                                 {previouslyFulfilled} RELEASED
                               </span>
                             )}
@@ -913,7 +913,7 @@ export default function EquipmentRelease() {
                           {!isFullyMet && (
                             <button 
                               onClick={() => addReleaseUnit(item)}
-                              className="text-xs font-bold text-[#FDB913] hover:text-[#e5a611] flex items-center gap-1"
+                              className="text-xs font-semibold text-[#FDB913] hover:text-[#e5a611] flex items-center gap-1"
                             >
                               <Plus className="w-3 h-3" /> Add Unit
                             </button>
