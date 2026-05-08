@@ -24,7 +24,7 @@ import { useData, Equipment } from '@/context/DataContext';
 import { api } from '@/lib/api-client';
 
 export default function EquipmentFleet() {
-  const { fleet: data, setFleet: setData, currentUser, fetchData, canAccess, users } = useData();
+  const { fleet: assets, setFleet: setAssets, currentUser, fetchData, canAccess, users } = useData();
   const [searchTerm, setSearchTerm] = useState('');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
@@ -46,7 +46,7 @@ export default function EquipmentFleet() {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Global Filter Logic
-  const filteredData = data.filter(item => {
+  const filteredData = (assets || []).filter(item => {
     const searchStr = searchTerm.toLowerCase();
     return Object.values(item).some(val => 
       String(val).toLowerCase().includes(searchStr)
