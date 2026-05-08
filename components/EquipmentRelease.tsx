@@ -909,6 +909,11 @@ export default function EquipmentRelease() {
                                 {previouslyFulfilled} RELEASED
                               </span>
                             )}
+                            {!isFullyMet && (
+                              <span className="px-2 py-0.5 bg-amber-100 text-amber-600 text-[10px] font-bold rounded-md">
+                                {remainingNeeded} UNRELEASED
+                              </span>
+                            )}
                           </div>
                           {!isFullyMet && (
                             <button 
