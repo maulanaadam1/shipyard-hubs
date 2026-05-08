@@ -56,8 +56,10 @@ export default function EquipmentLoans() {
   const [searchParams, setSearchParams] = useSearchParams();
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isApproveModalOpen, setIsApproveModalOpen] = useState(false);
+  const [isRejectModalOpen, setIsRejectModalOpen] = useState(false);
   const [isProgressModalOpen, setIsProgressModalOpen] = useState(false);
   const [loanToApprove, setLoanToApprove] = useState<string | null>(null);
+  const [loanToReject, setLoanToReject] = useState<string | null>(null);
   const [approvalComment, setApprovalComment] = useState('');
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedLoan, setSelectedLoan] = useState<LoanRequest | null>(null);
@@ -210,6 +212,12 @@ export default function EquipmentLoans() {
     setIsApproveModalOpen(true);
   };
 
+  const handleReject = (id: string) => {
+    setLoanToReject(id);
+    setApprovalComment('');
+    setIsRejectModalOpen(true);
+  };
+
   const confirmApprove = async () => {
     if (loanToApprove) {
       const loan = loans.find(l => l.id === loanToApprove);
@@ -270,6 +278,55 @@ export default function EquipmentLoans() {
         if (nextStep) {
           notifyApprover(loan.request_id, nextStep);
         }
+        await fetchData();
+      }
+    }
+  };
+
+  const confirmReject = async () => {
+    if (loanToReject) {
+      const loan = loans.find(l => l.id === loanToReject);
+      if (!loan) return;
+
+      const newSteps = loan.approval_steps.map((step, idx) => {
+        if (step.isCurrent) {
+          return { 
+            ...step, 
+            isCurrent: false, 
+            isCompleted: true, 
+            date: new Date().toLocaleString(), 
+            comment: approvalComment, 
+            user: currentUser?.name || 'Authorized User',
+            status: 'Rejected'
+          };
+        }
+        return step;
+      });
+
+      const { error } = await api.from('loan_requests')
+        .update({ 
+          status: 'Rejected', 
+          approval_steps: newSteps 
+        })
+        .eq('id', loanToReject);
+
+      if (error) {
+        console.error('Error rejecting loan in Supabase:', error.message);
+        alert('Error rejecting: ' + error.message);
+      } else {
+        setIsRejectModalOpen(false);
+        setLoanToReject(null);
+
+        // Auto-mark related approval notifications as read
+        const relatedNotifs = notifications.filter(n =>
+          !n.is_read &&
+          n.type === 'approval' &&
+          n.message?.includes(loan.request_id)
+        );
+        for (const notif of relatedNotifs) {
+          markNotificationRead(notif.id);
+        }
+
         await fetchData();
       }
     }
@@ -381,8 +438,14 @@ export default function EquipmentLoans() {
       return d.getFullYear() === currentYear && (d.getMonth() + 1) === currentMonth;
     }).length;
 
+    // Determine status: if submit_status is provided (Draft), use it. 
+    // Otherwise, it's a submission, so default to 'Pending'.
+    const submitStatus = formData.get('submit_status') as string;
+    const status = submitStatus || 'Pending';
+
     const loanData = {
       request_id: selectedLoan?.request_id || `ERQ/${currentYear}/${String(currentMonth).padStart(2, '0')}/${String(monthLoansCount + 1).padStart(3, '0')}/YWTS`,
+      date_created: selectedLoan?.date_created || now.toISOString(),
       project_id: formData.get('project_id') as string,
       shipname: formData.get('shipname') as string,
       vendor: formData.get('vendor') as string,
@@ -392,7 +455,7 @@ export default function EquipmentLoans() {
       duration: Number(formData.get('duration')) || 1,
       lampiran: '',
       change: '',
-      status: (formData.get('submit_status') as any) || selectedLoan?.status || 'Pending',
+      status: status,
       items: requestedItems,
       approval_steps: selectedLoan?.approval_steps || [
         { status: 'Draft', label: 'Request Created', date: new Date().toLocaleString(), user: currentUser?.name || 'Admin', isCompleted: true, isCurrent: false },
@@ -430,12 +493,16 @@ export default function EquipmentLoans() {
       alert('Error saving: ' + error.message);
     } else {
       setIsModalOpen(false);
-      if (!selectedLoan && loanData.status === 'Pending') {
+      
+      // If submitting (Pending status), notify the first approver
+      if (status === 'Pending') {
         const firstStep = loanData.approval_steps.find(s => s.isCurrent);
         if (firstStep) {
           notifyApprover(loanData.request_id, firstStep);
         }
       }
+      
+      // Force immediate data fetch to refresh the table
       await fetchData();
     }
   };
@@ -633,13 +700,22 @@ export default function EquipmentLoans() {
                         );
                         
                         return loan.status === 'Pending' && canApprove && (
-                          <button 
-                            onClick={() => handleApprove(loan.id)}
-                            className="p-2 text-slate-400 hover:text-[#FDB913] rounded-lg hover:bg-[#FDB913]/10 transition-colors"
-                            title="Approve"
-                          >
-                            <Check className="w-4 h-4" />
-                          </button>
+                          <div className="flex items-center gap-1">
+                            <button 
+                              onClick={() => handleApprove(loan.id)}
+                              className="p-2 text-slate-400 hover:text-teal-600 rounded-lg hover:bg-teal-50 transition-colors"
+                              title="Approve"
+                            >
+                              <Check className="w-4 h-4" />
+                            </button>
+                            <button 
+                              onClick={() => handleReject(loan.id)}
+                              className="p-2 text-slate-400 hover:text-red-600 rounded-lg hover:bg-red-50 transition-colors"
+                              title="Reject"
+                            >
+                              <X className="w-4 h-4" />
+                            </button>
+                          </div>
                         );
                       })()}
                       {canAccess('Request', 'edit') && loan.status === 'Draft' && (
@@ -842,7 +918,13 @@ export default function EquipmentLoans() {
                       type="date"
                       name="date_start"
                       value={dateStart}
-                      onChange={(e) => setDateStart(e.target.value)}
+                      onChange={(e) => {
+                        setDateStart(e.target.value);
+                        // Reset finish date if it's now before start date
+                        if (dateFinish && e.target.value > dateFinish) {
+                          setDateFinish('');
+                        }
+                      }}
                       required
                       disabled={!isEditable}
                       className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-[#FDB913]/30 focus:border-[#FDB913] disabled:opacity-60"
@@ -854,11 +936,20 @@ export default function EquipmentLoans() {
                       type="date"
                       name="date_finish"
                       value={dateFinish}
+                      min={dateStart}
+                      max={dateStart ? (() => {
+                        const d = new Date(dateStart);
+                        d.setDate(d.getDate() + 10); // 10 calendar days max (approx 7-8 working days)
+                        return d.toISOString().split('T')[0];
+                      })() : undefined}
                       onChange={(e) => setDateFinish(e.target.value)}
                       required
-                      disabled={!isEditable}
-                      className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-[#FDB913]/30 focus:border-[#FDB913] disabled:opacity-60"
+                      disabled={!isEditable || !dateStart}
+                      className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-[#FDB913]/30 focus:border-[#FDB913] disabled:opacity-60 disabled:cursor-not-allowed"
                     />
+                    {dateStart && (
+                      <p className="text-[10px] text-slate-400 mt-1">Max 7-10 days loan period allowed.</p>
+                    )}
                   </div>
                 </div>
 
@@ -867,18 +958,27 @@ export default function EquipmentLoans() {
                   const days = (dateStart && dateFinish) 
                     ? Math.max(1, Math.ceil((new Date(dateFinish).getTime() - new Date(dateStart).getTime()) / (1000 * 60 * 60 * 24)) + 1)
                     : 1;
+                  const isTooLong = days > 10;
                   return (
-                    <div className="p-4 bg-slate-900 rounded-2xl flex items-center justify-between">
+                    <div className={`p-4 rounded-2xl flex items-center justify-between transition-colors ${isTooLong ? 'bg-red-50 border border-red-100' : 'bg-slate-900'}`}>
                       <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 bg-white/10 rounded-xl flex items-center justify-center text-[#FDB913]">
+                        <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${isTooLong ? 'bg-red-100 text-red-600' : 'bg-white/10 text-[#FDB913]'}`}>
                           <Clock className="w-5 h-5" />
                         </div>
                         <div>
-                          <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Calculated Duration</p>
-                          <p className="text-xl font-display font-bold text-white">{days} Days</p>
+                          <p className={`text-[10px] font-bold uppercase tracking-widest ${isTooLong ? 'text-red-400' : 'text-slate-400'}`}>
+                            {isTooLong ? 'Duration Limit Exceeded' : 'Calculated Duration'}
+                          </p>
+                          <p className={`text-xl font-display font-bold ${isTooLong ? 'text-red-700' : 'text-white'}`}>{days} Days</p>
                         </div>
                       </div>
                       <input type="hidden" name="duration" value={days} />
+                      {isTooLong && (
+                        <div className="flex items-center gap-1.5 text-red-600">
+                          <AlertCircle className="w-4 h-4" />
+                          <span className="text-[10px] font-bold uppercase tracking-tight">Max 7 Working Days</span>
+                        </div>
+                      )}
                     </div>
                   );
                 })()}
@@ -973,19 +1073,23 @@ export default function EquipmentLoans() {
                     <>
                   <button 
                     type="button"
-                    onClick={(e) => {
-                      // Trigger form submit with Draft status
+                    onClick={async (e) => {
                       const form = (e.target as HTMLButtonElement).form;
                       if (form) {
-                        const event = new Event('submit', { cancelable: true, bubbles: true });
-                        // We need a way to tell the submit handler it's a draft
-                        // Let's just manually call a handler or use a hidden input
+                        // Create a synthetic event or just call handleRequestLoan manually
+                        // But handleRequestLoan expects a FormEvent. 
+                        // Let's just use a hidden input in the form that we control via state.
                         const statusInput = document.createElement('input');
                         statusInput.type = 'hidden';
                         statusInput.name = 'submit_status';
                         statusInput.value = 'Draft';
                         form.appendChild(statusInput);
-                        form.dispatchEvent(event);
+                        
+                        // We can't easily trigger onSubmit prop from here, 
+                        // so we call it indirectly by triggering a submit button click
+                        const submitBtn = form.querySelector('button[type="submit"]') as HTMLButtonElement;
+                        if (submitBtn) submitBtn.click();
+                        
                         form.removeChild(statusInput);
                       }
                     }}
@@ -997,7 +1101,7 @@ export default function EquipmentLoans() {
                     type="submit"
                     className="px-8 py-2.5 bg-[#FDB913] text-slate-900 rounded-xl text-sm font-bold hover:bg-[#e5a611] transition-colors shadow-lg shadow-[#FDB913]/20"
                   >
-                    {selectedLoan ? 'Update Request' : 'Submit Request'}
+                    {selectedLoan ? (selectedLoan.status === 'Draft' ? 'Submit Request' : 'Update Request') : 'Submit Request'}
                   </button>
                     </>
                   )}
@@ -1057,6 +1161,59 @@ export default function EquipmentLoans() {
                   className="flex-1 px-6 py-3 bg-[#FDB913] text-slate-900 rounded-xl text-sm font-bold hover:bg-[#e5a611] transition-colors shadow-lg shadow-[#FDB913]/20"
                 >
                   Approve Request
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+      {/* Reject Confirmation Modal */}
+      <AnimatePresence>
+        {isRejectModalOpen && (
+          <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
+            <motion.div 
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setIsRejectModalOpen(false)}
+              className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm"
+            />
+            <motion.div 
+              initial={{ scale: 0.95, opacity: 0, y: 20 }}
+              animate={{ scale: 1, opacity: 1, y: 0 }}
+              exit={{ scale: 0.95, opacity: 0, y: 20 }}
+              className="relative w-full max-w-md bg-white rounded-3xl shadow-2xl p-8"
+            >
+              <div className="w-16 h-16 bg-red-100 text-red-600 rounded-full flex items-center justify-center mx-auto mb-4">
+                <X className="w-8 h-8" />
+              </div>
+              <h3 className="font-display font-bold text-xl text-slate-800 mb-2 text-center">Confirm Rejection</h3>
+              <p className="text-sm text-slate-500 mb-6 text-center">
+                Are you sure you want to reject this equipment loan request?
+              </p>
+              
+              <div className="space-y-2 mb-8">
+                <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Rejection Reason</label>
+                <textarea 
+                  value={approvalComment}
+                  onChange={(e) => setApprovalComment(e.target.value)}
+                  placeholder="Explain why this request is being rejected..."
+                  className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-red-500/30 focus:border-red-500 min-h-[100px] resize-none"
+                />
+              </div>
+
+              <div className="flex gap-3">
+                <button 
+                  onClick={() => setIsRejectModalOpen(false)}
+                  className="flex-1 px-6 py-3 bg-slate-100 text-slate-600 rounded-xl text-sm font-bold hover:bg-slate-200 transition-colors"
+                >
+                  Cancel
+                </button>
+                <button 
+                  onClick={confirmReject}
+                  className="flex-1 px-6 py-3 bg-red-600 text-white rounded-xl text-sm font-bold hover:bg-red-700 transition-colors shadow-lg shadow-red-600/20"
+                >
+                  Reject Request
                 </button>
               </div>
             </motion.div>
@@ -1168,15 +1325,26 @@ export default function EquipmentLoans() {
                   );
                   
                   return selectedLoan.status === 'Pending' && canApprove && (
-                    <button 
-                      onClick={() => {
-                        setIsProgressModalOpen(false);
-                        handleApprove(selectedLoan.id);
-                      }}
-                      className="px-6 py-2 bg-[#FDB913] text-slate-900 rounded-xl text-sm font-bold hover:bg-[#e5a611] transition-colors shadow-lg shadow-[#FDB913]/20"
-                    >
-                      Approve Now
-                    </button>
+                    <div className="flex gap-3">
+                      <button 
+                        onClick={() => {
+                          setIsProgressModalOpen(false);
+                          handleReject(selectedLoan.id);
+                        }}
+                        className="px-6 py-2 bg-red-50 text-red-600 border border-red-100 rounded-xl text-sm font-bold hover:bg-red-100 transition-colors"
+                      >
+                        Reject
+                      </button>
+                      <button 
+                        onClick={() => {
+                          setIsProgressModalOpen(false);
+                          handleApprove(selectedLoan.id);
+                        }}
+                        className="px-6 py-2 bg-[#FDB913] text-slate-900 rounded-xl text-sm font-bold hover:bg-[#e5a611] transition-colors shadow-lg shadow-[#FDB913]/20"
+                      >
+                        Approve Now
+                      </button>
+                    </div>
                   );
                 })()}
               </div>
