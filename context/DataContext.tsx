@@ -19,6 +19,7 @@ export interface Equipment {
   available: string; // Used to be status
   alias: string;
   price: string;
+  pic?: string;
 }
 
 export interface RequestedItem {

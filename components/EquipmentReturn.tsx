@@ -22,7 +22,7 @@ import { useData, LoanRequest, DeploymentRecord } from '@/context/DataContext';
 import { api } from '@/lib/api-client';
 
 export default function EquipmentReturn() {
-  const { fleet: assets, setFleet: setAssets, loans, setLoans, deployments, setDeployments, fetchData } = useData();
+  const { fleet: assets, setFleet: setAssets, loans, setLoans, deployments, setDeployments, fetchData, currentUser } = useData();
   const [searchTerm, setSearchTerm] = useState('');
   const [expandedRequests, setExpandedRequests] = useState<Set<string>>(new Set());
   const [activeTab, setActiveTab] = useState<'pending' | 'history'>('pending');
@@ -55,7 +55,19 @@ export default function EquipmentReturn() {
       loan.shipname.toLowerCase().includes(searchLower) ||
       loan.project_id.toLowerCase().includes(searchLower));
     
-    return hasActiveDeployments && matchesSearch;
+    if (!hasActiveDeployments || !matchesSearch) return false;
+
+    // Identity-based PIC Filtering (Name or Username)
+    const myEquipmentTypes = assets
+      .filter(a => a.pic === currentUser?.name || (a.pic && a.pic === (currentUser as any)?.username))
+      .map(a => a.type);
+    const uniqueMyTypes = Array.from(new Set(myEquipmentTypes));
+
+    if (uniqueMyTypes.length > 0) {
+      return loan.items.some(item => uniqueMyTypes.includes(item.type));
+    }
+
+    return true;
   });
 
   // 2. Logic for Return History (Individual Records)
@@ -68,7 +80,19 @@ export default function EquipmentReturn() {
       (d.product_name || '').toLowerCase().includes(searchLower) ||
       (d.shipname || '').toLowerCase().includes(searchLower));
     
-    return isReturned && matchesSearch;
+    if (!isReturned || !matchesSearch) return false;
+
+    // Identity-based PIC Filtering (Name or Username)
+    const myEquipmentTypes = assets
+      .filter(a => a.pic === currentUser?.name || (a.pic && a.pic === (currentUser as any)?.username))
+      .map(a => a.type);
+    const uniqueMyTypes = Array.from(new Set(myEquipmentTypes));
+
+    if (uniqueMyTypes.length > 0) {
+      return uniqueMyTypes.includes(d.item);
+    }
+
+    return true;
   }).sort((a, b) => new Date(b.return_date).getTime() - new Date(a.return_date).getTime());
 
   // Pagination Logic (Mainly for History)

@@ -24,7 +24,7 @@ import { useData, Equipment } from '@/context/DataContext';
 import { api } from '@/lib/api-client';
 
 export default function EquipmentFleet() {
-  const { fleet: data, setFleet: setData, currentUser, fetchData, canAccess } = useData();
+  const { fleet: data, setFleet: setData, currentUser, fetchData, canAccess, users } = useData();
   const [searchTerm, setSearchTerm] = useState('');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
@@ -132,7 +132,8 @@ export default function EquipmentFleet() {
         year_invest: parts[6] || '',
         alias: parts[7] || '',
         price: parts[8] || '', // was category
-        available: parts[9] || 'Available'
+        available: parts[9] || 'Available',
+        pic: parts[10] || ''
       };
     });
 
@@ -157,7 +158,8 @@ export default function EquipmentFleet() {
       year_invest: item.year_invest || 'N/A',
       alias: item.alias || 'N/A',
       price: item.price || '0',
-      available: item.available || 'Available'
+      available: item.available || 'Available',
+      pic: item.pic || ''
     }));
 
     // Deduplicate by no_asset to prevent "cannot affect row a second time" error
@@ -256,7 +258,8 @@ export default function EquipmentFleet() {
       year_invest: (formData.get('year_invest') as string) || 'N/A',
       alias: (formData.get('alias') as string) || 'N/A',
       price: (formData.get('price') as string) || '0',
-      available: formData.get('available') as string || selectedItem?.available || 'Available'
+      available: formData.get('available') as string || selectedItem?.available || 'Available',
+      pic: formData.get('pic') as string || selectedItem?.pic || ''
     };
 
     try {
@@ -534,6 +537,7 @@ export default function EquipmentFleet() {
                 <th className="px-6 py-4 border-b border-slate-100">Source</th>
                 <th className="px-6 py-4 border-b border-slate-100">Year</th>
                 <th className="px-6 py-4 border-b border-slate-100">Status</th>
+                <th className="px-6 py-4 border-b border-slate-100">PIC</th>
                 <th className="px-6 py-4 border-b border-slate-100 text-right">Actions</th>
               </tr>
             </thead>
@@ -595,6 +599,11 @@ export default function EquipmentFleet() {
                         : 'bg-red-50 text-red-600 border-red-100'
                     }`}>
                       {item.available === 'Yes' || item.available === 'Available' ? 'Available' : item.available || 'In Use'}
+                    </span>
+                  </td>
+                  <td className="px-6 py-4">
+                    <span className="text-xs font-bold text-slate-600 bg-blue-50 px-2 py-1 rounded-md border border-blue-100">
+                      {item.pic || 'Unassigned'}
                     </span>
                   </td>
                   <td className="px-6 py-4 text-right">
@@ -795,6 +804,20 @@ export default function EquipmentFleet() {
                       <option value="No">In Use / Not Available</option>
                       <option value="Damaged">Damaged</option>
                       <option value="Pemutihan">Pemutihan (Write-off)</option>
+                    </select>
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">PIC / Person In Charge</label>
+                    <select 
+                      name="pic"
+                      defaultValue={selectedItem?.pic || ''}
+                      disabled={isDetailMode}
+                      className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-[#FDB913]/30 focus:border-[#FDB913] disabled:opacity-70"
+                    >
+                      <option value="">Select PIC</option>
+                      {(users || []).map(u => (
+                        <option key={u.id} value={u.name}>{u.name}</option>
+                      ))}
                     </select>
                   </div>
                 </div>

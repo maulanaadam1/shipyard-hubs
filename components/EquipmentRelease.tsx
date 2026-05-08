@@ -489,9 +489,22 @@ export default function EquipmentRelease() {
     }
   };
 
-  const approvedLoans = loans.filter(l => 
-    (l.status === 'Approved' || l.status === 'Released') && !isLoanFullyReleased(l)
-  );
+  const approvedLoans = loans.filter(l => {
+    const isBasicStatusMatch = (l.status === 'Approved' || l.status === 'Released') && !isLoanFullyReleased(l);
+    if (!isBasicStatusMatch) return false;
+
+    // Identity-based PIC Filtering (Name or Username)
+    const myEquipmentTypes = assets
+      .filter(a => a.pic === currentUser?.name || (a.pic && a.pic === (currentUser as any)?.username))
+      .map(a => a.type);
+    const uniqueMyTypes = Array.from(new Set(myEquipmentTypes));
+
+    if (uniqueMyTypes.length > 0) {
+      return l.items.some(item => uniqueMyTypes.includes(item.type));
+    }
+    
+    return true;
+  });
 
   const filteredLoans = approvedLoans.filter(l => 
     l.shipname.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -501,11 +514,28 @@ export default function EquipmentRelease() {
 
   const [selectedHistory, setSelectedHistory] = useState<ReleaseRecord | null>(null);
 
-  const filteredHistory = (releases || []).filter(r => 
-    r.release_no.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    r.received_by.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    (r.loan_id || '').toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  const filteredHistory = (releases || []).filter(r => {
+    const searchLower = searchTerm.toLowerCase();
+    const matchesSearch = 
+      r.release_no.toLowerCase().includes(searchLower) ||
+      r.received_by.toLowerCase().includes(searchLower) ||
+      (r.loan_id || '').toLowerCase().includes(searchLower);
+    
+    if (!matchesSearch) return false;
+
+    // Identity-based PIC Filtering (Name or Username)
+    const myEquipmentTypes = assets
+      .filter(a => a.pic === currentUser?.name || (a.pic && a.pic === (currentUser as any)?.username))
+      .map(a => a.type);
+    const uniqueMyTypes = Array.from(new Set(myEquipmentTypes));
+
+    if (uniqueMyTypes.length > 0) {
+      const items = getItemsList(r.items_released);
+      return items.some((i: any) => uniqueMyTypes.includes(i.type));
+    }
+
+    return true;
+  });
 
   // Pagination Logic for History
   const totalHistory = filteredHistory.length;

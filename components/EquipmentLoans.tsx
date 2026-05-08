@@ -461,6 +461,36 @@ export default function EquipmentLoans() {
       );
     }
   };
+  
+  const notifyPICs = async (requestId: string, items: RequestedItem[]) => {
+    console.group(`[notifyPICs] ${requestId}`);
+    const requestedTypes = Array.from(new Set(items.map(i => i.type)));
+    
+    // Find PICs for these types
+    const picsToNotify = new Set<string>();
+    requestedTypes.forEach(type => {
+      const match = fleet?.filter(f => f.type === type && f.pic);
+      match?.forEach(m => {
+        if (m.pic) {
+          const picUser = users.find(u => u.name === m.pic);
+          if (picUser) picsToNotify.add(picUser.id);
+        }
+      });
+    });
+
+    console.log(`Found ${picsToNotify.size} PICs to notify:`, Array.from(picsToNotify));
+
+    for (const picId of picsToNotify) {
+      await createNotification(
+        picId,
+        'Equipment Requested',
+        `Loan request ${requestId} contains equipment types under your responsibility.`,
+        'info',
+        '/release'
+      );
+    }
+    console.groupEnd();
+  };
 
   const handleDeleteLoan = async (id: string, requestId: string) => {
     if (confirm(`Are you sure you want to delete loan request ${requestId}?`)) {
@@ -553,6 +583,8 @@ export default function EquipmentLoans() {
         if (firstStep) {
           notifyApprover(loanData.request_id, firstStep);
         }
+        // Also notify PICs of requested equipment
+        notifyPICs(loanData.request_id, loanData.items);
       }
       
       // Force immediate data fetch to refresh the table
