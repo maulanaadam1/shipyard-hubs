@@ -36,6 +36,8 @@ export default function EquipmentFleet() {
   const [isDetailMode, setIsDetailMode] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [isSaving, setIsSaving] = useState(false);
+  const [isBulkAssignModalOpen, setIsBulkAssignModalOpen] = useState(false);
+  const [bulkPic, setBulkPic] = useState('');
   
   // Pagination State
   const [currentPage, setCurrentPage] = useState(1);
@@ -306,6 +308,28 @@ export default function EquipmentFleet() {
     }
   };
 
+  const handleBulkAssignPic = async () => {
+    if (selectedIds.size === 0 || !bulkPic) return;
+    setIsSaving(true);
+    try {
+      const ids = Array.from(selectedIds);
+      const { error } = await api.from('equipment')
+        .update({ pic: bulkPic })
+        .in('id', ids);
+      
+      if (error) throw error;
+      
+      alert(`Successfully assigned ${bulkPic} as PIC for ${ids.length} items.`);
+      setIsBulkAssignModalOpen(false);
+      setSelectedIds(new Set());
+      if (typeof fetchData === 'function') await fetchData();
+    } catch (err: any) {
+      alert('Error assigning PIC: ' + err.message);
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
   const confirmClearAll = async () => {
     setIsSaving(true);
     try {
@@ -330,7 +354,7 @@ export default function EquipmentFleet() {
     <div className="p-8 space-y-6">
       <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
         <div>
-          <h2 className="font-display font-bold text-2xl text-slate-800 tracking-tight">Equipment Fleet</h2>
+          <h2 className="font-display font-bold text-2xl text-slate-800 tracking-tight">Master Equipment</h2>
           <p className="text-sm text-slate-500 mt-1">Manage and track all shipyard assets and master equipment.</p>
         </div>
         <div className="flex flex-wrap items-center gap-2 sm:gap-3">
@@ -458,6 +482,15 @@ export default function EquipmentFleet() {
                 >
                   <Download className="w-4 h-4" />
                 </button>
+                {canAccess('Master Equipment', 'edit') && (
+                  <button 
+                    onClick={() => setIsBulkAssignModalOpen(true)}
+                    className="p-1 text-blue-600 hover:bg-blue-100 rounded transition-colors"
+                    title="Bulk Assign PIC"
+                  >
+                    <User className="w-4 h-4" />
+                  </button>
+                )}
                 {canAccess('Master Equipment', 'delete') && (
                   <button 
                     onClick={handleBulkDelete}
@@ -845,6 +878,71 @@ export default function EquipmentFleet() {
           </div>
         )}
       </AnimatePresence>
+      </AnimatePresence>
+
+      {/* Bulk Assign PIC Modal */}
+      <AnimatePresence>
+        {isBulkAssignModalOpen && (
+          <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
+            <motion.div 
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setIsBulkAssignModalOpen(false)}
+              className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm"
+            />
+            <motion.div 
+              initial={{ scale: 0.95, opacity: 0, y: 20 }}
+              animate={{ scale: 1, opacity: 1, y: 0 }}
+              exit={{ scale: 0.95, opacity: 0, y: 20 }}
+              className="relative w-full max-w-md bg-white rounded-3xl shadow-2xl overflow-hidden p-8 border border-slate-200"
+            >
+              <div className="flex items-center gap-3 mb-6">
+                <div className="w-12 h-12 bg-blue-50 rounded-2xl flex items-center justify-center text-blue-600">
+                  <User className="w-6 h-6" />
+                </div>
+                <div>
+                  <h3 className="text-xl font-bold text-slate-800">Bulk Assign PIC</h3>
+                  <p className="text-sm text-slate-500">Updating {selectedIds.size} items</p>
+                </div>
+              </div>
+
+              <div className="space-y-4">
+                <div className="space-y-2">
+                  <label className="text-xs font-bold text-slate-500 uppercase">Select New PIC</label>
+                  <select 
+                    value={bulkPic}
+                    onChange={(e) => setBulkPic(e.target.value)}
+                    className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-[#FDB913]/30"
+                  >
+                    <option value="">Select User</option>
+                    {(users || []).map(u => (
+                      <option key={u.id} value={u.name}>{u.name}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="pt-4 flex gap-3">
+                  <button 
+                    onClick={() => setIsBulkAssignModalOpen(false)}
+                    className="flex-1 px-4 py-2.5 bg-white border border-slate-200 rounded-xl text-sm font-medium text-slate-600 hover:bg-slate-50 transition-colors"
+                  >
+                    Cancel
+                  </button>
+                  <button 
+                    onClick={handleBulkAssignPic}
+                    disabled={!bulkPic || isSaving}
+                    className="flex-1 px-4 py-2.5 bg-blue-600 text-white rounded-xl text-sm font-bold hover:bg-blue-700 transition-colors shadow-lg shadow-blue-200 disabled:opacity-50"
+                  >
+                    {isSaving ? 'Updating...' : 'Apply Assign'}
+                  </button>
+                </div>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
       {/* Clear All Confirmation Modal */}
       <AnimatePresence>
         {isClearAllModalOpen && (
