@@ -1076,9 +1076,14 @@ export default function EquipmentLoans() {
                               disabled={!isEditable}
                               className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-sm outline-none disabled:opacity-60"
                             >
-                              {equipmentTypes.map(type => (
-                                <option key={type} value={type}>{type}</option>
-                              ))}
+                              {equipmentTypes.map(type => {
+                                const availableCount = fleet?.filter(f => f.type === type && (f.available === 'Yes' || f.available === 'Available')).length || 0;
+                                return (
+                                  <option key={type} value={type}>
+                                    {type} ({availableCount} Available)
+                                  </option>
+                                );
+                              })}
                             </select>
                           </div>
                           <div className="w-24 space-y-1">
