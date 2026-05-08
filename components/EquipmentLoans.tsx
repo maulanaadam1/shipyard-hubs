@@ -36,11 +36,12 @@ const statusColors: Record<string, string> = {
   Deployed: 'bg-indigo-100 text-indigo-700 border-indigo-200',
 };
 
-const equipmentTypes = ['SMAW', 'FCAW', 'Blower', 'Angle Grinder', 'Forklift (3T)', 'Forklift (10T)', 'Gantry Crane'];
+// Dynamic types will be derived from fleet data
 
 export default function EquipmentLoans() {
   const { 
     loans, 
+    fleet,
     fetchData, 
     vendors, 
     ships, 
@@ -58,6 +59,13 @@ export default function EquipmentLoans() {
   const [isApproveModalOpen, setIsApproveModalOpen] = useState(false);
   const [isRejectModalOpen, setIsRejectModalOpen] = useState(false);
   const [isProgressModalOpen, setIsProgressModalOpen] = useState(false);
+  
+  // Derived unique equipment types from fleet
+  const equipmentTypes = React.useMemo(() => {
+    if (!fleet || fleet.length === 0) return ['SMAW', 'FCAW', 'Blower']; // Fallback
+    const types = fleet.map(f => f.type).filter(Boolean);
+    return Array.from(new Set(types)).sort();
+  }, [fleet]);
   const [loanToApprove, setLoanToApprove] = useState<string | null>(null);
   const [loanToReject, setLoanToReject] = useState<string | null>(null);
   const [approvalComment, setApprovalComment] = useState('');

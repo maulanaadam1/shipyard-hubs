@@ -533,7 +533,7 @@ export default function EquipmentFleet() {
                 <th className="px-6 py-4 border-b border-slate-100">Capacity</th>
                 <th className="px-6 py-4 border-b border-slate-100">Source</th>
                 <th className="px-6 py-4 border-b border-slate-100">Year</th>
-                <th className="px-6 py-4 border-b border-slate-100">Price</th>
+                <th className="px-6 py-4 border-b border-slate-100">Status</th>
                 <th className="px-6 py-4 border-b border-slate-100 text-right">Actions</th>
               </tr>
             </thead>
@@ -582,10 +582,20 @@ export default function EquipmentFleet() {
                     <span className="text-sm text-slate-600">{item.source}</span>
                   </td>
                   <td className="px-6 py-4">
-                    <span className="text-sm text-slate-600">{item.year_invest}</span>
+                    <span className="text-sm text-slate-600 font-medium">{item.year_invest}</span>
                   </td>
                   <td className="px-6 py-4">
-                    <span className="text-sm text-slate-600 font-medium">{item.price}</span>
+                    <span className={`px-2 py-1 rounded-md text-[10px] font-bold uppercase tracking-wider border ${
+                      item.available === 'Yes' || item.available === 'Available'
+                        ? 'bg-teal-50 text-teal-600 border-teal-100'
+                        : item.available === 'Damaged'
+                        ? 'bg-amber-50 text-amber-600 border-amber-100'
+                        : item.available === 'Pemutihan'
+                        ? 'bg-slate-100 text-slate-500 border-slate-200'
+                        : 'bg-red-50 text-red-600 border-red-100'
+                    }`}>
+                      {item.available === 'Yes' || item.available === 'Available' ? 'Available' : item.available || 'In Use'}
+                    </span>
                   </td>
                   <td className="px-6 py-4 text-right">
                     <div className="flex items-center justify-end gap-1">
@@ -772,6 +782,20 @@ export default function EquipmentFleet() {
                       disabled={isDetailMode}
                       className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-[#FDB913]/30 focus:border-[#FDB913] disabled:opacity-70"
                     />
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Availability Status</label>
+                    <select 
+                      name="available"
+                      defaultValue={selectedItem?.available || 'Available'}
+                      disabled={isDetailMode}
+                      className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-[#FDB913]/30 focus:border-[#FDB913] disabled:opacity-70"
+                    >
+                      <option value="Available">Available</option>
+                      <option value="No">In Use / Not Available</option>
+                      <option value="Damaged">Damaged</option>
+                      <option value="Pemutihan">Pemutihan (Write-off)</option>
+                    </select>
                   </div>
                 </div>
 
