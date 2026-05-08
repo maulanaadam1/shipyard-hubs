@@ -332,6 +332,51 @@ export default function EquipmentLoans() {
     }
   };
 
+  const confirmUnlock = async (loanId: string) => {
+    const loan = loans.find(l => l.id === loanId);
+    if (!loan) return;
+
+    if (!confirm('Are you sure you want to unlock/revert this approval? It will move back to the previous step.')) return;
+
+    const currentIdx = loan.approval_steps.findIndex(s => s.isCurrent);
+    const lastCompletedIdx = [...loan.approval_steps].reverse().findIndex(s => s.isCompleted);
+    const actualLastIdx = lastCompletedIdx !== -1 ? (loan.approval_steps.length - 1 - lastCompletedIdx) : -1;
+
+    let targetIdx = -1;
+    let newSteps = [...loan.approval_steps];
+
+    if (currentIdx !== -1) {
+      // Revert current step to Awaiting/Pending and move back
+      if (currentIdx > 0) {
+        targetIdx = currentIdx - 1;
+        newSteps[currentIdx] = { ...newSteps[currentIdx], isCurrent: false, status: 'Awaiting' };
+        newSteps[targetIdx] = { ...newSteps[targetIdx], isCurrent: true, isCompleted: false, status: 'Pending' };
+      }
+    } else if (actualLastIdx !== -1) {
+      // If all completed or rejected, revert the last one
+      targetIdx = actualLastIdx;
+      newSteps[targetIdx] = { ...newSteps[targetIdx], isCurrent: true, isCompleted: false, status: 'Pending' };
+    }
+
+    if (targetIdx !== -1) {
+      const { error } = await api.from('loan_requests')
+        .update({ 
+          status: 'Pending', 
+          approval_steps: newSteps 
+        })
+        .eq('id', loanId);
+
+      if (error) {
+        alert('Error unlocking: ' + error.message);
+      } else {
+        await fetchData();
+        // Update selected loan in modal if open
+        const updated = loans.find(l => l.id === loanId);
+        if (updated) setSelectedLoan(updated);
+      }
+    }
+  };
+
   const notifyApprover = async (requestId: string, step: any) => {
     console.group(`[notifyApprover] ${requestId} → Step "${step.label}" (order: ${step.step_order})`);
     console.log('Step data:', { jabatan: step.jabatan, user_id: step.user_id, user_ids: step.user_ids, step_order: step.step_order });
@@ -1248,12 +1293,24 @@ export default function EquipmentLoans() {
                     <p className="text-[10px] text-slate-500 uppercase tracking-widest font-bold">{selectedLoan.request_id}</p>
                   </div>
                 </div>
-                <button 
-                  onClick={() => setIsProgressModalOpen(false)}
-                  className="p-2 hover:bg-slate-200 rounded-full transition-colors"
-                >
-                  <X className="w-5 h-5 text-slate-500" />
-                </button>
+                <div className="flex items-center gap-2">
+                  {currentUser?.role === 'Admin' && (
+                    <button 
+                      onClick={() => confirmUnlock(selectedLoan.id)}
+                      className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-slate-200 rounded-lg text-[10px] font-bold text-slate-600 hover:bg-slate-50 transition-colors"
+                      title="Unlock & Revert Step"
+                    >
+                      <X className="w-3 h-3" />
+                      Unlock Approval
+                    </button>
+                  )}
+                  <button 
+                    onClick={() => setIsProgressModalOpen(false)}
+                    className="p-2 hover:bg-slate-200 rounded-full transition-colors"
+                  >
+                    <X className="w-5 h-5 text-slate-500" />
+                  </button>
+                </div>
               </div>
 
               <div className="p-8">
