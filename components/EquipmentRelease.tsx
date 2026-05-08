@@ -803,91 +803,90 @@ export default function EquipmentRelease() {
 
       <AnimatePresence>
         {isModalOpen && selectedLoan && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-md">
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm">
             <motion.div 
-              initial={{ opacity: 0, scale: 0.95, y: 20 }}
+              initial={{ opacity: 0, scale: 0.9, y: 20 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
-              exit={{ opacity: 0, scale: 0.95, y: 20 }}
-              className="bg-white rounded-[2.5rem] w-full max-w-5xl overflow-hidden shadow-[0_32px_64px_-12px_rgba(0,0,0,0.14)] border border-slate-200 flex h-[85vh]"
+              exit={{ opacity: 0, scale: 0.9, y: 20 }}
+              className="bg-white rounded-[40px] w-full max-w-3xl overflow-hidden shadow-2xl border border-slate-200"
             >
-              {/* Left Sidebar: Deployment Info */}
-              <div className="w-80 bg-slate-900 text-white p-8 flex flex-col shrink-0">
-                <div className="mb-8">
-                  <div className="w-12 h-12 bg-[#FDB913] rounded-2xl flex items-center justify-center text-slate-900 mb-4 shadow-lg shadow-[#FDB913]/20">
-                    <ShieldCheck className="w-6 h-6" />
-                  </div>
-                  <h3 className="text-xl font-display font-bold">Deployment Hub</h3>
-                  <p className="text-xs text-slate-400 mt-2 leading-relaxed">Processing equipment release for project assignment.</p>
-                </div>
-
-                <div className="space-y-6 flex-1">
-                  <div className="space-y-1">
-                    <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Project / Vessel</p>
-                    <p className="text-sm font-bold text-white truncate">{selectedLoan.shipname}</p>
-                  </div>
-                  <div className="space-y-1">
-                    <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Destination Vendor</p>
-                    <p className="text-sm font-bold text-white truncate">{selectedLoan.vendor}</p>
-                  </div>
-                  <div className="space-y-1">
-                    <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Loan Duration</p>
-                    <div className="flex items-center gap-2 text-sm font-bold text-[#FDB913]">
-                      <Calendar className="w-3.5 h-3.5" />
-                      {selectedLoan.duration} Days
+              {/* Header */}
+              <div className="p-8 border-b border-slate-100">
+                <div className="flex justify-between items-start">
+                  <div className="flex items-center gap-4">
+                    <div className="w-12 h-12 bg-amber-100 rounded-2xl flex items-center justify-center text-[#FDB913]">
+                      <ShieldCheck className="w-6 h-6" />
+                    </div>
+                    <div>
+                      <h3 className="text-xl font-bold text-slate-800">Process Release</h3>
+                      <p className="text-sm text-slate-500">Assign physical equipment units for deployment</p>
                     </div>
                   </div>
-
-                  <div className="pt-6 border-t border-slate-800 space-y-4">
-                    <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Release Metadata</p>
-                    <div className="space-y-4">
-                      <div className="space-y-2">
-                        <label className="text-[10px] font-medium text-slate-400">Receiver Name</label>
-                        <input 
-                          type="text"
-                          value={releaseForm.received_by}
-                          onChange={(e) => setReleaseForm({ ...releaseForm, received_by: e.target.value })}
-                          className="w-full px-4 py-2.5 bg-slate-800 border border-slate-700 rounded-xl text-xs outline-none focus:ring-1 focus:ring-[#FDB913]"
-                          placeholder="Full Name"
-                        />
-                      </div>
-                      <div className="space-y-2">
-                        <label className="text-[10px] font-medium text-slate-400">Internal Notes</label>
-                        <textarea 
-                          rows={3}
-                          value={releaseForm.notes}
-                          onChange={(e) => setReleaseForm({ ...releaseForm, notes: e.target.value })}
-                          className="w-full px-4 py-2.5 bg-slate-800 border border-slate-700 rounded-xl text-xs outline-none focus:ring-1 focus:ring-[#FDB913] resize-none"
-                          placeholder="Optional notes..."
-                        />
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="pt-6 border-t border-slate-800">
-                  <button 
-                    onClick={() => setIsModalOpen(false)}
-                    className="w-full px-4 py-3 bg-white/5 hover:bg-white/10 text-slate-300 rounded-xl text-xs font-bold transition-all border border-white/10"
-                  >
-                    Cancel Session
+                  <button onClick={() => setIsModalOpen(false)} className="p-2 hover:bg-slate-50 rounded-xl transition-colors">
+                    <X className="w-5 h-5 text-slate-400" />
                   </button>
                 </div>
               </div>
 
-              {/* Main Content: Item Assignment */}
-              <div className="flex-1 flex flex-col bg-slate-50 overflow-hidden">
-                <div className="p-8 border-b border-slate-200 bg-white flex justify-between items-center">
-                  <div>
-                    <h4 className="text-lg font-bold text-slate-800">Assign Physical Units</h4>
-                    <p className="text-xs text-slate-500">Match requested equipment with serial numbers.</p>
+              <div className="p-8 space-y-6 max-h-[70vh] overflow-y-auto">
+                {/* Deployment Metadata */}
+                <div className="grid grid-cols-2 gap-6">
+                  <div className="space-y-1.5">
+                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">WORK ORDER / PROJECT</p>
+                    <div className="px-4 py-3 bg-slate-50 border border-slate-200 rounded-2xl text-sm font-bold text-slate-700">
+                      {selectedLoan.work_order || 'N/A'} - {selectedLoan.shipname}
+                    </div>
                   </div>
-                  <div className="flex items-center gap-2 px-4 py-2 bg-blue-50 text-blue-600 rounded-full border border-blue-100">
-                    <Clock className="w-4 h-4" />
-                    <span className="text-[10px] font-bold uppercase tracking-widest">Active Deployment</span>
+                  <div className="space-y-1.5">
+                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">VENDOR</p>
+                    <div className="px-4 py-3 bg-slate-50 border border-slate-200 rounded-2xl text-sm font-bold text-slate-700">
+                      {selectedLoan.vendor}
+                    </div>
                   </div>
                 </div>
 
-                <div className="flex-1 overflow-y-auto p-8 space-y-6">
+                {/* Duration Banner Style */}
+                <div className="bg-slate-900 rounded-3xl p-5 flex items-center gap-4 text-white shadow-lg">
+                  <div className="w-10 h-10 bg-[#FDB913]/20 rounded-xl flex items-center justify-center text-[#FDB913]">
+                    <Clock className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Loan Duration</p>
+                    <p className="text-lg font-bold">{selectedLoan.duration} Days</p>
+                  </div>
+                </div>
+
+                {/* Receiver & Notes */}
+                <div className="grid grid-cols-2 gap-6">
+                  <div className="space-y-1.5">
+                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">RECEIVED BY (PERSON NAME)</p>
+                    <input 
+                      type="text"
+                      value={releaseForm.received_by}
+                      onChange={(e) => setReleaseForm({ ...releaseForm, received_by: e.target.value })}
+                      className="w-full px-4 py-3 bg-white border border-slate-200 rounded-2xl text-sm outline-none focus:ring-2 focus:ring-[#FDB913]/30 transition-all"
+                      placeholder="Enter receiver name"
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">INTERNAL NOTES</p>
+                    <input 
+                      type="text"
+                      value={releaseForm.notes}
+                      onChange={(e) => setReleaseForm({ ...releaseForm, notes: e.target.value })}
+                      className="w-full px-4 py-3 bg-white border border-slate-200 rounded-2xl text-sm outline-none focus:ring-2 focus:ring-[#FDB913]/30 transition-all"
+                      placeholder="Optional notes"
+                    />
+                  </div>
+                </div>
+
+                {/* Assignment Cards */}
+                <div className="space-y-4 pt-4 border-t border-slate-100">
+                  <div className="flex justify-between items-center">
+                    <h4 className="font-bold text-slate-800">Deployment Items</h4>
+                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Assign physical units</span>
+                  </div>
+
                   {selectedLoan.items.map((item, idx) => {
                     const previouslyFulfilled = getFulfilledQuantity(selectedLoan.id, item.id);
                     const assignedInThisSession = releaseForm.items
@@ -898,114 +897,100 @@ export default function EquipmentRelease() {
                     const remainingNeeded = item.quantity - previouslyFulfilled;
 
                     return (
-                      <div key={idx} className={`bg-white rounded-3xl border transition-all duration-300 ${isFullyMet ? 'border-green-200 shadow-sm' : 'border-slate-200 shadow-xl shadow-slate-200/40'}`}>
-                        <div className="p-6 border-b border-slate-100 flex justify-between items-center">
-                          <div className="flex items-center gap-4">
-                            <div className={`w-10 h-10 rounded-2xl flex items-center justify-center ${isFullyMet ? 'bg-green-100 text-green-600' : 'bg-blue-100 text-blue-600'}`}>
-                              <Package className="w-5 h-5" />
-                            </div>
-                            <div>
-                              <h5 className="font-bold text-slate-800">{item.type}</h5>
-                              <div className="flex items-center gap-2 mt-1">
-                                <span className="text-[10px] text-slate-400 font-bold uppercase">Requested: {item.quantity}</span>
-                                {previouslyFulfilled > 0 && (
-                                  <span className="text-[10px] text-green-500 font-bold uppercase">• {previouslyFulfilled} Already Released</span>
-                                )}
-                              </div>
-                            </div>
-                          </div>
-                          
+                      <div key={idx} className="bg-slate-50 p-6 rounded-3xl border border-slate-200 space-y-4">
+                        <div className="flex justify-between items-center">
                           <div className="flex items-center gap-3">
-                            <div className="text-right mr-2">
-                              <p className="text-[10px] font-bold text-slate-400 uppercase">Session Progress</p>
-                              <p className="text-sm font-bold text-slate-700">{assignedInThisSession.length} / {remainingNeeded} Assigned</p>
-                            </div>
-                            {!isFullyMet && (
-                              <button 
-                                onClick={() => addReleaseUnit(item)}
-                                className="w-10 h-10 bg-[#FDB913] text-slate-900 rounded-xl flex items-center justify-center hover:bg-[#e5a611] transition-all shadow-lg shadow-[#FDB913]/20"
-                              >
-                                <Plus className="w-5 h-5" />
-                              </button>
-                            )}
-                            {isFullyMet && (
-                              <div className="w-10 h-10 bg-green-500 text-white rounded-xl flex items-center justify-center">
-                                <CheckCircle2 className="w-5 h-5" />
-                              </div>
+                            <span className="font-bold text-slate-700">{item.type}</span>
+                            <span className="px-2 py-0.5 bg-blue-100 text-blue-600 text-[10px] font-black rounded-md">
+                              QTY: {item.quantity}
+                            </span>
+                            {previouslyFulfilled > 0 && (
+                              <span className="px-2 py-0.5 bg-green-100 text-green-600 text-[10px] font-black rounded-md">
+                                {previouslyFulfilled} RELEASED
+                              </span>
                             )}
                           </div>
+                          {!isFullyMet && (
+                            <button 
+                              onClick={() => addReleaseUnit(item)}
+                              className="text-xs font-bold text-[#FDB913] hover:text-[#e5a611] flex items-center gap-1"
+                            >
+                              <Plus className="w-3 h-3" /> Add Unit
+                            </button>
+                          )}
                         </div>
 
-                        {assignedInThisSession.length > 0 && (
-                          <div className="p-6 bg-slate-50/50 space-y-3">
-                            {assignedInThisSession.map((unit, uIdx) => (
-                              <div key={uIdx} className="flex gap-3 group">
-                                <div className="flex-1 relative">
-                                  <select 
-                                    className="w-full pl-4 pr-10 py-3 bg-white border border-slate-200 rounded-2xl text-xs font-semibold outline-none focus:ring-2 focus:ring-[#FDB913]/30 transition-all appearance-none group-hover:border-[#FDB913]/50 shadow-sm"
-                                    value={unit.equipment_id}
-                                    onChange={(e) => {
-                                      const assetId = e.target.value;
-                                      const asset = assets.find(a => a.id === assetId);
-                                      const newItems = [...releaseForm.items];
-                                      newItems[unit.originalIdx] = { 
-                                        ...newItems[unit.originalIdx], 
-                                        equipment_id: assetId,
-                                        alias: asset?.alias || asset?.name || ''
-                                      };
-                                      setReleaseForm({ ...releaseForm, items: newItems });
-                                    }}
-                                  >
-                                    <option value="">-- Assign Physical Asset (Serial/Alias) --</option>
-                                    {assets
-                                      .filter(a => 
-                                        a.type === item.type && 
-                                        (a.available === 'Yes' || a.id === unit.equipment_id) &&
-                                        !releaseForm.items.some(other => other.equipment_id === a.id && other !== releaseForm.items[unit.originalIdx])
-                                      )
-                                      .map(a => (
-                                        <option key={a.id} value={a.id}>{a.alias || a.name} [{a.no_asset}]</option>
-                                      ))
-                                    }
-                                  </select>
-                                  <div className="absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400">
-                                    <ChevronRight className="w-3.5 h-3.5 rotate-90" />
-                                  </div>
-                                </div>
-                                <button 
-                                  onClick={() => removeReleaseUnit(unit.originalIdx)}
-                                  className="w-11 h-11 bg-white border border-slate-200 text-slate-400 hover:text-red-500 hover:border-red-100 hover:bg-red-50 rounded-2xl flex items-center justify-center transition-all shadow-sm"
-                                >
-                                  <Trash2 className="w-4 h-4" />
-                                </button>
-                              </div>
-                            ))}
-                          </div>
-                        )}
+                        <div className="space-y-3">
+                          {assignedInThisSession.map((unit, uIdx) => (
+                            <div key={uIdx} className="flex gap-3">
+                              <select 
+                                className="flex-1 px-4 py-2.5 bg-white border border-slate-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-[#FDB913]/30"
+                                value={unit.equipment_id}
+                                onChange={(e) => {
+                                  const assetId = e.target.value;
+                                  const asset = assets.find(a => a.id === assetId);
+                                  const newItems = [...releaseForm.items];
+                                  newItems[unit.originalIdx] = { 
+                                    ...newItems[unit.originalIdx], 
+                                    equipment_id: assetId,
+                                    alias: asset?.alias || asset?.name || ''
+                                  };
+                                  setReleaseForm({ ...releaseForm, items: newItems });
+                                }}
+                              >
+                                <option value="">Select Physical Asset</option>
+                                {assets
+                                  .filter(a => 
+                                    a.type === item.type && 
+                                    (a.available === 'Yes' || a.id === unit.equipment_id) &&
+                                    !releaseForm.items.some(other => other.equipment_id === a.id && other !== releaseForm.items[unit.originalIdx])
+                                  )
+                                  .map(a => (
+                                    <option key={a.id} value={a.id}>{a.alias || a.name} [{a.no_asset}]</option>
+                                  ))
+                                }
+                              </select>
+                              <button 
+                                onClick={() => removeReleaseUnit(unit.originalIdx)}
+                                className="p-2.5 text-slate-400 hover:text-red-500 hover:bg-white rounded-xl border border-transparent hover:border-red-100 transition-all"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </button>
+                            </div>
+                          ))}
+                          {assignedInThisSession.length === 0 && !isFullyMet && (
+                            <div className="py-4 border-2 border-dashed border-slate-200 rounded-2xl flex items-center justify-center">
+                              <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest italic">No units assigned yet</p>
+                            </div>
+                          )}
+                          {isFullyMet && assignedInThisSession.length === 0 && (
+                            <div className="py-4 bg-green-50 border border-green-100 rounded-2xl flex items-center justify-center gap-2">
+                              <CheckCircle2 className="w-4 h-4 text-green-500" />
+                              <p className="text-[10px] text-green-600 font-bold uppercase tracking-widest">Fully Fulfilled</p>
+                            </div>
+                          )}
+                        </div>
                       </div>
                     );
                   })}
                 </div>
+              </div>
 
-                <div className="p-8 bg-white border-t border-slate-200 flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <div className="text-xs">
-                      <p className="text-slate-400 font-medium">Ready to deploy</p>
-                      <p className="text-slate-700 font-bold">{releaseForm.items.filter(i => i.equipment_id).length} units assigned in this session</p>
-                    </div>
-                  </div>
-                  <button 
-                    onClick={handleRelease}
-                    disabled={isLoading || releaseForm.items.length === 0 || releaseForm.items.some(i => !i.equipment_id)}
-                    className="px-10 py-4 bg-[#FDB913] text-slate-900 rounded-2xl text-sm font-black hover:bg-[#e5a611] transition-all disabled:opacity-30 disabled:grayscale shadow-xl shadow-[#FDB913]/20 flex items-center gap-3 uppercase tracking-wider"
-                  >
-                    {isLoading ? 'Processing...' : (
-                      <>
-                        Finalize Deployment <ArrowRight className="w-4 h-4" />
-                      </>
-                    )}
-                  </button>
-                </div>
+              {/* Footer */}
+              <div className="p-8 bg-slate-50 border-t border-slate-100 flex justify-end gap-3">
+                <button 
+                  onClick={() => setIsModalOpen(false)}
+                  className="px-8 py-3 bg-white border border-slate-200 text-slate-600 rounded-2xl text-sm font-bold hover:bg-slate-100 transition-all"
+                >
+                  Cancel
+                </button>
+                <button 
+                  onClick={handleRelease}
+                  disabled={isLoading || releaseForm.items.length === 0 || releaseForm.items.some(i => !i.equipment_id)}
+                  className="px-10 py-3 bg-[#FDB913] text-slate-900 rounded-2xl text-sm font-black hover:bg-[#e5a611] transition-all disabled:opacity-50 shadow-lg shadow-[#FDB913]/20"
+                >
+                  {isLoading ? 'Processing...' : 'Confirm Release'}
+                </button>
               </div>
             </motion.div>
           </div>
