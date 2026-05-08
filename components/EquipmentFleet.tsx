@@ -17,7 +17,8 @@ import {
   Edit2,
   AlertCircle,
   Info,
-  FileText
+  FileText,
+  User
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { useData, Equipment } from '@/context/DataContext';
