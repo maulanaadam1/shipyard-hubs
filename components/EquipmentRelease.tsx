@@ -370,6 +370,16 @@ export default function EquipmentRelease() {
     setReleaseForm({ ...releaseForm, items: newItems });
   };
 
+  const getItemsList = (items: any) => {
+    try {
+      if (Array.isArray(items)) return items;
+      if (typeof items === 'string') return JSON.parse(items);
+      return [];
+    } catch (e) {
+      return [];
+    }
+  };
+
   const getFulfilledQuantity = (loanId: string, itemId: string) => {
     const loanReleases = (releases || []).filter(r => r.loan_id === loanId);
     let total = 0;
@@ -521,15 +531,6 @@ export default function EquipmentRelease() {
     setCurrentPageHistory(1);
   }, [searchTerm]);
 
-  const getItemsList = (items: any) => {
-    try {
-      if (Array.isArray(items)) return items;
-      if (typeof items === 'string') return JSON.parse(items);
-      return [];
-    } catch (e) {
-      return [];
-    }
-  };
 
   return (
     <div className="p-8 space-y-8 min-h-screen bg-slate-50/50">
