@@ -76,7 +76,7 @@ func createTables() {
 		created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
 		updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
 		source TEXT, no_asset TEXT, type TEXT, brand TEXT, name TEXT,
-		capacity TEXT, year_invest TEXT, available TEXT, alias TEXT, price TEXT
+		capacity TEXT, year_invest TEXT, available TEXT, alias TEXT, price TEXT, pic TEXT
 	);
 
 	CREATE TABLE IF NOT EXISTS loan_requests (
@@ -246,6 +246,7 @@ func createTables() {
 	DB.Exec("ALTER TABLE vessel_layouts ADD COLUMN scale_y REAL DEFAULT 3.2")
 	DB.Exec("ALTER TABLE vessel_layouts ADD COLUMN location_id TEXT")
 	DB.Exec("ALTER TABLE vessel_layouts ADD COLUMN default_zoom REAL DEFAULT 1.0")
+	DB.Exec("ALTER TABLE equipment ADD COLUMN pic TEXT")
 	
 	DB.Exec(`CREATE TABLE IF NOT EXISTS roles_master (
 		id TEXT PRIMARY KEY,
