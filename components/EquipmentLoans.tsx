@@ -1425,11 +1425,17 @@ export default function EquipmentLoans() {
                 {(() => {
                   const currentStep = selectedLoan.approval_steps.find(s => s.isCurrent);
                   const stepUserIds2: string[] = (() => { try { return currentStep?.user_ids ? JSON.parse(currentStep.user_ids) : []; } catch { return []; } })();
+                  const isPIC = selectedLoan.items.some(item => {
+                    const itemTypeData = fleet.find(a => a.type === item.type);
+                    return itemTypeData?.pic === currentUser?.name || itemTypeData?.pic === (currentUser as any)?.username;
+                  });
+
                   const canApprove = currentStep && (
                     (currentUser?.role === 'Admin') ||
-                    (stepUserIds2.length > 0 && stepUserIds2.includes(currentUser?.id || '')) ||
-                    (stepUserIds2.length === 0 && currentStep.user_id && currentStep.user_id === currentUser?.id) ||
-                    (stepUserIds2.length === 0 && !currentStep.user_id && currentStep.jabatan && currentStep.jabatan?.trim().toLowerCase() === currentUser?.jabatan?.trim().toLowerCase())
+                    ((stepUserIds2.length > 0 && stepUserIds2.includes(currentUser?.id || '')) ||
+                     (stepUserIds2.length === 0 && currentStep.user_id && currentStep.user_id === currentUser?.id) ||
+                     (stepUserIds2.length === 0 && !currentStep.user_id && currentStep.jabatan && currentStep.jabatan?.trim().toLowerCase() === currentUser?.jabatan?.trim().toLowerCase())
+                    ) && isPIC
                   );
                   
                   return selectedLoan.status === 'Pending' && canApprove && (
