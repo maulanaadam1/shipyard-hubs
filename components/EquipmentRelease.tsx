@@ -60,7 +60,7 @@ export default function EquipmentRelease() {
       if (loanErr) throw loanErr;
 
       // 3. Delete all deployment records (menu return)
-      const { error: depErr } = await api.from('deployment_records').delete().eq('unique_id', 'all');
+      const { error: depErr } = await api.from('deployment_records').delete().eq('id', 'all');
       if (depErr) throw depErr;
       
       alert('✅ Database has been cleared. You can now perform a fresh import.');
