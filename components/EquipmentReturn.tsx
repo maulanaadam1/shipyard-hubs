@@ -63,11 +63,13 @@ export default function EquipmentReturn() {
       .map(a => a.type);
     const uniqueMyTypes = Array.from(new Set(myEquipmentTypes));
 
+    if (currentUser?.role === 'Admin') return true;
+
     if (uniqueMyTypes.length > 0) {
       return loan.items.some(item => uniqueMyTypes.includes(item.type));
     }
 
-    return true;
+    return false;
   });
 
   // 2. Logic for Return History (Individual Records)
@@ -88,11 +90,13 @@ export default function EquipmentReturn() {
       .map(a => a.type);
     const uniqueMyTypes = Array.from(new Set(myEquipmentTypes));
 
+    if (currentUser?.role === 'Admin') return true;
+
     if (uniqueMyTypes.length > 0) {
       return uniqueMyTypes.includes(d.item);
     }
 
-    return true;
+    return false;
   }).sort((a, b) => new Date(b.return_date).getTime() - new Date(a.return_date).getTime());
 
   // Pagination Logic (Mainly for History)

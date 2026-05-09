@@ -499,11 +499,13 @@ export default function EquipmentRelease() {
       .map(a => a.type);
     const uniqueMyTypes = Array.from(new Set(myEquipmentTypes));
 
+    if (currentUser?.role === 'Admin') return true;
+
     if (uniqueMyTypes.length > 0) {
       return l.items.some(item => uniqueMyTypes.includes(item.type));
     }
     
-    return true;
+    return false;
   });
 
   const filteredLoans = approvedLoans.filter(l => 
@@ -529,12 +531,14 @@ export default function EquipmentRelease() {
       .map(a => a.type);
     const uniqueMyTypes = Array.from(new Set(myEquipmentTypes));
 
+    if (currentUser?.role === 'Admin') return true;
+
     if (uniqueMyTypes.length > 0) {
       const items = getItemsList(r.items_released);
       return items.some((i: any) => uniqueMyTypes.includes(i.type));
     }
 
-    return true;
+    return false;
   });
 
   // Pagination Logic for History
