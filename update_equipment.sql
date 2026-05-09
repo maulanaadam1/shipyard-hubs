@@ -26,6 +26,7 @@ ALTER TABLE equipment RENAME COLUMN location TO source;
 ------------------------------------------------------------------
 ALTER TABLE equipment ADD COLUMN updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW();
 ALTER TABLE equipment ADD COLUMN price TEXT;
+ALTER TABLE equipment ADD COLUMN pic TEXT;
 
 ------------------------------------------------------------------
 -- 4. Drop unused columns (HATI-HATI PADA DATA ANDA)
