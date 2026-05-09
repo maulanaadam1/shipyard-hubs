@@ -39,6 +39,8 @@ export default function EquipmentFleet() {
   const [isSaving, setIsSaving] = useState(false);
   const [isBulkAssignModalOpen, setIsBulkAssignModalOpen] = useState(false);
   const [bulkPic, setBulkPic] = useState('');
+  const [isSuccessModalOpen, setIsSuccessModalOpen] = useState(false);
+  const [successMessage, setSuccessMessage] = useState('');
   
   // Pagination State
   const [currentPage, setCurrentPage] = useState(1);
@@ -320,7 +322,8 @@ export default function EquipmentFleet() {
       
       if (error) throw error;
       
-      alert(`Successfully assigned ${bulkPic} as PIC for ${ids.length} items.`);
+      setSuccessMessage(`Successfully assigned ${bulkPic} as PIC for ${ids.length} items.`);
+      setIsSuccessModalOpen(true);
       setIsBulkAssignModalOpen(false);
       setSelectedIds(new Set());
       if (typeof fetchData === 'function') await fetchData();
@@ -938,6 +941,52 @@ export default function EquipmentFleet() {
                   </button>
                 </div>
               </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      </AnimatePresence>
+
+      {/* Success Modal */}
+      <AnimatePresence>
+        {isSuccessModalOpen && (
+          <div className="fixed inset-0 z-[70] flex items-center justify-center p-4">
+            <motion.div 
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setIsSuccessModalOpen(false)}
+              className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm"
+            />
+            <motion.div 
+              initial={{ scale: 0.9, opacity: 0, y: 20 }}
+              animate={{ scale: 1, opacity: 1, y: 0 }}
+              exit={{ scale: 0.9, opacity: 0, y: 20 }}
+              className="relative w-full max-w-sm bg-white rounded-[2rem] shadow-2xl overflow-hidden p-8 text-center border border-slate-100"
+            >
+              <div className="mb-6 relative">
+                <div className="w-20 h-20 bg-teal-50 rounded-full flex items-center justify-center mx-auto text-teal-600 relative z-10">
+                  <Check className="w-10 h-10" />
+                </div>
+                <motion.div 
+                  initial={{ scale: 0 }}
+                  animate={{ scale: 1 }}
+                  className="absolute inset-0 bg-teal-100 rounded-full blur-2xl opacity-50"
+                />
+              </div>
+              
+              <h3 className="text-xl font-bold text-slate-800 mb-2">Success!</h3>
+              <p className="text-sm text-slate-500 mb-8 leading-relaxed">
+                {successMessage}
+              </p>
+
+              <button 
+                onClick={() => setIsSuccessModalOpen(false)}
+                className="w-full py-3.5 bg-slate-900 text-white rounded-2xl text-sm font-bold hover:bg-slate-800 transition-all shadow-xl shadow-slate-200 active:scale-[0.98]"
+              >
+                Great, thanks!
+              </button>
             </motion.div>
           </div>
         )}
