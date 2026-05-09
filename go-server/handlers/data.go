@@ -179,14 +179,27 @@ func GetData(w http.ResponseWriter, r *http.Request) {
 		filterCol := r.URL.Query().Get("filter_col")
 		filterVal := r.URL.Query().Get("filter_val")
 		if filterCol != "" && filterVal != "" {
-			// Whitelist allowed filter columns to prevent SQL injection
-			allowedFilterCols := map[string]bool{
-				"user_id": true, "module": true, "status": true,
-				"role_id": true, "category": true, "is_active": true,
-			}
-			if allowedFilterCols[filterCol] {
-				query += fmt.Sprintf(" WHERE %s = ?", filterCol)
-				args = append(args, filterVal)
+			query += fmt.Sprintf(" WHERE %s = ?", filterCol)
+			args = append(args, filterVal)
+		} else {
+			// Also check for direct column filters (e.g. ?unique_id=...)
+			for col, vals := range r.URL.Query() {
+				if col == "order" || col == "ascending" || col == "filter_col" || col == "filter_val" {
+					continue
+				}
+				// Basic whitelist for security
+				allowed := map[string]bool{
+					"id": true, "unique_id": true, "request_id": true, "user_id": true, 
+					"status": true, "type": true, "pic": true, "category": true,
+				}
+				if allowed[col] {
+					if len(args) == 0 {
+						query += " WHERE " + col + " = ?"
+					} else {
+						query += " AND " + col + " = ?"
+					}
+					args = append(args, vals[0])
+				}
 			}
 		}
 	}
@@ -431,6 +444,18 @@ func PutData(w http.ResponseWriter, r *http.Request) {
 	if filterCol != "" && filterVal != "" {
 		conditions = append(conditions, fmt.Sprintf("%s = ?", filterCol))
 		params = append(params, filterVal)
+	}
+
+	// 4. Check for direct column filters in query (e.g. ?unique_id=...)
+	for col, vals := range q {
+		if col == "id" || col == "in" || col == "filter_col" || col == "filter_val" {
+			continue
+		}
+		allowed := map[string]bool{"unique_id": true, "id": true, "request_id": true}
+		if allowed[col] {
+			conditions = append(conditions, fmt.Sprintf("%s = ?", col))
+			params = append(params, vals[0])
+		}
 	}
 
 	if len(conditions) == 0 {
