@@ -173,6 +173,7 @@ func createTables() {
 
 	CREATE TABLE IF NOT EXISTS deployment_records (
 		unique_id TEXT PRIMARY KEY,
+		create_date TEXT,
 		create_by TEXT,
 		last_updated TEXT,
 		request_id TEXT,
@@ -247,6 +248,7 @@ func createTables() {
 	DB.Exec("ALTER TABLE vessel_layouts ADD COLUMN location_id TEXT")
 	DB.Exec("ALTER TABLE vessel_layouts ADD COLUMN default_zoom REAL DEFAULT 1.0")
 	DB.Exec("ALTER TABLE equipment ADD COLUMN pic TEXT")
+	DB.Exec("ALTER TABLE deployment_records ADD COLUMN create_date TEXT")
 	
 	DB.Exec(`CREATE TABLE IF NOT EXISTS roles_master (
 		id TEXT PRIMARY KEY,
