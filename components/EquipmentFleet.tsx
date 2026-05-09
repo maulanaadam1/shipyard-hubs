@@ -946,8 +946,6 @@ export default function EquipmentFleet() {
         )}
       </AnimatePresence>
 
-      </AnimatePresence>
-
       {/* Success Modal */}
       <AnimatePresence>
         {isSuccessModalOpen && (
