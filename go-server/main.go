@@ -61,6 +61,12 @@ func main() {
 		r.Get("/api/data/{table}", handlers.GetData)
 		r.Get("/api/stats", handlers.GetStats)
 
+		// Proxy for single Work Order Detail
+		r.Get("/api/work-orders/{id}/detail", handlers.GetWorkOrderDetail)
+		r.Post("/api/work-orders/{id}/sync", handlers.SyncWorkOrderDetail)
+		r.Get("/api/work-orders/pending-approvals", handlers.GetPendingApprovals)
+		r.Post("/api/work-orders/bulk-pending-approvals", handlers.PostBulkPendingApprovals)
+
 		// Export (all authenticated roles)
 		r.Get("/api/export/{table}/csv", handlers.ExportCSV)
 		r.Get("/api/export/{table}/json", handlers.ExportJSON)

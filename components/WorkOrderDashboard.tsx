@@ -23,7 +23,8 @@ import {
   Calendar,
   ExternalLink,
   Settings,
-  CloudLightning
+  CloudLightning,
+  DownloadCloud
 } from 'lucide-react';
 import { api, getHeaders } from '@/lib/api-client';
 
@@ -308,11 +309,98 @@ export default function WorkOrderDashboard() {
 
   // Selected Detail Row State (Drawer)
   const [selectedRow, setSelectedRow] = useState<any>(null);
+  const [detailedRowData, setDetailedRowData] = useState<any>(null);
+  const [isFetchingDetail, setIsFetchingDetail] = useState(false);
+  const [isSyncingDetail, setIsSyncingDetail] = useState(false);
+  const [detailFetchError, setDetailFetchError] = useState<string | null>(null);
+  const [activeDetailTab, setActiveDetailTab] = useState<'pekerjaan' | 'material'>('pekerjaan');
 
   // Hover state for SVG weekly trend interaction
   const [hoveredTrendPoint, setHoveredTrendPoint] = useState<any>(null);
 
   const [isSyncing, setIsSyncing] = useState(false);
+  const [pendingApprovals, setPendingApprovals] = useState<Record<string, number>>({});
+  const fetchDetail = async (): Promise<boolean> => {
+    if (!selectedRow || !selectedRow.id) return false;
+    setIsFetchingDetail(true);
+    setDetailedRowData(null);
+    setDetailFetchError(null);
+    try {
+      const headers = await getHeaders();
+      const res = await fetch(`/api/work-orders/${selectedRow.id}/detail`, { headers });
+      if (res.ok) {
+        const result = await res.json();
+        setDetailedRowData(result.data || result);
+        return true;
+      } else if (res.status === 404) {
+        // Not synced yet, this is expected.
+        setDetailedRowData(null);
+        return false;
+      } else {
+        setDetailFetchError("Gagal membaca database lokal.");
+        return false;
+      }
+    } catch (error) {
+      setDetailFetchError("Terjadi kesalahan jaringan.");
+      return false;
+    } finally {
+      setIsFetchingDetail(false);
+    }
+  };
+
+  const fetchPendingApprovals = async (ids: string[]) => {
+    if (!ids || ids.length === 0) return;
+    try {
+      const headers = await getHeaders();
+      const res = await fetch('/api/work-orders/bulk-pending-approvals', {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ ids: ids.map(String) })
+      });
+      if (res.ok) {
+        const map = await res.json();
+        setPendingApprovals(prev => ({ ...prev, ...map }));
+      }
+    } catch (e) {}
+  };
+
+  const triggerSyncDetail = async () => {
+    if (!selectedRow || !selectedRow.id) return;
+    setIsSyncingDetail(true);
+    setDetailFetchError(null);
+    try {
+      const headers = await getHeaders();
+      const res = await fetch(`/api/work-orders/${selectedRow.id}/sync`, { method: 'POST', headers });
+      if (res.ok) {
+        const result = await res.json();
+        setDetailedRowData(result.data || result);
+        fetchPendingApprovals([selectedRow.id]); // update main table immediately
+      } else {
+        const errObj = await res.json().catch(() => ({}));
+        setDetailFetchError(errObj.error || "Gagal melakukan sinkronisasi dengan API Samudera.");
+      }
+    } catch (error) {
+      setDetailFetchError("Terjadi kesalahan jaringan saat proses sinkronisasi.");
+    } finally {
+      setIsSyncingDetail(false);
+    }
+  };
+
+  useEffect(() => {
+    if (selectedRow) {
+      setActiveDetailTab('pekerjaan'); // reset tab on new selection
+      fetchDetail().then((hasLocalData) => {
+        // Automatically sync to pull the latest details when modal opens
+        // If hasLocalData is false, we definitely need it.
+        // Even if it's true, we trigger sync in the background so the user always has latest data.
+        if (!hasLocalData) {
+           triggerSyncDetail();
+        }
+      });
+    } else {
+      setDetailedRowData(null);
+    }
+  }, [selectedRow]);
 
   // Auto fetch sync config on mount
   useEffect(() => {
@@ -700,15 +788,16 @@ export default function WorkOrderDashboard() {
   const weeklyCostTrend = useMemo(() => {
     const groups: Record<string, { cost: number; count: number }> = {};
     filteredData.forEach(item => {
-      if (!item.created_at) return;
+      const targetDate = item.updated_at || item.created_at;
+      if (!targetDate) return;
       
       let groupKey: string | null = "";
       if (trendGroupingMode === "daily") {
-        groupKey = item.created_at.split(' ')[0]; // YYYY-MM-DD
+        groupKey = targetDate.split(' ')[0]; // YYYY-MM-DD
       } else if (trendGroupingMode === "weekly") {
-        groupKey = getStartOfWeek(item.created_at); // Hari Senin Terdekat
+        groupKey = getStartOfWeek(targetDate); // Hari Senin Terdekat
       } else {
-        groupKey = item.created_at.substring(0, 7); // YYYY-MM (Bulanan)
+        groupKey = targetDate.substring(0, 7); // YYYY-MM (Bulanan)
       }
 
       if (!groupKey) return;
@@ -860,6 +949,11 @@ export default function WorkOrderDashboard() {
     return filteredData.slice(startIndex, startIndex + itemsPerPage);
   }, [filteredData, currentPage]);
 
+  useEffect(() => {
+    const pageIds = paginatedData.map(d => d.id);
+    fetchPendingApprovals(pageIds);
+  }, [paginatedData]);
+
   const totalPages = Math.ceil(filteredData.length / itemsPerPage) || 1;
 
   const formatIDR = (value: number) => {
@@ -933,7 +1027,7 @@ export default function WorkOrderDashboard() {
         </div>
       </header>
 
-      <main className="w-full max-w-[1600px] mx-auto p-4 md:p-8 space-y-6">
+      <main className="w-full p-4 md:p-8 space-y-6">
 
         {/* SECTION 2: TOP METRICS (4 Columns) */}
         <section className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -1381,7 +1475,7 @@ export default function WorkOrderDashboard() {
                       >
                         <div className="flex justify-between items-start">
                           <div className="min-w-0 flex-1">
-                            <p className="text-xs font-bold text-slate-700 dark:text-slate-200 truncate pr-2 flex items-center gap-1" title={vp.vendorName}>
+                            <p className="text-xs font-semibold text-slate-900 truncate pr-2 flex items-center gap-1" title={vp.vendorName}>
                               {vp.vendorName}
                               {isCurrentVendorFilter && (
                                 <span className="text-[8px] font-bold px-1.5 py-0.2 rounded bg-emerald-500 text-white uppercase tracking-wider">
@@ -1389,7 +1483,7 @@ export default function WorkOrderDashboard() {
                                 </span>
                               )}
                             </p>
-                            <p className="text-[10px] text-slate-900 font-medium truncate pr-2 mt-0.5" title={vp.projectName}>
+                            <p className="text-[10px] text-slate-500 font-medium truncate pr-2 mt-0.5" title={vp.projectName}>
                               Proyek: {vp.projectName}
                             </p>
                           </div>
@@ -1538,22 +1632,23 @@ export default function WorkOrderDashboard() {
           <div className="overflow-x-auto">
             <table className="w-full text-left border-collapse">
               <thead>
-                <tr className={`text-xs font-bold uppercase tracking-wider border-b ${isDarkMode ? 'bg-slate-800/50 border-slate-800 text-slate-400' : 'bg-slate-50/75 border-slate-200 text-slate-500'}`}>
+                <tr className="bg-slate-50/50 border-b border-slate-100 text-xs font-bold uppercase tracking-wider text-slate-400">
                   <th className="py-3.5 px-6">No</th>
                   <th className="py-3.5 px-6">Kode WO (Work Order)</th>
                   <th className="py-3.5 px-6">Kode JO (Job Order)</th>
                   <th className="py-3.5 px-6">Proyek (JO - Nama Kapal)</th>
                   <th className="py-3.5 px-6">Vendor Rekanan</th>
                   <th className="py-3.5 px-6 text-right">Nilai WO</th>
+                  <th className="py-3.5 px-6 text-right">Pending Approval</th>
                   <th className="py-3.5 px-6 text-center">Terakhir Diperbarui</th>
                   <th className="py-3.5 px-6 text-center">Status Approval</th>
                   <th className="py-3.5 px-6 text-center">Detail</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-100 dark:divide-slate-800 text-sm">
+              <tbody className="divide-y divide-slate-50 text-sm">
                 {paginatedData.length === 0 ? (
                   <tr>
-                    <td colSpan={9} className="py-12 text-center text-slate-400 text-xs">
+                    <td colSpan={10} className="py-12 text-center text-slate-400 text-xs">
                       Tidak ada data Work Order yang cocok dengan penyaringan Anda pada rentang waktu ini.
                     </td>
                   </tr>
@@ -1602,6 +1697,11 @@ export default function WorkOrderDashboard() {
                         {formatIDR(item.totalCostNum)}
                       </td>
 
+                      {/* Kolom Pending Approval */}
+                      <td className="py-3.5 px-6 text-right font-bold font-mono text-xs text-amber-500">
+                        {pendingApprovals[item.id] !== undefined ? formatIDR(pendingApprovals[item.id]) : 'Rp 0'}
+                      </td>
+
                       {/* Kolom Terakhir Diperbarui */}
                       <td className="py-3.5 px-6 text-center font-mono text-xs text-slate-500 dark:text-slate-400">
                         {item.updated_at || '-'}
@@ -1626,7 +1726,7 @@ export default function WorkOrderDashboard() {
             </table>
           </div>
 
-          <div className="px-6 py-4 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between gap-4">
+          <div className="px-6 py-4 border-t border-slate-100 bg-slate-50/30 flex items-center justify-between gap-4">
             <span className="text-xs text-slate-400">
               Menampilkan {Math.min(filteredData.length, (currentPage - 1) * itemsPerPage + 1)}-{Math.min(filteredData.length, currentPage * itemsPerPage)} dari {filteredData.length} data
             </span>
@@ -1656,154 +1756,309 @@ export default function WorkOrderDashboard() {
 
       </main>
 
-      {/* DETAILED ROW SIDE PANEL (DRAWER MODAL) */}
+      {/* DETAILED ROW MODAL */}
       {selectedRow && (
-        <div className="fixed inset-0 z-50 overflow-hidden flex justify-end">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6">
           <div 
-            className="absolute inset-0 bg-slate-950/40 backdrop-blur-sm transition-opacity"
+            className="absolute inset-0 bg-slate-950/60 backdrop-blur-sm transition-opacity"
             onClick={() => setSelectedRow(null)}
           ></div>
 
-          <div className={`relative w-full max-w-lg h-full flex flex-col shadow-2xl transition-transform duration-300 transform translate-x-0 ${isDarkMode ? 'bg-slate-900 border-l border-slate-800 text-slate-100' : 'bg-white border-l border-slate-200 text-slate-800'}`}>
+          <div className="relative w-full max-w-6xl max-h-[95vh] flex flex-col shadow-2xl rounded-2xl overflow-hidden bg-white border border-slate-200 text-slate-800">
             
-            <div className="p-6 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between">
+            <div className="p-5 sm:p-6 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
               <div className="space-y-1">
-                <span className="text-[10px] uppercase font-bold tracking-wider text-slate-400 px-2 py-0.5 rounded bg-slate-500/10">Detail Work Order</span>
-                {/* Kode WO di Sidebar Drawer juga memiliki Tautan Eksternal */}
-                <h3 className="text-lg font-bold font-mono text-indigo-500 mt-1 flex items-center gap-2">
+                <span className="text-xs uppercase font-bold tracking-wider text-slate-400 px-2 py-0.5 rounded bg-slate-500/10">Detail Work Order</span>
+                <h3 className="text-xl sm:text-2xl font-bold font-mono text-[#FDB913] mt-1 flex items-center gap-2">
                   {selectedRow.woCode}
                   <a 
                     href={`https://shipyard-siaga.samudera.id/v2/work-orders/progress/${selectedRow.id}`}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="text-slate-400 hover:text-indigo-500 transition"
+                    className="text-slate-400 hover:text-[#FDB913] transition"
                     title="Buka detail WO di Samudera Shipyard"
                   >
-                    <ExternalLink size={16} />
+                    <ExternalLink size={20} />
                   </a>
                 </h3>
               </div>
               <button 
                 onClick={() => setSelectedRow(null)}
-                className="p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-400 transition"
+                className="p-2 rounded-full hover:bg-slate-200 text-slate-400 hover:text-rose-500 transition"
               >
-                <X size={20} />
+                <X size={24} />
               </button>
             </div>
 
-            <div className="flex-1 overflow-y-auto p-6 space-y-6">
+            <div className="flex-1 overflow-y-auto p-5 sm:p-8 space-y-8 custom-scrollbar">
               
-              <div className="grid grid-cols-2 gap-4 p-4 rounded-xl bg-slate-500/5">
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4 p-5 rounded-xl bg-slate-50 border border-slate-100">
                 <div>
-                  <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider mb-2">Status Approval</p>
-                  <span className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold ${getStatusBadgeStyles(selectedRow.derivedStatus)}`}>
+                  <p className="text-xs text-slate-400 font-bold uppercase tracking-wider mb-2">Status Approval</p>
+                  <span className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-semibold ${getStatusBadgeStyles(selectedRow.derivedStatus)}`}>
                     {getStatusIcon(selectedRow.derivedStatus)}
                     {selectedRow.derivedStatus}
                   </span>
                 </div>
                 <div>
-                  <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Total Cost (IDR)</p>
-                  <p className="text-base font-bold font-mono text-emerald-500 mt-1">
+                  <p className="text-xs text-slate-400 font-bold uppercase tracking-wider mb-2">Total Harga / Cost (IDR)</p>
+                  <p className="text-lg font-bold font-mono text-emerald-500">
                     {formatIDR(selectedRow.totalCostNum)}
                   </p>
                 </div>
+                <div className="md:col-span-2">
+                  <p className="text-xs text-slate-400 font-bold uppercase tracking-wider mb-2">Vendor / Partner</p>
+                  <p className="text-sm font-bold text-slate-800">{selectedRow.vendorName}</p>
+                </div>
               </div>
 
-              <div className="space-y-4">
-                <h4 className="text-xs font-bold uppercase text-slate-400 tracking-wider pb-1 border-b border-dashed border-slate-200 dark:border-slate-800">Informasi Proyek & Kapal</h4>
-                
-                <div className="grid grid-cols-2 gap-y-3 text-xs">
-                  <div className="col-span-2">
-                    <span className="text-slate-400">Nama Proyek (Gabungan):</span>
-                    <p className="font-bold mt-0.5 text-indigo-500">{selectedRow.projectName}</p>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                <div className="space-y-4">
+                  <h4 className="text-sm font-bold uppercase text-slate-400 tracking-wider pb-2 border-b border-dashed border-slate-200">Informasi Proyek & Kapal</h4>
+                  
+                  <div className="space-y-4 text-sm">
+                    <div>
+                      <span className="text-xs text-slate-400 block mb-1">Nama Proyek (Gabungan):</span>
+                      <p className="font-bold text-[#FDB913]">{selectedRow.projectName}</p>
+                    </div>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <span className="text-xs text-slate-400 block mb-1">Nama Kapal (m_ship_name):</span>
+                        <p className="font-bold text-slate-800">{selectedRow.shipName}</p>
+                      </div>
+                      <div>
+                        <span className="text-xs text-slate-400 block mb-1">Kode Job Order (jo_code):</span>
+                        <p className="font-bold font-mono text-slate-700">{selectedRow.joCode}</p>
+                      </div>
+                    </div>
                   </div>
-                  <div>
-                    <span className="text-slate-400">Nama Kapal (m_ship_name):</span>
-                    <p className="font-bold mt-0.5">{selectedRow.shipName}</p>
-                  </div>
-                  <div>
-                    <span className="text-slate-400">Kode Job Order (jo_code):</span>
-                    <p className="font-bold font-mono text-slate-700 dark:text-slate-255 mt-0.5">{selectedRow.joCode}</p>
-                  </div>
-                  <div>
-                    <span className="text-slate-400">ID Referensi:</span>
-                    <p className="font-semibold text-slate-400 mt-0.5">{selectedRow.reference || '-'}</p>
+                </div>
+
+                <div className="space-y-4">
+                  <h4 className="text-sm font-bold uppercase text-slate-400 tracking-wider pb-2 border-b border-dashed border-slate-200">Detail Teknis & Manajemen</h4>
+                  
+                  <div className="grid grid-cols-2 gap-y-4 gap-x-6 text-sm">
+                    <div>
+                      <span className="text-xs text-slate-400 block mb-1">Tipe Billing:</span>
+                      <p className="font-semibold text-slate-800">{selectedRow.billing_type || '-'}</p>
+                    </div>
+                    <div>
+                      <span className="text-xs text-slate-400 block mb-1">Jumlah Man Power:</span>
+                      <p className="font-bold text-slate-800">{selectedRow.man_power} Orang</p>
+                    </div>
+                    <div>
+                      <span className="text-xs text-slate-400 block mb-1">Dibuat Oleh:</span>
+                      <p className="font-semibold text-slate-800">{selectedRow.created_name || 'N/A'}</p>
+                    </div>
+                    <div>
+                      <span className="text-xs text-slate-400 block mb-1">Disetujui Terakhir:</span>
+                      <p className="font-semibold text-emerald-500">{selectedRow.last_approved || '-'}</p>
+                    </div>
                   </div>
                 </div>
               </div>
 
-              <div className="space-y-4">
-                <h4 className="text-xs font-bold uppercase text-slate-400 tracking-wider pb-1 border-b border-dashed border-slate-200 dark:border-slate-800">Partner & Manajemen</h4>
-                
-                <div className="grid grid-cols-2 gap-y-3 text-xs">
-                  <div className="col-span-2">
-                    <span className="text-slate-400">Nama Vendor:</span>
-                    <p className="font-bold mt-0.5">{selectedRow.vendorName}</p>
+              {/* Rincian API Detail */}
+              <div className="mt-8 pt-6 border-t border-slate-200">
+                <h3 className="text-lg font-bold text-slate-800 mb-6 flex items-center gap-2">
+                  <Layers className="text-[#FDB913]" />
+                  Rincian Item Pekerjaan & Material (Samudera API)
+                </h3>
+
+                {isFetchingDetail ? (
+                  <div className="py-12 flex flex-col items-center justify-center gap-4 bg-slate-50 rounded-2xl border border-dashed border-slate-200">
+                    <div className="w-8 h-8 border-4 border-[#FDB913] border-t-transparent rounded-full animate-spin"></div>
+                    <p className="text-sm font-medium text-slate-500 animate-pulse">Memeriksa Database Lokal...</p>
                   </div>
-                  <div>
-                    <span className="text-slate-400">Dibuat Oleh:</span>
-                    <p className="font-semibold mt-0.5">{selectedRow.created_name || 'N/A'}</p>
+                ) : detailedRowData ? (
+                  <div className="space-y-6">
+                    {/* Tabs Header */}
+                    <div className="flex border-b border-slate-200">
+                      <button
+                        onClick={() => setActiveDetailTab('pekerjaan')}
+                        className={`px-6 py-3 text-sm font-bold border-b-2 transition-colors flex items-center gap-2 ${activeDetailTab === 'pekerjaan' ? 'border-[#FDB913] text-[#FDB913]' : 'border-transparent text-slate-500 hover:text-slate-800 hover:border-slate-300'}`}
+                      >
+                        Daftar Pekerjaan
+                        <span className="text-xs px-2 py-0.5 rounded-full bg-slate-100 text-slate-600">{detailedRowData.repair_list?.length || 0}</span>
+                      </button>
+                      <button
+                        onClick={() => setActiveDetailTab('material')}
+                        className={`px-6 py-3 text-sm font-bold border-b-2 transition-colors flex items-center gap-2 ${activeDetailTab === 'material' ? 'border-emerald-500 text-emerald-600' : 'border-transparent text-slate-500 hover:text-slate-800 hover:border-slate-300'}`}
+                      >
+                        Kebutuhan Material
+                        <span className="text-xs px-2 py-0.5 rounded-full bg-slate-100 text-slate-600">{detailedRowData.t_requisition_details?.length || 0}</span>
+                      </button>
+                    </div>
+
+                    {/* Tab Content: Pekerjaan */}
+                    {activeDetailTab === 'pekerjaan' && (
+                      <div className="space-y-4 animate-in fade-in slide-in-from-bottom-2 duration-300">
+                        <h4 className="text-sm font-bold uppercase text-[#FDB913] tracking-wider pb-2 border-b-2 border-solid border-[#FDB913]/20 flex justify-between items-end">
+                          <span>Daftar Pekerjaan (Repair List)</span>
+                        </h4>
+                        
+                        {!detailedRowData.repair_list || detailedRowData.repair_list.length === 0 ? (
+                           <p className="text-sm text-slate-500 italic p-6 bg-slate-50 rounded-xl text-center">Tidak ada detail pekerjaan tersedia</p>
+                        ) : (
+                          <div className="space-y-3">
+                            {(() => {
+                              const renderItem = (item: any, depth = 0): React.ReactNode => {
+                                let titleHtml = '';
+                                if (item.group_flag || item.label?.toLowerCase() === 'grup') {
+                                  titleHtml = item.description || item.label;
+                                } else {
+                                  titleHtml = item.label || item.description;
+                                }
+                                
+                                if (!titleHtml) titleHtml = 'Pekerjaan / Item';
+
+                                return (
+                                  <div key={item.id || item.uniqcode || Math.random()} className={`mt-3 ${depth > 0 ? 'ml-4 md:ml-8 border-l-2 border-[#FDB913]/20 pl-4 md:pl-6' : ''}`}>
+                                    <div className={`p-4 rounded-xl border transition-colors flex flex-col md:flex-row justify-between items-start gap-4 shadow-sm ${depth === 0 ? 'bg-[#FDB913]/5 border-[#FDB913]/30' : 'bg-white border-slate-200 hover:border-[#FDB913]/50'}`}>
+                                      <div className="flex-1 min-w-0">
+                                        <p className="text-sm sm:text-base font-bold text-slate-800 leading-relaxed" dangerouslySetInnerHTML={{ __html: titleHtml }}></p>
+                                        
+                                        {/* Parameter / Quantity Display */}
+                                        {(!item.group_flag && item.label?.toLowerCase() !== 'grup') && (
+                                          <div className="flex flex-wrap gap-x-4 gap-y-2 mt-3 text-xs text-slate-600 font-medium items-center">
+                                            <span className="bg-white border border-slate-200 shadow-sm px-2.5 py-1 rounded-md text-[#FDB913]">
+                                              Volume: <span className="font-black text-sm">{item.volume || item.act_quantity || item.quantity || 0}</span> {item.volume_unit || item.unit || ''}
+                                            </span>
+                                            {(() => {
+                                              let statusStr = item.status_approval;
+                                              if (item.approved_level !== undefined && item.approved_level !== null) {
+                                                if (item.approved_level >= 5) statusStr = "approved";
+                                                else if (item.approved_level > 0) statusStr = `approved level ${item.approved_level}`;
+                                                else if (item.approved_level === 0) statusStr = "waiting";
+                                              }
+                                              if (!statusStr) return null;
+                                              
+                                              const isAppr = statusStr.toLowerCase().includes('approved');
+                                              return (
+                                                <span className={`uppercase tracking-wider font-black ${isAppr ? 'text-emerald-600' : 'text-amber-500'}`}>
+                                                  [{statusStr}]
+                                                </span>
+                                              );
+                                            })()}
+                                            {item.progress !== undefined && <span className="text-[#e5a611] font-bold bg-[#FDB913]/10 px-2 py-0.5 rounded">Progress: {item.progress}%</span>}
+                                          </div>
+                                        )}
+                                      </div>
+                                      
+                                      {(item.volume_cost_final > 0 || item.total_price > 0 || item.price > 0) && (
+                                        <div className="text-left md:text-right shrink-0 mt-2 md:mt-0 bg-white px-3 py-2 rounded-lg border border-slate-100">
+                                          <span className="text-[10px] text-slate-400 block mb-0.5 uppercase tracking-wider font-bold">Total Harga</span>
+                                          <p className="text-base font-black text-emerald-600 font-mono tracking-tight">
+                                            {formatIDR(item.volume_cost_final || item.total_price || item.price || 0)}
+                                          </p>
+                                        </div>
+                                      )}
+                                    </div>
+                                    
+                                    {/* Recursion for Children */}
+                                    {item.material && item.material.length > 0 && (
+                                      <div className="mt-2 space-y-2">
+                                        {item.material.map((m: any) => renderItem(m, depth + 1))}
+                                      </div>
+                                    )}
+                                  </div>
+                                );
+                              };
+                              return detailedRowData.repair_list.map((m: any) => renderItem(m, 0));
+                            })()}
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    {/* Tab Content: Material */}
+                    {activeDetailTab === 'material' && (
+                      <div className="space-y-4 animate-in fade-in slide-in-from-bottom-2 duration-300">
+                        <h4 className="text-sm font-bold uppercase text-emerald-500 tracking-wider pb-2 border-b-2 border-solid border-emerald-500/20 flex justify-between items-end">
+                          <span>Kebutuhan Material (Requisition)</span>
+                        </h4>
+                        
+                        {!detailedRowData.t_requisition_details || detailedRowData.t_requisition_details.length === 0 ? (
+                           <p className="text-sm text-slate-500 italic p-6 bg-slate-50 rounded-xl text-center">Tidak ada daftar kebutuhan material tersedia</p>
+                        ) : (
+                          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                            {detailedRowData.t_requisition_details.map((req: any) => (
+                              <div key={req.id} className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex flex-col justify-between gap-3 hover:border-emerald-500/30 transition-colors">
+                                <div className="min-w-0">
+                                  <p className="text-sm font-bold text-slate-800 leading-snug" title={req.m_component?.description_code}>
+                                    {req.m_component?.description_code || req.m_component?.description || 'Barang/Material'}
+                                  </p>
+                                  <div className="flex flex-wrap gap-x-3 gap-y-2 mt-3 text-xs text-slate-600">
+                                    <span className="font-bold text-[#FDB913] bg-[#FDB913]/10 px-2 py-1 rounded-md border border-[#FDB913]/20">Req: {req.quantity} {req.unit}</span>
+                                    <span className="font-bold text-emerald-700 bg-emerald-50 px-2 py-1 rounded-md border border-emerald-100">Terkirim: {req.quantity_delivered}</span>
+                                    {req.quantity_undelivered > 0 && <span className="font-bold text-rose-600 bg-rose-50 px-2 py-1 rounded-md border border-rose-100">Sisa: {req.quantity_undelivered}</span>}
+                                  </div>
+                                </div>
+                                {req.t_delivery_details?.length > 0 && (
+                                   <div className="mt-2 pt-3 border-t border-slate-100 flex items-center gap-2 text-xs">
+                                      <span className="bg-emerald-500 text-white px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider">Terkirim pada</span>
+                                      <span className="font-mono text-slate-500 font-bold">
+                                        {req.t_delivery_details[0].t_delivery?.date ? new Date(req.t_delivery_details[0].t_delivery.date).toLocaleDateString('id-ID', {day:'numeric', month:'long', year:'numeric'}) : ''}
+                                      </span>
+                                   </div>
+                                )}
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    )}
                   </div>
-                  <div>
-                    <span className="text-slate-400">Terakhir Dimodifikasi:</span>
-                    <p className="font-semibold mt-0.5">{selectedRow.modified_name || '-'}</p>
+                ) : (
+                  <div className="py-16 flex flex-col items-center justify-center gap-5 bg-slate-50 rounded-2xl border-2 border-dashed border-slate-200">
+                    <div className="text-center max-w-md">
+                      <div className="w-16 h-16 bg-[#FDB913]/20 rounded-full flex items-center justify-center mx-auto mb-4 text-[#FDB913]">
+                        <DownloadCloud size={32} />
+                      </div>
+                      <p className="text-lg font-bold text-slate-800">Data Rincian Belum Tersedia di Lokal</p>
+                      <p className="text-sm text-slate-500 mt-2 leading-relaxed">
+                        Detail item pekerjaan dan material untuk Work Order ini belum tersimpan di database lokal sistem Anda.
+                      </p>
+                    </div>
+                    {detailFetchError && (
+                      <div className="bg-red-50 text-red-600 px-4 py-2 rounded-lg text-sm font-bold border border-red-200 shadow-sm">
+                        Error: {detailFetchError}
+                      </div>
+                    )}
+                    <button 
+                      onClick={triggerSyncDetail}
+                      disabled={isSyncingDetail}
+                      className="mt-2 flex items-center gap-2 px-6 py-3 bg-[#FDB913] hover:bg-[#e5a611] text-slate-900 text-sm font-bold rounded-xl transition-all shadow-lg shadow-[#FDB913]/30 hover:shadow-[#FDB913]/50 hover:-translate-y-0.5 disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none"
+                    >
+                      {isSyncingDetail ? (
+                        <>
+                          <RefreshCw size={18} className="animate-spin" />
+                          Menarik Data dari API Samudera...
+                        </>
+                      ) : (
+                        <>
+                          <DownloadCloud size={18} />
+                          Tarik Data Rincian Sekarang
+                        </>
+                      )}
+                    </button>
                   </div>
-                  <div>
-                    <span className="text-slate-400">Disetujui Terakhir Oleh:</span>
-                    <p className="font-semibold text-emerald-500 mt-0.5">{selectedRow.last_approved || '-'}</p>
-                  </div>
-                  <div>
-                    <span className="text-slate-400">Tanggal Disetujui:</span>
-                    <p className="font-semibold mt-0.5 font-mono">{selectedRow.approved_date || '-'}</p>
-                  </div>
+                )}
+
+                <div className="space-y-2 mt-8 pt-6 border-t border-slate-200">
+                  <span className="text-xs font-bold uppercase text-slate-500 tracking-wider flex items-center justify-between cursor-pointer hover:text-slate-800 transition-colors" onClick={(e) => {
+                    const pre = e.currentTarget.nextElementSibling;
+                    if (pre) pre.classList.toggle('hidden');
+                  }}>
+                    <span>Lihat Raw JSON Response (Mode Debug)</span>
+                    <span className="text-[10px] bg-slate-200 px-2 py-0.5 rounded-md text-slate-600 shadow-inner">KLIK UNTUK TOGGLE</span>
+                  </span>
+                  <pre className="hidden text-xs p-5 rounded-xl overflow-x-auto font-mono bg-slate-950 text-emerald-400 max-h-96 border border-slate-800 custom-scrollbar shadow-inner mt-2">
+                    {JSON.stringify(detailedRowData || selectedRow, null, 2)}
+                  </pre>
                 </div>
               </div>
-
-              <div className="space-y-4">
-                <h4 className="text-xs font-bold uppercase text-slate-400 tracking-wider pb-1 border-b border-dashed border-slate-200 dark:border-slate-800">Detail Teknis Pekerjaan</h4>
-                
-                <div className="grid grid-cols-2 gap-y-3 text-xs">
-                  <div>
-                    <span className="text-slate-400">Tipe Billing:</span>
-                    <p className="font-semibold mt-0.5">{selectedRow.billing_type || '-'}</p>
-                  </div>
-                  <div>
-                    <span className="text-slate-400">Jumlah Man Power:</span>
-                    <p className="font-bold mt-0.5">{selectedRow.man_power} Orang</p>
-                  </div>
-                  <div className="col-span-2">
-                    <span className="text-slate-400">Material yang Digunakan:</span>
-                    <p className="font-medium mt-0.5 text-slate-500 dark:text-slate-300">{selectedRow.material_usage || 'Tidak Ada Material Tercatat'}</p>
-                  </div>
-                  <div>
-                    <span className="text-slate-400">Tanggal Dibuat:</span>
-                    <p className="font-semibold mt-0.5 font-mono">{selectedRow.created_at}</p>
-                  </div>
-                  <div>
-                    <span className="text-slate-400">Level Approval Database:</span>
-                    <p className="font-bold mt-0.5 text-indigo-500">Level {selectedRow.min_approval_level} ({selectedRow.derivedStatus})</p>
-                  </div>
-                </div>
-              </div>
-
-              <div className="space-y-2">
-                <span className="text-[10px] font-bold uppercase text-slate-400 tracking-wider">Raw JSON Data Object</span>
-                <pre className="text-[10px] p-3 rounded-lg overflow-x-auto font-mono bg-slate-950 text-emerald-400 max-h-40 border border-slate-800">
-                  {JSON.stringify(selectedRow, null, 2)}
-                </pre>
-              </div>
-
             </div>
-
-            <div className="p-4 border-t border-slate-100 dark:border-slate-800 flex justify-end bg-slate-50 dark:bg-slate-950">
-              <button 
-                onClick={() => setSelectedRow(null)}
-                className="px-4 py-2 bg-slate-500 text-white text-xs font-semibold rounded-lg hover:bg-slate-600 transition"
-              >
-                Tutup Detail
-              </button>
-            </div>
-
           </div>
         </div>
       )}
