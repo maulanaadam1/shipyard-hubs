@@ -994,8 +994,8 @@ export default function WorkOrderDashboard() {
                 </div>
                 <span className="text-[10px] font-bold text-emerald-500 uppercase tracking-widest bg-emerald-500/10 px-2.5 py-1 rounded-lg">Aktual Cost</span>
               </div>
-              <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">Estimasi & Aktual Pengeluaran</p>
-              <h2 className="text-3xl font-extrabold tracking-tight mt-2 text-slate-900 dark:text-white break-all">
+              <p className="text-xs font-bold text-slate-600 uppercase tracking-wider">Estimasi & Aktual Pengeluaran</p>
+              <h2 className="text-3xl font-extrabold tracking-tight mt-2 text-slate-900 break-all">
                 {formatIDR(stats.totalCostValue)}
               </h2>
               <p className="text-xs text-slate-500 dark:text-slate-400 mt-2.5 leading-relaxed">
@@ -1003,16 +1003,16 @@ export default function WorkOrderDashboard() {
               </p>
             </div>
 
-            <div className="mt-6 pt-4 border-t border-slate-100 dark:border-slate-800 grid grid-cols-2 gap-2 text-center">
-              <div className="border-r border-slate-100 dark:border-slate-800">
-                <p className="text-[10px] font-bold text-slate-400 uppercase">Rata-Rata WO</p>
-                <p className="text-sm font-bold text-slate-800 dark:text-slate-200 mt-1">
+            <div className="mt-6 pt-4 border-t border-slate-100 grid grid-cols-2 gap-2 text-center">
+              <div className="border-r border-slate-100">
+                <p className="text-[10px] font-bold text-slate-600 uppercase">Rata-Rata WO</p>
+                <p className="text-sm font-bold text-slate-800 mt-1">
                   {stats.totalWOs > 0 ? formatIDR(Math.round(stats.totalCostValue / stats.totalWOs)) : "Rp 0"}
                 </p>
               </div>
               <div>
-                <p className="text-[10px] font-bold text-slate-400 uppercase">Kontrak WO</p>
-                <p className="text-sm font-bold text-indigo-500 mt-1">{stats.totalWOs} Berkas</p>
+                <p className="text-[10px] font-bold text-slate-600 uppercase">Kontrak WO</p>
+                <p className="text-sm font-bold text-indigo-600 mt-1">{stats.totalWOs} Berkas</p>
               </div>
             </div>
           </div>
