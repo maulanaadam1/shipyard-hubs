@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"log"
 	"net/http"
 	"os"
@@ -13,10 +14,12 @@ import (
 	"shipyard/db"
 	"shipyard/handlers"
 	appMiddleware "shipyard/middleware"
+	"shipyard/workers"
 )
 
 func main() {
 	db.Init()
+	workers.StartSyncWorker()
 
 	r := chi.NewRouter()
 	r.Use(chiMiddleware.Recoverer)
@@ -61,6 +64,18 @@ func main() {
 		// Export (all authenticated roles)
 		r.Get("/api/export/{table}/csv", handlers.ExportCSV)
 		r.Get("/api/export/{table}/json", handlers.ExportJSON)
+
+		// Manual Sync Trigger
+		r.Post("/api/sync/trigger", func(w http.ResponseWriter, req *http.Request) {
+			var body struct {
+				ID string `json:"id"`
+			}
+			json.NewDecoder(req.Body).Decode(&body)
+			
+			workers.RunSyncJob(true, body.ID)
+			w.Header().Set("Content-Type", "application/json")
+			w.Write([]byte(`{"success": true, "message": "Sync triggered successfully"}`))
+		})
 
 		// Write operations — permissions handled inside handlers based on role_permissions table
 		r.Group(func(r chi.Router) {

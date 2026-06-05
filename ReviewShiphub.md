@@ -1,12 +1,12 @@
 New Loan Request
 1. Request Loan harus melalui PIC atau Layek
-2. Maksimal peminjaman alat 7 hari kerja, tidak boleh lebih (coba lock dari input field kalender)
-3. Quantity stock equipment mengambil referensi ketersediaan stok dari equipment,
-meskipun belum bisa mengetahui equipment mana yang akan di pinjamkan
-4. Tambah button reject di approval
-5. Pastikan requeiremnt input data saat create loan
-6. Saat save as draft tidak bisa langsung muncul di dalam table, harus di refresh dulu (perbaiki)
-7. Saat status request draft ketika di update untuk di ajukan , statusnya tidak berubah pending
+2. Maksimal peminjaman alat 7 hari kerja, tidak boleh lebih (coba lock dari input field kalender) - DONE
+3. Quantity stock equipment mengambil referensi ketersediaan stok dari equipment, 
+meskipun belum bisa mengetahui equipment mana yang akan di pinjamkan - DONE
+4. Tambah button reject di approval - DONE
+5. Pastikan requeiremnt input data saat create loan - DONE
+6. Saat save as draft tidak bisa langsung muncul di dalam table, harus di refresh dulu (perbaiki) - DONE
+7. Saat status request draft ketika di update untuk di ajukan , statusnya tidak berubah pending - DONE
 8. Diberikan batasan akses approval berdasarkan PIC masing-masing alat di master equipment
 
 Release Equipment

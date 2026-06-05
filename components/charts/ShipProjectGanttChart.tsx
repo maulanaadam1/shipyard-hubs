@@ -21,7 +21,7 @@ const BAR_HEIGHT = 20;
 const BAR_OFFSET = (ROW_HEIGHT - BAR_HEIGHT) / 2; // vertical center of bar within row
 
 export default function ShipProjectGanttChart({ fullPage = false }: { fullPage?: boolean }) {
-  const { projects } = useData();
+  const { projects, locations, services } = useData();
   const [viewMode, setViewMode] = useState<'daily' | 'weekly' | 'monthly'>('monthly');
   const [hoveredProject, setHoveredProject] = useState<any>(null);
   const [mousePos, setMousePos] = useState({ x: 0, y: 0 });
@@ -110,7 +110,7 @@ export default function ShipProjectGanttChart({ fullPage = false }: { fullPage?:
 
     const activeProjects = projects.filter(p => {
       const s = p.status?.toLowerCase() || '';
-      if (!['on going', 'ongoing'].includes(s)) return false;
+      if (!['on going', 'ongoing', 'active', 'approved'].includes(s)) return false;
       const sd = p.est_start || p.actual_start;
       const ed = p.est_finish || p.actual_finish;
       if (!sd || !ed) return false;
@@ -126,9 +126,16 @@ export default function ShipProjectGanttChart({ fullPage = false }: { fullPage?:
       const clampedEnd = Math.min(endMs, windowEnd);
       const left = Math.max(0, ((clampedStart - windowStart) / totalDuration) * 100);
       const width = Math.max(0.5, ((clampedEnd - clampedStart) / totalDuration) * 100);
+      
+      const locMatch = locations?.find(l => String(l.id) === String(p.location));
+      const locName = locMatch ? locMatch.name : (p.location || '(No Location)');
+      
+      const svcMatch = (services as any[])?.find(s => String(s.id) === String(p.docking_type));
+      const svcName = svcMatch ? svcMatch.name : (p.docking_type || '');
+
       return {
         id: p.id, name: p.shipname || p.idproject, code: p.idproject,
-        location: p.location || '(No Location)', dockingType: p.docking_type || '',
+        location: locName, dockingType: svcName,
         startDateStr: sd, endDateStr: ed, startMs, endMs,
         left, width, isDelayed: Date.now() > endMs,
       };

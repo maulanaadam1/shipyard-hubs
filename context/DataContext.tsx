@@ -174,6 +174,29 @@ export interface LocationMaster {
   layout_id?: string;
 }
 
+export interface ServiceMaster {
+  id: string;
+  code: string;
+  name: string;
+  status: 'Active' | 'Inactive';
+}
+
+export interface EmployeeMaster {
+  id: string;
+  code: string;
+  name: string;
+  address: string;
+  email: string;
+  phone: string;
+  mobile_phone: string;
+  is_active: string;
+  position: string;
+  m_branch_id: number;
+  m_department_id: number;
+  m_city_id: number;
+  type: string;
+}
+
 export interface DockStatusMaster {
   id: string;
   name: string;
@@ -312,6 +335,10 @@ interface DataContextType {
   canAccess: (resource: string, action?: string) => boolean;
   dockStatuses: DockStatusMaster[];
   setDockStatuses: React.Dispatch<React.SetStateAction<DockStatusMaster[]>>;
+  services: ServiceMaster[];
+  setServices: React.Dispatch<React.SetStateAction<ServiceMaster[]>>;
+  employees: EmployeeMaster[];
+  setEmployees: React.Dispatch<React.SetStateAction<EmployeeMaster[]>>;
 }
 
 const DataContext = createContext<DataContextType | undefined>(undefined);
@@ -336,6 +363,8 @@ export function DataProvider({ children }: { children: ReactNode }) {
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [dockStatuses, setDockStatuses] = useState<DockStatusMaster[]>([]);
+  const [services, setServices] = useState<ServiceMaster[]>([]);
+  const [employees, setEmployees] = useState<EmployeeMaster[]>([]);
   const [isAuthLoading, setIsAuthLoading] = useState(true);
   const [isLoading, setIsLoading] = useState(true);
   const [hasInitialLoaded, setHasInitialLoaded] = useState(false);
@@ -391,6 +420,8 @@ export function DataProvider({ children }: { children: ReactNode }) {
         api.from('equipment_release').select('*').order('date_released', { ascending: false }),
         api.from('approval_workflow').select('*').order('step_order', { ascending: true }),
         api.from('master_status_dock').select('*').order('name', { ascending: true }),
+        api.from('master_services').select('*'),
+        api.from('master_employees').select('*'),
         currentUserIdRef.current 
           ? api.from('notifications').select('*').eq('user_id', currentUserIdRef.current).order('created_at', { ascending: false })
           : Promise.resolve({ data: [], error: null })
@@ -417,7 +448,9 @@ export function DataProvider({ children }: { children: ReactNode }) {
             if (index === 10) setReleases(data as ReleaseRecord[]);
             if (index === 11) setWorkflows(data as ApprovalWorkflow[]);
             if (index === 12) setDockStatuses(data as DockStatusMaster[]);
-            if (index === 13) setNotifications(data as Notification[]);
+            if (index === 13) setServices(data as ServiceMaster[]);
+            if (index === 14) setEmployees(data as EmployeeMaster[]);
+            if (index === 15) setNotifications(data as Notification[]);
           }
         }
       });
@@ -597,6 +630,8 @@ export function DataProvider({ children }: { children: ReactNode }) {
       rolePermissions, setRolePermissions,
       releases, setReleases,
       workflows, setWorkflows,
+      services, setServices,
+      employees, setEmployees,
       notifications, markNotificationRead, createNotification,
       currentUser, setCurrentUser,
       dockStatuses, setDockStatuses,

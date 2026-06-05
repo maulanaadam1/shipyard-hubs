@@ -225,6 +225,29 @@ func createTables() {
 		is_active BOOLEAN DEFAULT 1,
 		created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 	);
+
+	CREATE TABLE IF NOT EXISTS master_services (
+		id TEXT PRIMARY KEY,
+		code TEXT,
+		name TEXT,
+		status TEXT DEFAULT 'Active'
+	);
+	
+	CREATE TABLE IF NOT EXISTS master_employees (
+		id TEXT PRIMARY KEY,
+		code TEXT,
+		name TEXT,
+		address TEXT,
+		email TEXT,
+		phone TEXT,
+		mobile_phone TEXT,
+		is_active TEXT,
+		position TEXT,
+		m_branch_id INTEGER,
+		m_department_id INTEGER,
+		m_city_id INTEGER,
+		type TEXT
+	);
 	`
 
 	if _, err := DB.Exec(schema); err != nil {
@@ -263,6 +286,27 @@ func createTables() {
 		action TEXT,
 		is_allowed BOOLEAN DEFAULT 0
 	);`)
+
+	DB.Exec(`CREATE TABLE IF NOT EXISTS sync_configs (
+		id TEXT PRIMARY KEY,
+		name TEXT UNIQUE,
+		url TEXT,
+		headers TEXT,
+		last_sync TEXT,
+		last_response TEXT,
+		is_active BOOLEAN DEFAULT 1,
+		interval_type TEXT DEFAULT 'minutes',
+		interval_value INTEGER DEFAULT 5
+	);`)
+
+	// Migrations for sync_configs if they already exist from previous session
+	DB.Exec("ALTER TABLE sync_configs ADD COLUMN interval_type TEXT DEFAULT 'minutes'")
+	DB.Exec("ALTER TABLE sync_configs ADD COLUMN interval_value INTEGER DEFAULT 5")
+	DB.Exec("UPDATE sync_configs SET interval_type = 'minutes', interval_value = 5 WHERE interval_type IS NULL")
+
+	// Migrations for existing schemas
+	DB.Exec("ALTER TABLE projects ADD COLUMN location TEXT")
+	DB.Exec("ALTER TABLE projects ADD COLUMN docking_type TEXT")
 
 	seedRolesAndPermissions();
 

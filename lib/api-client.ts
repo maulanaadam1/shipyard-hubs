@@ -11,7 +11,7 @@ export const supabase = (supabaseUrl && supabaseAnonKey && supabaseUrl !== 'plac
     : null;
 
 // Helper to add auth headers to fetch requests
-const getHeaders = async () => {
+export const getHeaders = async () => {
     const headers: Record<string, string> = { 'Content-Type': 'application/json' };
     
     // Check if we use Supabase

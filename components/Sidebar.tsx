@@ -22,7 +22,9 @@ import {
   Shield,
   MapPin,
   Map as MapIcon,
-  Layout
+  Layout,
+  FileSpreadsheet,
+  Server
 } from 'lucide-react';
 import { useData } from '@/context/DataContext';
 import { motion } from 'motion/react';
@@ -40,6 +42,7 @@ export default function Sidebar({ onTabChange }: { onTabChange: () => void }) {
         { icon: MapIcon, label: 'Vessel Layout', path: '/vessel-layout', resource: 'Vessel Layout' },
         { icon: Activity, label: 'Utility', path: '/utility', resource: 'Utility' },
         { icon: Briefcase, label: 'Job Order', path: '/job-order', resource: 'Job Order' },
+        { icon: FileSpreadsheet, label: 'Work Order', path: '/work-order', resource: 'Work Order' },
         { icon: Anchor, label: 'Ship Docking', path: '/ship-docking', resource: 'Ship Docking' },
       ]
     },
@@ -67,10 +70,13 @@ export default function Sidebar({ onTabChange }: { onTabChange: () => void }) {
         { icon: Building2, label: 'Master Company', path: '/master-company', resource: 'Master Company' },
         { icon: Anchor, label: 'Master Kapal', path: '/master-kapal', resource: 'Master Kapal' },
         { icon: MapPin, label: 'Master Location', path: '/master-location', resource: 'Master Location' },
-        {icon: Activity, label: 'Master Dock Status', path: '/master-dock-status', resource: 'Master Dock Status' },
+        { icon: Wrench, label: 'Master Service', path: '/master-service', resource: 'Master Location' },
+        { icon: Users, label: 'Master Employee', path: '/master-employee', resource: 'User Management' },
+        { icon: Activity, label: 'Master Dock Status', path: '/master-dock-status', resource: 'Master Dock Status' },
         { icon: Layout, label: 'Master Layout', path: '/master-layout', resource: 'Master Layout' },
         { icon: ClipboardList, label: 'Approval Workflow', path: '/master-workflow', resource: 'Master Workflow' },
         { icon: Settings, label: 'Master Configuration', path: '/master-config', resource: 'Master Configuration' },
+        { icon: Server, label: 'API Sync Config', path: '/master-api-sync', resource: 'Master Configuration' },
         { icon: Shield, label: 'Role Management', path: '/master-roles', resource: 'Role Management' },
         { icon: Users, label: 'User Management', path: '/user-management', resource: 'User Management' },
       ]

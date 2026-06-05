@@ -60,6 +60,11 @@ import ShipDocking from '../components/ShipDocking';
 import VesselLayout from '../components/VesselLayout';
 import MasterDockStatus from '../components/MasterDockStatus';
 import MasterLayout from '../components/MasterLayout';
+import WorkOrderDashboard from '../components/WorkOrderDashboard';
+import ApiSyncManagement from '../components/ApiSyncManagement';
+import MasterService from '../components/MasterService';
+import MasterEmployee from '../components/MasterEmployee';
+
 
 function PlaceholderPage({ title }: { title: string }) {
   return (
@@ -180,6 +185,11 @@ createRoot(document.getElementById('root')!).render(
                 <ProjectManagement />
               </ProtectedRoute>
             } />
+            <Route path="work-order" element={
+              <ProtectedRoute resource="Work Order">
+                <WorkOrderDashboard />
+              </ProtectedRoute>
+            } />
             <Route path="request" element={
               <ProtectedRoute resource="Request">
                 <EquipmentLoans />
@@ -235,6 +245,16 @@ createRoot(document.getElementById('root')!).render(
                 <MasterLocation />
               </ProtectedRoute>
             } />
+            <Route path="master-service" element={
+              <ProtectedRoute resource="Master Location">
+                <MasterService />
+              </ProtectedRoute>
+            } />
+            <Route path="master-employee" element={
+              <ProtectedRoute resource="User Management">
+                <MasterEmployee />
+              </ProtectedRoute>
+            } />
             <Route path="master-dock-status" element={
               <ProtectedRoute resource="Master Dock Status">
                 <MasterDockStatus />
@@ -253,6 +273,11 @@ createRoot(document.getElementById('root')!).render(
             <Route path="master-config" element={
               <ProtectedRoute resource="Master Configuration">
                 <DropdownConfiguration />
+              </ProtectedRoute>
+            } />
+            <Route path="master-api-sync" element={
+              <ProtectedRoute resource="Master Configuration">
+                <ApiSyncManagement />
               </ProtectedRoute>
             } />
             <Route path="master-roles" element={

@@ -24,6 +24,7 @@ const RESOURCES = [
   { id: 'Dashboard', type: 'menu' },
   { id: 'Utility', type: 'menu' },
   { id: 'Job Order', type: 'menu' },
+  { id: 'Work Order', type: 'menu' },
   { id: 'Ship Docking', type: 'menu' },
   { id: 'Request', type: 'menu' },
   { id: 'Release', type: 'menu' },

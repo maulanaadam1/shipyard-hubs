@@ -27,7 +27,7 @@ import Papa from 'papaparse';
 import * as XLSX from 'xlsx';
 
 export default function ProjectManagement() {
-  const { projects, setProjects, dropdownConfigs, locations, ships, fetchData, canAccess } = useData();
+  const { projects, setProjects, dropdownConfigs, locations, ships, fetchData, canAccess, employees, services } = useData();
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [showSuccessModal, setShowSuccessModal] = useState(false);
   const [editingProject, setEditingProject] = useState<Project | null>(null);
@@ -47,6 +47,7 @@ export default function ProjectManagement() {
     year: new Date().getFullYear(),
     status: 'Active',
     project_lead: '',
+    m_employee_id: '',
     est_start: '',
     est_finish: '',
     est_docking_date: '',
@@ -79,6 +80,7 @@ export default function ProjectManagement() {
         year: project.year || new Date().getFullYear(), 
         status: project.status || 'Active',
         project_lead: project.project_lead || '',
+        m_employee_id: project.m_employee_id || '',
         est_start: formatDateForInput(project.est_start),
         est_finish: formatDateForInput(project.est_finish),
         est_docking_date: formatDateForInput(project.est_docking_date),
@@ -98,6 +100,7 @@ export default function ProjectManagement() {
         year: new Date().getFullYear(), 
         status: 'Active',
         project_lead: '',
+        m_employee_id: '',
         est_start: '',
         est_finish: '',
         est_docking_date: '',
@@ -632,21 +635,39 @@ export default function ProjectManagement() {
                   <td className="px-6 py-4">
                     <div className="flex items-center gap-2">
                       <UserIcon className="w-3.5 h-3.5 text-slate-400" />
-                      <span className="text-sm text-slate-500">{project.project_lead || '-'}</span>
+                      <span className="text-sm text-slate-500">
+                        {(() => {
+                          const match = employees?.find(e => String(e.id) === String(project.m_employee_id));
+                          return match ? match.name : (project.m_employee_id || project.project_lead || '-');
+                        })()}
+                      </span>
                     </div>
                   </td>
                   <td className="px-6 py-4">
-                    {project.docking_type ? (
-                      <span className="px-2.5 py-1 rounded-full text-[10px] font-bold bg-amber-50 text-amber-700 border border-amber-100 whitespace-nowrap">
-                        {project.docking_type}
-                      </span>
-                    ) : (
-                      <span className="text-slate-300 text-xs">-</span>
-                    )}
+                    {(() => {
+                      if (!project.docking_type) return <span className="text-slate-300 text-xs">-</span>;
+                      
+                      const match = services?.find(s => String(s.id) === String(project.docking_type));
+                      const label = match ? match.name : project.docking_type;
+                      
+                      return (
+                        <span className="px-2.5 py-1 rounded-full text-[10px] font-bold bg-amber-50 text-amber-700 border border-amber-100 whitespace-nowrap">
+                          {label}
+                        </span>
+                      );
+                    })()}
                   </td>
                   <td className="px-6 py-4">
                     <div className="flex items-center gap-1.5 text-slate-500">
-                      <span className="text-sm">{project.location || '-'}</span>
+                      {(() => {
+                        if (!project.location) return <span className="text-slate-300 text-xs">-</span>;
+                        const match = locations?.find(l => String(l.id) === String(project.location));
+                        return (
+                          <span className="text-sm font-medium text-slate-700 bg-slate-100 px-2 py-0.5 rounded">
+                            {match ? match.name : project.location}
+                          </span>
+                        );
+                      })()}
                     </div>
                   </td>
                   <td className="px-6 py-4 text-right">
@@ -688,32 +709,34 @@ export default function ProjectManagement() {
         </div>
 
         {/* Pagination Footer */}
-        {itemsPerPage !== 'all' && totalPages > 1 && (
-          <div className="p-4 border-t border-slate-100 flex items-center justify-between bg-slate-50/30">
-            <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">
-              Showing {(currentPage - 1) * (itemsPerPage as number) + 1} to {Math.min(currentPage * (itemsPerPage as number), totalItems)} of {totalItems} projects
-            </p>
+        <div className="p-4 border-t border-slate-100 bg-slate-50/30 flex items-center justify-between">
+          <p className="text-xs text-slate-500">
+            Showing <span className="font-bold text-slate-700">{paginatedProjects.length}</span> of <span className="font-bold text-slate-700">{totalItems}</span> projects
+          </p>
+          {totalPages > 1 && (
             <div className="flex items-center gap-2">
               <button 
                 onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
                 disabled={currentPage === 1}
-                className="p-2 border border-slate-200 rounded-lg hover:bg-white disabled:opacity-30 transition-all shadow-sm"
+                className="p-1.5 border border-slate-200 rounded-lg text-slate-400 hover:text-[#FDB913] hover:border-[#FDB913]/30 disabled:opacity-50 transition-colors"
               >
                 <ChevronLeft className="w-4 h-4" />
               </button>
-              <div className="flex items-center gap-1">
-                {renderPaginationButtons()}
+              <div className="flex items-center gap-2 px-3">
+                <span className="text-xs font-bold text-slate-600">
+                  {currentPage} <span className="text-slate-400 font-medium mx-1">/</span> {totalPages}
+                </span>
               </div>
               <button 
                 onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
                 disabled={currentPage === totalPages}
-                className="p-2 border border-slate-200 rounded-lg hover:bg-white disabled:opacity-30 transition-all shadow-sm"
+                className="p-1.5 border border-slate-200 rounded-lg text-slate-400 hover:text-[#FDB913] hover:border-[#FDB913]/30 disabled:opacity-50 transition-colors"
               >
                 <ChevronRight className="w-4 h-4" />
               </button>
             </div>
-          </div>
-        )}
+          )}
+        </div>
       </div>
 
       {/* Add/Edit Modal */}
@@ -820,14 +843,19 @@ export default function ProjectManagement() {
                     </select>
                   </div>
                   <div className="space-y-2">
-                    <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Project Lead</label>
-                    <input 
-                      type="text"
-                      value={formData.project_lead}
-                      onChange={(e) => setFormData({ ...formData, project_lead: e.target.value })}
+                    <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Project Lead (Employee)</label>
+                    <select 
+                      value={formData.m_employee_id}
+                      onChange={(e) => setFormData({ ...formData, m_employee_id: e.target.value })}
                       className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-[#FDB913]/30 focus:border-[#FDB913] transition-all"
-                      placeholder="e.g. JOJOK SETYAWAN"
-                    />
+                    >
+                      <option value="">Select Employee</option>
+                      {employees
+                        ?.filter(emp => String(emp.is_active).trim() === '1' && emp.position?.toLowerCase().includes('head of project'))
+                        .map(emp => (
+                          <option key={emp.id} value={emp.id}>{emp.name} - {emp.position}</option>
+                      ))}
+                    </select>
                   </div>
                   <div className="space-y-2">
                     <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Est. Start Date</label>
@@ -900,18 +928,9 @@ export default function ProjectManagement() {
                       className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-[#FDB913]/30 focus:border-[#FDB913] transition-all"
                     >
                       <option value="">Select Docking Type</option>
-                      {dropdownConfigs?.filter(c => c.category === 'docking_types' && c.is_active).map(c => (
-                        <option key={c.id} value={c.value}>{c.label}</option>
+                      {services?.filter(s => s.status === 'Active').map(s => (
+                        <option key={s.id} value={s.id}>{s.name}</option>
                       ))}
-                      {/* Fallbacks if DB is completely empty */}
-                      {(!dropdownConfigs || dropdownConfigs.filter(c => c.category === 'docking_types').length === 0) && (
-                        <>
-                          <option value="Graving Dock">Graving Dock</option>
-                          <option value="Slipway">Slipway</option>
-                          <option value="Airbag System">Airbag System</option>
-                          <option value="Floating Dock">Floating Dock</option>
-                        </>
-                      )}
                     </select>
                   </div>
                   <div className="space-y-2">
@@ -923,7 +942,7 @@ export default function ProjectManagement() {
                     >
                       <option value="">Select Location</option>
                       {locations?.filter(l => l.status === 'Active').map(l => (
-                        <option key={l.id} value={l.name}>{l.name} {l.size ? `(${l.size})` : ''}</option>
+                        <option key={l.id} value={l.name}>{l.name}</option>
                       ))}
                     </select>
                   </div>
