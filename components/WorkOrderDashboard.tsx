@@ -272,9 +272,8 @@ export default function WorkOrderDashboard() {
     if (rawData.length === 0) return new Date("2026-06-02");
     let maxTime = 0;
     rawData.forEach(item => {
-      const targetDate = item.updated_at || item.created_at;
-      if (targetDate) {
-        const t = new Date(targetDate.replace(' ', 'T')).getTime();
+      if (item.created_at) {
+        const t = new Date(item.created_at.replace(' ', 'T')).getTime();
         if (t > maxTime) maxTime = t;
       }
     });
@@ -407,9 +406,8 @@ export default function WorkOrderDashboard() {
   const dateFilteredData = useMemo(() => {
     const { start, end } = effectiveDateRange;
     return processedData.filter(item => {
-      const targetDate = item.updated_at || item.created_at;
-      if (!targetDate) return false;
-      const cleanStr = targetDate.replace(' ', 'T');
+      if (!item.created_at) return false;
+      const cleanStr = item.created_at.replace(' ', 'T');
       const itemTime = new Date(cleanStr).getTime();
       if (isNaN(itemTime)) return false;
 
