@@ -16,7 +16,9 @@ import {
   ToggleRight,
   ToggleLeft,
   Zap,
-  Database
+  Database,
+  ChevronLeft,
+  ChevronRight
 } from 'lucide-react';
 import { api, getHeaders } from '@/lib/api-client';
 import { useData } from '@/context/DataContext';
@@ -43,7 +45,7 @@ export default function ApiSyncManagement() {
 
   // Pagination states
   const [currentPage, setCurrentPage] = useState(1);
-  const itemsPerPage = 5;
+  const itemsPerPage = 10;
 
   useEffect(() => {
     fetchConfigs();
@@ -303,7 +305,7 @@ export default function ApiSyncManagement() {
   const paginatedConfigs = configs.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
 
   return (
-    <div className="p-8 space-y-6 max-w-7xl mx-auto">
+    <div className="p-8 space-y-6 w-full">
       <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
         <div>
           <h2 className="font-display font-bold text-2xl text-slate-800 tracking-tight">API Sync Management</h2>
@@ -423,29 +425,33 @@ export default function ApiSyncManagement() {
           </table>
         </div>
 
-        {totalPages > 1 && (
-          <div className="px-6 py-4 border-t border-slate-100 flex items-center justify-between bg-slate-50/50">
-            <span className="text-xs text-slate-500">
-              Menampilkan {(currentPage - 1) * itemsPerPage + 1} - {Math.min(currentPage * itemsPerPage, configs.length)} dari {configs.length} konfigurasi
-            </span>
-            <div className="flex gap-2">
-              <button 
-                disabled={currentPage === 1}
-                onClick={() => setCurrentPage(p => p - 1)}
-                className="px-3 py-1 text-xs font-semibold rounded bg-white border border-slate-200 text-slate-600 hover:bg-slate-50 disabled:opacity-50"
-              >
-                Sebelumnya
-              </button>
-              <button 
-                disabled={currentPage === totalPages}
-                onClick={() => setCurrentPage(p => p + 1)}
-                className="px-3 py-1 text-xs font-semibold rounded bg-white border border-slate-200 text-slate-600 hover:bg-slate-50 disabled:opacity-50"
-              >
-                Selanjutnya
-              </button>
+        {/* Pagination Footer */}
+        <div className="p-4 border-t border-slate-100 bg-slate-50/30 flex items-center justify-between">
+          <p className="text-xs text-slate-500">
+            Menampilkan <span className="font-bold text-slate-700">{paginatedConfigs.length}</span> dari <span className="font-bold text-slate-700">{configs.length}</span> data
+          </p>
+          <div className="flex items-center gap-2">
+            <button 
+              onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+              disabled={currentPage === 1}
+              className="p-1.5 border border-slate-200 rounded-lg text-slate-400 hover:text-[#FDB913] hover:border-[#FDB913]/30 disabled:opacity-50 transition-colors"
+            >
+              <ChevronLeft className="w-4 h-4" />
+            </button>
+            <div className="flex items-center gap-2 px-3">
+              <span className="text-xs font-bold text-slate-600">
+                {currentPage} <span className="text-slate-400 font-medium mx-1">/</span> {totalPages || 1}
+              </span>
             </div>
+            <button 
+              onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
+              disabled={currentPage === totalPages || totalPages === 0}
+              className="p-1.5 border border-slate-200 rounded-lg text-slate-400 hover:text-[#FDB913] hover:border-[#FDB913]/30 disabled:opacity-50 transition-colors"
+            >
+              <ChevronRight className="w-4 h-4" />
+            </button>
           </div>
-        )}
+        </div>
       </div>
 
       <AnimatePresence>
