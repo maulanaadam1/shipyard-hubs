@@ -406,13 +406,17 @@ export default function ShipManagement() {
                     <span className="text-sm font-bold text-slate-800">{ship.shipname}</span>
                   </td>
                   <td className="px-6 py-4">
-                    {ship.type ? (
-                      <span className="px-2 py-0.5 bg-[#FDB913]/10 text-[#FDB913] rounded text-[10px] font-bold uppercase tracking-wider">
-                        {ship.type}
-                      </span>
-                    ) : (
-                      <span className="text-xs text-slate-400">-</span>
-                    )}
+                    {(() => {
+                      const st = dropdownConfigs.find(c => c.id === ship.type || c.label === ship.type || c.value === ship.type);
+                      const displayType = st ? st.value : ship.type;
+                      return displayType ? (
+                        <span className="px-2 py-0.5 bg-[#FDB913]/10 text-[#FDB913] rounded text-[10px] font-bold uppercase tracking-wider" title={st ? st.label : ''}>
+                          {displayType}
+                        </span>
+                      ) : (
+                        <span className="text-xs text-slate-400">-</span>
+                      );
+                    })()}
                   </td>
                   <td className="px-6 py-4">
                     <div className="flex items-center gap-2 text-slate-600">
@@ -554,7 +558,7 @@ export default function ShipManagement() {
                     >
                       <option value="">Select Type</option>
                       {dropdownConfigs?.filter(c => c.category === 'ship_types' && c.is_active).map(c => (
-                        <option key={c.id} value={c.value}>{c.label}</option>
+                        <option key={c.id} value={c.id}>{c.label} ({c.value})</option>
                       ))}
                     </select>
                   </div>

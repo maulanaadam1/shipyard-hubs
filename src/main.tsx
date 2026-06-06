@@ -49,6 +49,7 @@ import EquipmentRelease from '../components/EquipmentRelease';
 import VendorManagement from '../components/VendorManagement';
 import CompanyManagement from '../components/CompanyManagement';
 import ShipManagement from '../components/ShipManagement';
+import MasterShipType from '../components/MasterShipType';
 import MasterLocation from '../components/MasterLocation';
 import UserManagement from '../components/UserManagement';
 import ProjectManagement from '../components/ProjectManagement';
@@ -64,6 +65,7 @@ import WorkOrderDashboard from '../components/WorkOrderDashboard';
 import ApiSyncManagement from '../components/ApiSyncManagement';
 import MasterService from '../components/MasterService';
 import MasterEmployee from '../components/MasterEmployee';
+import MasterComponent from '../components/MasterComponent';
 
 
 function PlaceholderPage({ title }: { title: string }) {
@@ -238,6 +240,16 @@ createRoot(document.getElementById('root')!).render(
             <Route path="master-kapal" element={
               <ProtectedRoute resource="Master Kapal">
                 <ShipManagement />
+              </ProtectedRoute>
+            } />
+            <Route path="master-ship-type" element={
+              <ProtectedRoute resource="Master Kapal">
+                <MasterShipType />
+              </ProtectedRoute>
+            } />
+            <Route path="master-component" element={
+              <ProtectedRoute resource="Master Component">
+                <MasterComponent />
               </ProtectedRoute>
             } />
             <Route path="master-location" element={

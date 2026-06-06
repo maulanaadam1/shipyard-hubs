@@ -66,6 +66,7 @@ export default function WorkOrderDashboard() {
   const [isSyncingDetail, setIsSyncingDetail] = useState(false);
   const [detailFetchError, setDetailFetchError] = useState<string | null>(null);
   const [activeDetailTab, setActiveDetailTab] = useState<'pekerjaan' | 'material'>('pekerjaan');
+  const [masterComponentsMap, setMasterComponentsMap] = useState<Record<string, any>>({});
 
   // Hover state for SVG weekly trend interaction
   const [hoveredTrendPoint, setHoveredTrendPoint] = useState<any>(null);
@@ -154,6 +155,66 @@ export default function WorkOrderDashboard() {
     }
   }, [selectedRow]);
 
+  // Fetch Master Components on mount for a base map
+  useEffect(() => {
+    const fetchComponents = async () => {
+      try {
+        const { data, error } = await api.from('master_components').select();
+        if (!error && data) {
+          const map: Record<string, any> = {};
+          data.forEach((c: any) => {
+            const cleanId = c.id?.toString().replace(/\.0$/, '');
+            map[cleanId] = c;
+          });
+          setMasterComponentsMap(map);
+        }
+      } catch (err) {
+        console.error("Failed to load master components", err);
+      }
+    };
+    fetchComponents();
+  }, []);
+
+  // Dynamically fetch missing master components for the current detail view
+  useEffect(() => {
+    if (!detailedRowData || !detailedRowData.t_requisition_details) return;
+
+    const fetchMissing = async () => {
+      let missingIds: string[] = [];
+      detailedRowData.t_requisition_details.forEach((req: any) => {
+        if (req.m_component_id && !masterComponentsMap[req.m_component_id.toString()]) {
+          missingIds.push(req.m_component_id.toString());
+        }
+      });
+
+      // Deduplicate
+      missingIds = Array.from(new Set(missingIds));
+      if (missingIds.length === 0) return;
+
+      const newMap = { ...masterComponentsMap };
+      let updated = false;
+
+      // Fetch each missing ID individually (since bulk IN is not supported locally)
+      for (const id of missingIds) {
+        try {
+          const { data, error } = await api.from('master_components').eq('id', id).select();
+          if (!error && data && data.length > 0) {
+            newMap[id] = data[0];
+            updated = true;
+          }
+        } catch (e) {
+          console.error("Failed to fetch component ID", id, e);
+        }
+      }
+
+      if (updated) {
+        setMasterComponentsMap(newMap);
+      }
+    };
+
+    fetchMissing();
+  }, [detailedRowData, masterComponentsMap]);
+
   // Auto fetch sync config on mount
   useEffect(() => {
     const fetchSyncData = async () => {
@@ -211,8 +272,9 @@ export default function WorkOrderDashboard() {
     if (rawData.length === 0) return new Date("2026-06-02");
     let maxTime = 0;
     rawData.forEach(item => {
-      if (item.created_at) {
-        const t = new Date(item.created_at.replace(' ', 'T')).getTime();
+      const targetDate = item.updated_at || item.created_at;
+      if (targetDate) {
+        const t = new Date(targetDate.replace(' ', 'T')).getTime();
         if (t > maxTime) maxTime = t;
       }
     });
@@ -226,6 +288,8 @@ export default function WorkOrderDashboard() {
 
     if (datePreset === "week") {
       start.setDate(end.getDate() - 7);
+    } else if (datePreset === "2weeks") {
+      start.setDate(end.getDate() - 14);
     } else if (datePreset === "month") {
       start.setDate(end.getDate() - 30);
     } else if (datePreset === "3months") {
@@ -343,8 +407,9 @@ export default function WorkOrderDashboard() {
   const dateFilteredData = useMemo(() => {
     const { start, end } = effectiveDateRange;
     return processedData.filter(item => {
-      if (!item.created_at) return false;
-      const cleanStr = item.created_at.replace(' ', 'T');
+      const targetDate = item.updated_at || item.created_at;
+      if (!targetDate) return false;
+      const cleanStr = targetDate.replace(' ', 'T');
       const itemTime = new Date(cleanStr).getTime();
       if (isNaN(itemTime)) return false;
 
@@ -523,6 +588,7 @@ export default function WorkOrderDashboard() {
   // Pengelompokan dinamis (Daily / Weekly / Monthly) agar grafik terlihat seimbang
   const trendGroupingMode = useMemo(() => {
     if (datePreset === "week") return "daily";
+    if (datePreset === "2weeks") return "daily";
     if (datePreset === "month") return "weekly";
     if (datePreset === "3months") return "weekly"; // 3 bulan dikelompokkan mingguan
     if (datePreset === "6months") return "monthly"; // 6 bulan dikelompokkan bulanan (Sintaks telah diperbaiki dari kesalahan return=)
@@ -753,9 +819,6 @@ export default function WorkOrderDashboard() {
       {/* HEADER BAR */}
       <header className={`sticky top-0 z-30 border-b backdrop-blur-md px-6 py-4 flex flex-wrap justify-between items-center gap-4 ${isDarkMode ? 'bg-slate-900/80 border-slate-800' : 'bg-white/80 border-slate-200'}`}>
         <div className="flex items-center gap-3">
-          <div className="bg-indigo-600 text-white p-2.5 rounded-xl shadow-lg shadow-indigo-500/20">
-            <FileSpreadsheet size={24} />
-          </div>
           <div>
             <h2 className={`font-display font-bold text-2xl tracking-tight ${isDarkMode ? 'text-white' : 'text-slate-800'}`}>Work Order Dashboard</h2>
             <p className="text-sm text-slate-500 mt-1">Resume & Analitika Work Order Logistik Perkapalan</p>
@@ -886,6 +949,7 @@ export default function WorkOrderDashboard() {
                 <div className="flex flex-wrap items-center gap-1.5">
                   {[
                     { id: "week", label: "1 Mng" },
+                    { id: "2weeks", label: "2 Mng" },
                     { id: "month", label: "1 Bln" },
                     { id: "3months", label: "3 Bln" },
                     { id: "6months", label: "6 Bln" },
@@ -1408,13 +1472,12 @@ export default function WorkOrderDashboard() {
                   <th className="py-3.5 px-6 text-right">Pending Approval</th>
                   <th className="py-3.5 px-6 text-center">Terakhir Diperbarui</th>
                   <th className="py-3.5 px-6 text-center">Status Approval</th>
-                  <th className="py-3.5 px-6 text-center">Detail</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-50 text-sm">
                 {paginatedData.length === 0 ? (
                   <tr>
-                    <td colSpan={10} className="py-12 text-center text-slate-400 text-xs">
+                    <td colSpan={9} className="py-12 text-center text-slate-400 text-xs">
                       Tidak ada data Work Order yang cocok dengan penyaringan Anda pada rentang waktu ini.
                     </td>
                   </tr>
@@ -1478,12 +1541,6 @@ export default function WorkOrderDashboard() {
                           {getStatusIcon(item.derivedStatus)}
                           {item.derivedStatus}
                         </span>
-                      </td>
-
-                      <td className="py-3.5 px-6 text-center" onClick={(e) => { e.stopPropagation(); setSelectedRow(item); }}>
-                        <button className="p-1 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-400 hover:text-indigo-500 transition">
-                          <Eye size={16} />
-                        </button>
                       </td>
                     </tr>
                   ))
@@ -1559,20 +1616,22 @@ export default function WorkOrderDashboard() {
             <div className="flex-1 overflow-y-auto p-5 sm:p-8 space-y-8 custom-scrollbar">
               
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4 p-5 rounded-xl bg-slate-50 border border-slate-100">
-                <div>
+                <div className="md:col-span-1">
                   <p className="text-xs text-slate-400 font-bold uppercase tracking-wider mb-2">Status Approval</p>
                   <span className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-semibold ${getStatusBadgeStyles(selectedRow.derivedStatus)}`}>
                     {getStatusIcon(selectedRow.derivedStatus)}
                     {selectedRow.derivedStatus}
                   </span>
                 </div>
-                <div>
-                  <p className="text-xs text-slate-400 font-bold uppercase tracking-wider mb-2">Total Harga / Cost (IDR)</p>
-                  <p className="text-lg font-bold font-mono text-emerald-500">
+                
+                <div className="col-span-2 md:col-span-2">
+                  <p className="text-xs text-slate-400 font-bold uppercase tracking-wider mb-2">Total Biaya (IDR)</p>
+                  <p className="text-2xl font-black font-mono text-emerald-600 tracking-tighter">
                     {formatIDR(selectedRow.totalCostNum)}
                   </p>
                 </div>
-                <div className="md:col-span-2">
+
+                <div className="col-span-2 md:col-span-1">
                   <p className="text-xs text-slate-400 font-bold uppercase tracking-wider mb-2">Vendor / Partner</p>
                   <p className="text-sm font-bold text-slate-800">{selectedRow.vendorName}</p>
                 </div>
@@ -1697,6 +1756,12 @@ export default function WorkOrderDashboard() {
                                                 else if (item.approved_level > 0) statusStr = `approved level ${item.approved_level}`;
                                                 else if (item.approved_level === 0) statusStr = "waiting";
                                               }
+                                              if (detailedRowData?.min_approval_level >= 5) {
+                                                statusStr = "approved";
+                                              } else if (detailedRowData?.min_approval_level > 0 && (!statusStr || statusStr === "waiting")) {
+                                                statusStr = `approved level ${detailedRowData.min_approval_level}`;
+                                              }
+
                                               if (!statusStr) return null;
                                               
                                               const isAppr = statusStr.toLowerCase().includes('approved');
@@ -1748,28 +1813,51 @@ export default function WorkOrderDashboard() {
                            <p className="text-sm text-slate-500 italic p-6 bg-slate-50 rounded-xl text-center">Tidak ada daftar kebutuhan material tersedia</p>
                         ) : (
                           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-                            {detailedRowData.t_requisition_details.map((req: any) => (
-                              <div key={req.id} className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex flex-col justify-between gap-3 hover:border-emerald-500/30 transition-colors">
-                                <div className="min-w-0">
-                                  <p className="text-sm font-bold text-slate-800 leading-snug" title={req.m_component?.description_code}>
-                                    {req.m_component?.description_code || req.m_component?.description || 'Barang/Material'}
-                                  </p>
-                                  <div className="flex flex-wrap gap-x-3 gap-y-2 mt-3 text-xs text-slate-600">
-                                    <span className="font-bold text-[#FDB913] bg-[#FDB913]/10 px-2 py-1 rounded-md border border-[#FDB913]/20">Req: {req.quantity} {req.unit}</span>
+                            {detailedRowData.t_requisition_details.map((req: any) => {
+                              const compFromReq = req.m_component || req.t_delivery_details?.[0]?.m_component;
+                              const localComp = masterComponentsMap[req.m_component_id?.toString()];
+                              
+                              const materialName = 
+                                localComp?.description_code || localComp?.description || 
+                                compFromReq?.description_code || compFromReq?.description || 
+                                `Barang/Material (ID: ${req.m_component_id})`;
+                              
+                              return (
+                                <div key={req.id} className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex flex-col justify-between gap-3 hover:border-emerald-500/30 transition-colors">
+                                  <div className="min-w-0">
+                                    <p className="text-sm font-bold text-slate-800 leading-snug" title={materialName}>
+                                      {materialName}
+                                    </p>
+                                    <div className="flex flex-wrap gap-x-3 gap-y-2 mt-3 text-xs text-slate-600">
+                                    <span className="font-bold text-[#FDB913] bg-[#FDB913]/10 px-2 py-1 rounded-md border border-[#FDB913]/20">Req: {req.quantity} {localComp?.unit || req.unit}</span>
                                     <span className="font-bold text-emerald-700 bg-emerald-50 px-2 py-1 rounded-md border border-emerald-100">Terkirim: {req.quantity_delivered}</span>
                                     {req.quantity_undelivered > 0 && <span className="font-bold text-rose-600 bg-rose-50 px-2 py-1 rounded-md border border-rose-100">Sisa: {req.quantity_undelivered}</span>}
                                   </div>
                                 </div>
-                                {req.t_delivery_details?.length > 0 && (
-                                   <div className="mt-2 pt-3 border-t border-slate-100 flex items-center gap-2 text-xs">
-                                      <span className="bg-emerald-500 text-white px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider">Terkirim pada</span>
-                                      <span className="font-mono text-slate-500 font-bold">
-                                        {req.t_delivery_details[0].t_delivery?.date ? new Date(req.t_delivery_details[0].t_delivery.date).toLocaleDateString('id-ID', {day:'numeric', month:'long', year:'numeric'}) : ''}
-                                      </span>
-                                   </div>
-                                )}
+                                  {req.t_delivery_details?.length > 0 && (
+                                     <div className="mt-2 pt-3 border-t border-slate-100 flex items-center justify-between gap-2 text-xs">
+                                        <div className="flex items-center gap-2">
+                                          <span className="bg-emerald-500 text-white px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider">Terkirim pada</span>
+                                          <span className="font-mono text-slate-500 font-bold">
+                                            {req.t_delivery_details[0].t_delivery?.date ? new Date(req.t_delivery_details[0].t_delivery.date).toLocaleDateString('id-ID', {day:'numeric', month:'long', year:'numeric'}) : ''}
+                                          </span>
+                                        </div>
+                                        {(() => {
+                                          const subTotal = req.t_delivery_details.reduce((sum: number, del: any) => {
+                                            const qty = parseFloat(del.quantity || '0');
+                                            const price = parseFloat(del.t_receiving_detail?.unit_price || '0');
+                                            return sum + (qty * price);
+                                          }, 0);
+                                          return subTotal > 0 ? (
+                                            <div className="font-mono font-bold text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded border border-indigo-100" title="Harga Total Material">
+                                              {formatIDR(subTotal)}
+                                            </div>
+                                          ) : null;
+                                        })()}
+                                     </div>
+                                  )}
                               </div>
-                            ))}
+                            )})}
                           </div>
                         )}
                       </div>
@@ -1829,11 +1917,6 @@ export default function WorkOrderDashboard() {
         </div>
       )}
 
-      {/* FOOTER */}
-      <footer className="text-center py-8 text-xs text-slate-500 border-t border-slate-200 dark:border-slate-800 mt-12">
-        <p>© 2026 Fleet Logistics & Repair Management System. Seluruh Hak Cipta Dilindungi.</p>
-        <p className="mt-1">Dirancang untuk kecepatan akses & analisis data modular multi-level approval.</p>
-      </footer>
 
     </div>
   );

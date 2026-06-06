@@ -69,6 +69,8 @@ export default function Sidebar({ onTabChange }: { onTabChange: () => void }) {
         { icon: Truck, label: 'Master Vendor', path: '/master-vendor', resource: 'Master Vendor' },
         { icon: Building2, label: 'Master Company', path: '/master-company', resource: 'Master Company' },
         { icon: Anchor, label: 'Master Kapal', path: '/master-kapal', resource: 'Master Kapal' },
+        { icon: Ship, label: 'Master Ship Type', path: '/master-ship-type', resource: 'Master Kapal' },
+        { icon: Package, label: 'Master Component', path: '/master-component', resource: 'Master Component' },
         { icon: MapPin, label: 'Master Location', path: '/master-location', resource: 'Master Location' },
         { icon: Wrench, label: 'Master Service', path: '/master-service', resource: 'Master Location' },
         { icon: Users, label: 'Master Employee', path: '/master-employee', resource: 'User Management' },

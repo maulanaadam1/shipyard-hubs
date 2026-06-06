@@ -109,6 +109,21 @@ func RunSyncJob(force bool, targetId string) {
 		} else if id == "Employees" {
 			processEmployeesIncremental(id, urlStr, headers, lastSyncStr)
 			continue
+		} else if id == "Vendors" {
+			processVendorsIncremental(id, urlStr, headers, lastSyncStr)
+			continue
+		} else if id == "Companies" {
+			processCompaniesIncremental(id, urlStr, headers, lastSyncStr)
+			continue
+		} else if id == "Ships" {
+			processShipsIncremental(id, urlStr, headers, lastSyncStr)
+			continue
+		} else if id == "ShipTypes" {
+			processShipTypesIncremental(id, urlStr, headers, lastSyncStr)
+			continue
+		} else if id == "MasterComponents" {
+			processComponentsIncremental(id, urlStr, headers, lastSyncStr)
+			continue
 		}
 
 		client := &http.Client{Timeout: 30 * time.Second}
@@ -937,5 +952,675 @@ func processEmployeesIncremental(configId, baseUrl string, headers map[string]st
 	if !newestUpdatedAt.IsZero() {
 		nowStr := time.Now().Format("2006-01-02 15:04:05")
 		db.DB.Exec("UPDATE sync_configs SET last_sync = ? WHERE id = ?", nowStr, configId)
+	}
+}
+
+func processVendorsIncremental(configId, baseUrl string, headers map[string]string, lastSyncStr string) {
+	var lastSync time.Time
+	if lastSyncStr != "" {
+		lastSync, _ = time.Parse("2006-01-02 15:04:05", lastSyncStr)
+	}
+
+	page := 1
+	hasMore := true
+	client := &http.Client{Timeout: 30 * time.Second}
+	var newestUpdatedAt time.Time
+
+	for hasMore {
+		url := baseUrl
+		if strings.Contains(url, "?") {
+			url = fmt.Sprintf("%s&page=%d", url, page)
+		} else {
+			url = fmt.Sprintf("%s?page=%d", url, page)
+		}
+
+		req, err := http.NewRequest("GET", url, nil)
+		if err != nil { break }
+		for k, v := range headers { req.Header.Set(k, v) }
+
+		resp, err := client.Do(req)
+		if err != nil { break }
+
+		bodyBytes, err := io.ReadAll(resp.Body)
+		resp.Body.Close()
+		if err != nil { break }
+
+		var payload map[string]interface{}
+		if err := json.Unmarshal(bodyBytes, &payload); err != nil {
+			var payloadArray []interface{}
+			if err2 := json.Unmarshal(bodyBytes, &payloadArray); err2 == nil {
+				payload = map[string]interface{}{"data": payloadArray}
+			} else { break }
+		}
+
+		var items []interface{}
+		if data, ok := payload["data"].([]interface{}); ok {
+			items = data
+		} else if records, ok := payload["records"].([]interface{}); ok {
+			items = records
+		} else {
+			hasMore = false
+			break
+		}
+
+		if len(items) == 0 {
+			hasMore = false
+			break
+		}
+
+		allOlder := true
+		tx, err := db.DB.Begin()
+		if err != nil { break }
+
+		stmt, err := tx.Prepare(`INSERT INTO vendors (id, vendor, nama_pt, whatapps, category, jumlah_anggota, status) 
+			VALUES (?, ?, ?, ?, ?, ?, ?) ON CONFLICT(id) DO UPDATE SET 
+			vendor=excluded.vendor, nama_pt=excluded.nama_pt, whatapps=excluded.whatapps, 
+			category=excluded.category, jumlah_anggota=excluded.jumlah_anggota, status=excluded.status`)
+
+		if err == nil {
+			for _, item := range items {
+				itemMap, ok := item.(map[string]interface{})
+				if !ok { continue }
+
+				var itemId string
+				if val, ok := itemMap["id"]; ok {
+					itemId = fmt.Sprintf("%v", val)
+				} else { continue }
+
+				itemUpdatedStr := ""
+				if val, ok := itemMap["updated_at"].(string); ok {
+					itemUpdatedStr = val
+				} else if val, ok := itemMap["created_at"].(string); ok {
+					itemUpdatedStr = val
+				}
+
+				var itemUpdated time.Time
+				if itemUpdatedStr != "" {
+					t, err := time.Parse("2006-01-02 15:04:05", itemUpdatedStr)
+					if err == nil { itemUpdated = t }
+				}
+
+				if itemUpdated.After(newestUpdatedAt) { newestUpdatedAt = itemUpdated }
+
+				if itemUpdatedStr != "" && !itemUpdated.IsZero() && !lastSync.IsZero() {
+					if itemUpdated.After(lastSync) { allOlder = false }
+				} else { allOlder = false }
+
+				getString := func(k string) string {
+					if v, ok := itemMap[k]; ok && v != nil {
+						return strings.TrimSpace(fmt.Sprintf("%v", v))
+					}
+					return ""
+				}
+
+				vendor := getString("name")
+				if vendor == "" { vendor = getString("vendor_name") }
+				nama_pt := getString("company_name")
+				if nama_pt == "" { nama_pt = getString("nama_pt") }
+				whatapps := getString("phone")
+				if whatapps == "" { whatapps = getString("whatsapp") }
+				if whatapps == "" { whatapps = getString("whatapps") }
+				category := getString("category")
+				
+				jumlah := 0
+				if val, ok := itemMap["jumlah_anggota"].(float64); ok {
+					jumlah = int(val)
+				}
+
+				status := "Active"
+
+				stmt.Exec(itemId, vendor, nama_pt, whatapps, category, jumlah, status)
+			}
+			stmt.Close()
+		}
+		tx.Commit()
+
+		if allOlder { hasMore = false; break }
+		page++
+	}
+
+	if !newestUpdatedAt.IsZero() {
+		now := time.Now().Format("2006-01-02 15:04:05")
+		db.DB.Exec("UPDATE sync_configs SET last_sync = ? WHERE id = ?", now, configId)
+	}
+}
+
+func processCompaniesIncremental(configId, baseUrl string, headers map[string]string, lastSyncStr string) {
+	var lastSync time.Time
+	if lastSyncStr != "" { lastSync, _ = time.Parse("2006-01-02 15:04:05", lastSyncStr) }
+
+	page := 1
+	hasMore := true
+	client := &http.Client{Timeout: 30 * time.Second}
+	var newestUpdatedAt time.Time
+
+	for hasMore {
+		url := baseUrl
+		if strings.Contains(url, "?") {
+			url = fmt.Sprintf("%s&page=%d", url, page)
+		} else {
+			url = fmt.Sprintf("%s?page=%d", url, page)
+		}
+
+		req, err := http.NewRequest("GET", url, nil)
+		if err != nil { break }
+		for k, v := range headers { req.Header.Set(k, v) }
+
+		resp, err := client.Do(req)
+		if err != nil { break }
+
+		bodyBytes, err := io.ReadAll(resp.Body)
+		resp.Body.Close()
+		if err != nil { break }
+
+		var payload map[string]interface{}
+		if err := json.Unmarshal(bodyBytes, &payload); err != nil {
+			var payloadArray []interface{}
+			if err2 := json.Unmarshal(bodyBytes, &payloadArray); err2 == nil {
+				payload = map[string]interface{}{"data": payloadArray}
+			} else { break }
+		}
+
+		var items []interface{}
+		if data, ok := payload["data"].([]interface{}); ok {
+			items = data
+		} else if records, ok := payload["records"].([]interface{}); ok {
+			items = records
+		} else {
+			hasMore = false; break
+		}
+
+		if len(items) == 0 { hasMore = false; break }
+
+		allOlder := true
+		tx, err := db.DB.Begin()
+		if err != nil { break }
+
+		stmt, err := tx.Prepare(`INSERT INTO companies (id, company_type, company_name, status) 
+			VALUES (?, ?, ?, ?) ON CONFLICT(id) DO UPDATE SET 
+			company_type=excluded.company_type, company_name=excluded.company_name, status=excluded.status`)
+
+		if err == nil {
+			for _, item := range items {
+				itemMap, ok := item.(map[string]interface{})
+				if !ok { continue }
+
+				var itemId string
+				if val, ok := itemMap["id"]; ok {
+					itemId = fmt.Sprintf("%v", val)
+				} else { continue }
+
+				itemUpdatedStr := ""
+				if val, ok := itemMap["updated_at"].(string); ok {
+					itemUpdatedStr = val
+				} else if val, ok := itemMap["created_at"].(string); ok {
+					itemUpdatedStr = val
+				}
+
+				var itemUpdated time.Time
+				if itemUpdatedStr != "" {
+					t, err := time.Parse("2006-01-02 15:04:05", itemUpdatedStr)
+					if err == nil { itemUpdated = t }
+				}
+
+				if itemUpdated.After(newestUpdatedAt) { newestUpdatedAt = itemUpdated }
+				if itemUpdatedStr != "" && !itemUpdated.IsZero() && !lastSync.IsZero() {
+					if itemUpdated.After(lastSync) { allOlder = false }
+				} else { allOlder = false }
+
+				getString := func(k string) string {
+					if v, ok := itemMap[k]; ok && v != nil {
+						return strings.TrimSpace(fmt.Sprintf("%v", v))
+					}
+					return ""
+				}
+
+				cType := getString("type")
+				if cType == "" { cType = getString("company_type") }
+				cName := getString("name")
+				if cName == "" { cName = getString("company_name") }
+				status := "Active"
+
+				stmt.Exec(itemId, cType, cName, status)
+			}
+			stmt.Close()
+		}
+		tx.Commit()
+
+		if allOlder { hasMore = false; break }
+		page++
+	}
+
+	if !newestUpdatedAt.IsZero() {
+		now := time.Now().Format("2006-01-02 15:04:05")
+		db.DB.Exec("UPDATE sync_configs SET last_sync = ? WHERE id = ?", now, configId)
+	}
+}
+
+func processShipsIncremental(configId, baseUrl string, headers map[string]string, lastSyncStr string) {
+	var lastSync time.Time
+	if lastSyncStr != "" { lastSync, _ = time.Parse("2006-01-02 15:04:05", lastSyncStr) }
+
+	page := 1
+	hasMore := true
+	client := &http.Client{Timeout: 30 * time.Second}
+	var newestUpdatedAt time.Time
+
+	for hasMore {
+		url := baseUrl
+		if strings.Contains(url, "?") {
+			url = fmt.Sprintf("%s&page=%d", url, page)
+		} else {
+			url = fmt.Sprintf("%s?page=%d", url, page)
+		}
+
+		req, err := http.NewRequest("GET", url, nil)
+		if err != nil { break }
+		for k, v := range headers { req.Header.Set(k, v) }
+
+		resp, err := client.Do(req)
+		if err != nil { break }
+
+		bodyBytes, err := io.ReadAll(resp.Body)
+		resp.Body.Close()
+		if err != nil { break }
+
+		var payload map[string]interface{}
+		if err := json.Unmarshal(bodyBytes, &payload); err != nil {
+			var payloadArray []interface{}
+			if err2 := json.Unmarshal(bodyBytes, &payloadArray); err2 == nil {
+				payload = map[string]interface{}{"data": payloadArray}
+			} else { break }
+		}
+
+		var items []interface{}
+		if data, ok := payload["data"].([]interface{}); ok {
+			items = data
+		} else if records, ok := payload["records"].([]interface{}); ok {
+			items = records
+		} else {
+			hasMore = false; break
+		}
+
+		if len(items) == 0 { hasMore = false; break }
+
+		allOlder := true
+		tx, err := db.DB.Begin()
+		if err != nil { break }
+
+		stmt, err := tx.Prepare(`INSERT INTO ships (id, type, shipname, company, loa, breadth, depth, draft, gt, buid) 
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(id) DO UPDATE SET 
+			type=excluded.type, shipname=excluded.shipname, company=excluded.company, loa=excluded.loa, 
+			breadth=excluded.breadth, depth=excluded.depth, draft=excluded.draft, gt=excluded.gt, buid=excluded.buid`)
+
+		if err == nil {
+			for _, item := range items {
+				itemMap, ok := item.(map[string]interface{})
+				if !ok { continue }
+
+				var itemId string
+				if val, ok := itemMap["id"]; ok {
+					itemId = fmt.Sprintf("%v", val)
+				} else { continue }
+
+				itemUpdatedStr := ""
+				if val, ok := itemMap["updated_at"].(string); ok {
+					itemUpdatedStr = val
+				} else if val, ok := itemMap["created_at"].(string); ok {
+					itemUpdatedStr = val
+				}
+
+				var itemUpdated time.Time
+				if itemUpdatedStr != "" {
+					t, err := time.Parse("2006-01-02 15:04:05", itemUpdatedStr)
+					if err == nil { itemUpdated = t }
+				}
+
+				if itemUpdated.After(newestUpdatedAt) { newestUpdatedAt = itemUpdated }
+				if itemUpdatedStr != "" && !itemUpdated.IsZero() && !lastSync.IsZero() {
+					if itemUpdated.After(lastSync) { allOlder = false }
+				} else { allOlder = false }
+
+				getString := func(k string) string {
+					if v, ok := itemMap[k]; ok && v != nil {
+						return strings.TrimSpace(fmt.Sprintf("%v", v))
+					}
+					return ""
+				}
+
+				getFloat := func(k string) float64 {
+					if v, ok := itemMap[k].(float64); ok {
+						return v
+					} else if vStr, ok := itemMap[k].(string); ok {
+						var f float64
+						fmt.Sscanf(vStr, "%f", &f)
+						return f
+					}
+					return 0
+				}
+
+				sType := getString("type")
+				
+				if typeId, ok := itemMap["m_ship_type_id"]; ok && typeId != nil {
+					sType = fmt.Sprintf("st_%v", typeId)
+				} else if typeObj, ok := itemMap["m_ship_type"].(map[string]interface{}); ok {
+					if tId, ok := typeObj["id"]; ok && tId != nil {
+						sType = fmt.Sprintf("st_%v", tId)
+					}
+				}
+
+				sName := getString("name")
+				if sName == "" { sName = getString("shipname") }
+				
+				company := getString("company_name")
+				if company == "" { company = getString("company") }
+				if company == "" { 
+					if compObj, ok := itemMap["m_customer"].(map[string]interface{}); ok {
+						if cName, ok := compObj["name"].(string); ok { company = cName }
+					}
+				}
+
+				loa := getFloat("loa")
+				breadth := getFloat("breadth")
+				depth := getFloat("depth")
+				draft := getFloat("draft")
+				gt := getFloat("gt")
+				buid := getString("buid")
+
+				stmt.Exec(itemId, sType, sName, company, loa, breadth, depth, draft, gt, buid)
+			}
+			stmt.Close()
+		}
+		tx.Commit()
+
+		if allOlder { hasMore = false; break }
+		page++
+	}
+
+	if !newestUpdatedAt.IsZero() {
+		now := time.Now().Format("2006-01-02 15:04:05")
+		db.DB.Exec("UPDATE sync_configs SET last_sync = ? WHERE id = ?", now, configId)
+	}
+}
+
+func processShipTypesIncremental(configId, baseUrl string, headers map[string]string, lastSyncStr string) {
+	var lastSync time.Time
+	if lastSyncStr != "" { lastSync, _ = time.Parse("2006-01-02 15:04:05", lastSyncStr) }
+
+	page := 1
+	hasMore := true
+	client := &http.Client{Timeout: 30 * time.Second}
+	var newestUpdatedAt time.Time
+
+	for hasMore {
+		url := baseUrl
+		if strings.Contains(url, "?") {
+			url = fmt.Sprintf("%s&page=%d", url, page)
+		} else {
+			url = fmt.Sprintf("%s?page=%d", url, page)
+		}
+
+		req, err := http.NewRequest("GET", url, nil)
+		if err != nil { break }
+		for k, v := range headers { req.Header.Set(k, v) }
+
+		resp, err := client.Do(req)
+		if err != nil { break }
+
+		bodyBytes, err := io.ReadAll(resp.Body)
+		resp.Body.Close()
+		if err != nil { break }
+
+		var payload map[string]interface{}
+		if err := json.Unmarshal(bodyBytes, &payload); err != nil {
+			var payloadArray []interface{}
+			if err2 := json.Unmarshal(bodyBytes, &payloadArray); err2 == nil {
+				payload = map[string]interface{}{"data": payloadArray}
+			} else { break }
+		}
+
+		var items []interface{}
+		if data, ok := payload["data"].([]interface{}); ok {
+			items = data
+		} else if records, ok := payload["records"].([]interface{}); ok {
+			items = records
+		} else {
+			hasMore = false; break
+		}
+
+		if len(items) == 0 { hasMore = false; break }
+
+		allOlder := true
+		tx, err := db.DB.Begin()
+		if err != nil { break }
+
+		stmt, err := tx.Prepare(`INSERT INTO dropdown_configs (id, category, label, value, is_active) 
+			VALUES (?, 'ship_types', ?, ?, 1) ON CONFLICT(id) DO UPDATE SET 
+			label=excluded.label, value=excluded.value`)
+
+		if err == nil {
+			for _, item := range items {
+				itemMap, ok := item.(map[string]interface{})
+				if !ok { continue }
+
+				var itemId string
+				if val, ok := itemMap["id"]; ok {
+					itemId = fmt.Sprintf("%v", val)
+				} else { continue }
+
+				itemUpdatedStr := ""
+				if val, ok := itemMap["updated_at"].(string); ok {
+					itemUpdatedStr = val
+				} else if val, ok := itemMap["created_at"].(string); ok {
+					itemUpdatedStr = val
+				}
+
+				var itemUpdated time.Time
+				if itemUpdatedStr != "" {
+					t, err := time.Parse("2006-01-02 15:04:05", itemUpdatedStr)
+					if err == nil { itemUpdated = t }
+				}
+
+				if itemUpdated.After(newestUpdatedAt) { newestUpdatedAt = itemUpdated }
+				if itemUpdatedStr != "" && !itemUpdated.IsZero() && !lastSync.IsZero() {
+					if itemUpdated.After(lastSync) { allOlder = false }
+				} else { allOlder = false }
+
+				getString := func(k string) string {
+					if v, ok := itemMap[k]; ok && v != nil {
+						return strings.TrimSpace(fmt.Sprintf("%v", v))
+					}
+					return ""
+				}
+
+				code := getString("code")
+				name := getString("name")
+				if name == "" { name = getString("type_name") }
+				if name == "" { name = getString("ship_type") }
+				
+				if code == "" { code = name } // Fallback
+
+				if name != "" {
+					safeId := fmt.Sprintf("st_%s", itemId)
+					stmt.Exec(safeId, name, code)
+				}
+			}
+			stmt.Close()
+		}
+		tx.Commit()
+
+		if allOlder { hasMore = false; break }
+		page++
+	}
+
+	if !newestUpdatedAt.IsZero() {
+		now := time.Now().Format("2006-01-02 15:04:05")
+		db.DB.Exec("UPDATE sync_configs SET last_sync = ? WHERE id = ?", now, configId)
+	}
+}
+
+func processComponentsIncremental(configId string, apiUrl string, headers map[string]string, lastSyncStr string) {
+	var lastSync time.Time
+	if lastSyncStr != "" {
+		t, err := time.Parse("2006-01-02 15:04:05", lastSyncStr)
+		if err == nil {
+			lastSync = t
+		}
+	}
+
+	page := 1
+	hasMore := true
+	var newestUpdatedAt time.Time
+
+	for hasMore {
+		pagedUrl := apiUrl
+		if strings.Contains(pagedUrl, "?") {
+			pagedUrl = fmt.Sprintf("%s&page=%d", pagedUrl, page)
+		} else {
+			pagedUrl = fmt.Sprintf("%s?page=%d", pagedUrl, page)
+		}
+
+		req, err := http.NewRequest("GET", pagedUrl, nil)
+		if err != nil {
+			break
+		}
+		for k, v := range headers {
+			req.Header.Set(k, v)
+		}
+
+		client := &http.Client{Timeout: 30 * time.Second}
+		resp, err := client.Do(req)
+		if err != nil {
+			break
+		}
+
+		bodyBytes, err := io.ReadAll(resp.Body)
+		resp.Body.Close()
+		if err != nil {
+			break
+		}
+
+		var apiRes struct {
+			Data []map[string]interface{} `json:"data"`
+			Meta struct {
+				CurrentPage int `json:"current_page"`
+				LastPage    int `json:"last_page"`
+			} `json:"meta"`
+		}
+		
+		if err := json.Unmarshal(bodyBytes, &apiRes); err != nil {
+			var altRes []map[string]interface{}
+			if err := json.Unmarshal(bodyBytes, &altRes); err == nil {
+				apiRes.Data = altRes
+				hasMore = false
+			} else {
+				break
+			}
+		}
+
+		if len(apiRes.Data) == 0 {
+			break
+		}
+
+		if apiRes.Meta.CurrentPage >= apiRes.Meta.LastPage && apiRes.Meta.LastPage > 0 {
+			hasMore = false
+		}
+
+		tx, err := db.DB.Begin()
+		if err != nil {
+			break
+		}
+
+		allOlder := true
+		for _, item := range apiRes.Data {
+			getString := func(k string) string {
+				if v, ok := item[k]; ok && v != nil {
+					return fmt.Sprintf("%v", v)
+				}
+				return ""
+			}
+
+			itemId := getString("id")
+			if itemId == "" {
+				continue
+			}
+
+			updatedAtStr := getString("updated_at")
+			if updatedAtStr != "" {
+				t, err := time.Parse("2006-01-02 15:04:05", updatedAtStr)
+				if err == nil {
+					if t.After(newestUpdatedAt) {
+						newestUpdatedAt = t
+					}
+					if t.After(lastSync) || lastSync.IsZero() {
+						allOlder = false
+					}
+				}
+			}
+
+			code := getString("code")
+			description := getString("description")
+			unit := getString("unit")
+			flagActive := 1
+			if val, ok := item["flag_active"]; ok && val != nil {
+				strVal := fmt.Sprintf("%v", val)
+				if strVal == "0" || strVal == "false" || strVal == "False" {
+					flagActive = 0
+				}
+			}
+			createdAt := getString("created_at")
+			minimumStock := 0
+			if val, ok := item["minimum_stock"].(float64); ok {
+				minimumStock = int(val)
+			}
+			parentId := getString("parent_id")
+			compType := getString("type")
+			class := getString("class")
+			remark := getString("remark")
+			partNo := getString("part_no")
+			branchId := getString("m_branch_id")
+			itemCode := getString("itemcode")
+			descriptionCode := getString("description_code")
+
+			_, err = tx.Exec(`
+				INSERT INTO master_components (
+					id, code, description, unit, flag_active, created_at, updated_at,
+					minimum_stock, parent_id, type, class, remark, part_no,
+					m_branch_id, itemcode, description_code
+				) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+				ON CONFLICT(id) DO UPDATE SET
+					code=excluded.code,
+					description=excluded.description,
+					unit=excluded.unit,
+					flag_active=excluded.flag_active,
+					updated_at=excluded.updated_at,
+					minimum_stock=excluded.minimum_stock,
+					parent_id=excluded.parent_id,
+					type=excluded.type,
+					class=excluded.class,
+					remark=excluded.remark,
+					part_no=excluded.part_no,
+					m_branch_id=excluded.m_branch_id,
+					itemcode=excluded.itemcode,
+					description_code=excluded.description_code
+			`,
+				itemId, code, description, unit, flagActive, createdAt, updatedAtStr,
+				minimumStock, parentId, compType, class, remark, partNo,
+				branchId, itemCode, descriptionCode,
+			)
+		}
+		
+		tx.Commit()
+
+		if allOlder {
+			hasMore = false
+			break
+		}
+		page++
+	}
+
+	if !newestUpdatedAt.IsZero() {
+		now := time.Now().Format("2006-01-02 15:04:05")
+		db.DB.Exec("UPDATE sync_configs SET last_sync = ? WHERE id = ?", now, configId)
 	}
 }

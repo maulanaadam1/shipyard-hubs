@@ -248,6 +248,27 @@ func createTables() {
 		m_city_id INTEGER,
 		type TEXT
 	);
+	
+	CREATE TABLE IF NOT EXISTS master_components (
+		id TEXT PRIMARY KEY,
+		code TEXT,
+		description TEXT,
+		unit TEXT,
+		flag_active BOOLEAN,
+		created_at TEXT,
+		updated_at TEXT,
+		minimum_stock INTEGER,
+		parent_id TEXT,
+		type TEXT,
+		class TEXT,
+		remark TEXT,
+		part_no TEXT,
+		m_branch_id TEXT,
+		itemcode TEXT,
+		description_code TEXT,
+		created_by TEXT,
+		modified_by TEXT
+	);
 	`
 
 	if _, err := DB.Exec(schema); err != nil {
@@ -259,6 +280,8 @@ func createTables() {
 	DB.Exec("ALTER TABLE companies ADD COLUMN status TEXT DEFAULT 'Active'")
 	DB.Exec("ALTER TABLE vendors ADD COLUMN status TEXT DEFAULT 'Active'")
 	DB.Exec("ALTER TABLE profiles ADD COLUMN jabatan TEXT")
+	DB.Exec("ALTER TABLE master_components ADD COLUMN created_by TEXT")
+	DB.Exec("ALTER TABLE master_components ADD COLUMN modified_by TEXT")
 	DB.Exec("ALTER TABLE profiles ADD COLUMN city TEXT")
 	DB.Exec("ALTER TABLE profiles ADD COLUMN branch TEXT")
 	DB.Exec("ALTER TABLE profiles ADD COLUMN department TEXT")

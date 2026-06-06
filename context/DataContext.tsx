@@ -640,6 +640,9 @@ export function DataProvider({ children }: { children: ReactNode }) {
       canAccess: (resource: string, action: string = 'view') => {
         if (!currentUser) return false;
         
+        // Dashboard module is universally accessible to all logged-in users
+        if (resource === 'Dashboard') return true;
+
         // Admin always has access
         if (currentUser.role === 'Admin') {
           // console.log(`RBAC [${resource}:${action}]: Allowed (Admin)`);

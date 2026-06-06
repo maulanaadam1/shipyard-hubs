@@ -38,6 +38,7 @@ var allowedTables = map[string]bool{
 	"sync_configs":       true,
 	"master_services":    true,
 	"master_employees":   true,
+	"master_components":  true,
 }
 
 // getPKCol returns the primary key column name for a given table
@@ -69,8 +70,9 @@ var tableToResource = map[string]string{
 	"master_status_dock": "Master Dock Status",
 	"vessel_layouts":     "Master Layout",
 	"sync_configs":       "Master Configuration",
-	"master_services":    "Master Location",
+	"master_services":    "Utility",
 	"master_employees":   "User Management",
+	"master_components":  "Master Component",
 }
 
 // CheckTablePermission verifies if the user from context has permission for table and action

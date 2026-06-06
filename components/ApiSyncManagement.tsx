@@ -504,6 +504,9 @@ export default function ApiSyncManagement() {
                       <option value="Locations">Locations (Master Data Slipway/Lokasi)</option>
                       <option value="Services">Services (Master Data Docking Type)</option>
                       <option value="Vendors">Vendors (Master Data Vendor)</option>
+                      <option value="Companies">Companies (Master Data Perusahaan)</option>
+                      <option value="ShipTypes">ShipTypes (Master Tipe Kapal)</option>
+                      <option value="MasterComponents">MasterComponents (Master Material / Sparepart)</option>
                       <option value="Ships">Ships (Master Data Kapal)</option>
                       <option value="Employees">Employees (Master Data Karyawan)</option>
                       <option value="Materials">Materials (Master Data Material)</option>
