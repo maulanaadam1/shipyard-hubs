@@ -151,36 +151,61 @@ func GetPendingApprovals(w http.ResponseWriter, r *http.Request) {
 			continue
 		}
 
-		var sum float64
-		var sumPending func(items []interface{})
-		sumPending = func(items []interface{}) {
-			for _, itemRaw := range items {
-				item, ok := itemRaw.(map[string]interface{})
-				if !ok {
-					continue
-				}
-
-				approvedLevel := float64(0)
-				if val, ok := item["approved_level"].(float64); ok {
-					approvedLevel = val
-				}
-
-				// Only sum if NOT level 5 approved
-				if approvedLevel < 5 {
-					if cost, ok := item["volume_cost_final"].(float64); ok {
-						sum += cost
-					} else if cost, ok := item["total_price"].(float64); ok {
-						sum += cost
-					}
-				}
-
-				if matRaw, ok := item["material"].([]interface{}); ok {
-					sumPending(matRaw)
+		var isGlobalApproved bool
+		var dataObj map[string]interface{}
+		if d, ok := dynamic["data"].(map[string]interface{}); ok {
+			dataObj = d
+		} else {
+			dataObj = dynamic
+		}
+		if tJobOrder, ok := dataObj["t_job_order"].(map[string]interface{}); ok {
+			if appStatus, ok := tJobOrder["approval_status"].(string); ok {
+				if strings.ToLower(strings.TrimSpace(appStatus)) == "approved" {
+					isGlobalApproved = true
 				}
 			}
 		}
 
-		sumPending(repairList)
+		var sum float64
+		if !isGlobalApproved {
+			var sumPending func(items []interface{})
+			sumPending = func(items []interface{}) {
+				for _, itemRaw := range items {
+					item, ok := itemRaw.(map[string]interface{})
+					if !ok {
+						continue
+					}
+	
+					matRaw, hasMat := item["material"].([]interface{})
+					if hasMat && len(matRaw) > 0 {
+						// Parent node, recurse into children
+						sumPending(matRaw)
+					} else {
+						// Leaf node, check approval level and status
+						approvedLevel := float64(0)
+						if val, ok := item["approved_level"].(float64); ok {
+							approvedLevel = val
+						}
+	
+						statusAppr := ""
+						if val, ok := item["status_approval"].(string); ok {
+							statusAppr = strings.ToLower(strings.TrimSpace(val))
+						}
+		
+						// Only sum if NOT fully approved (level 5 or status 'approved')
+						if approvedLevel < 5 && statusAppr != "approved" {
+							if cost, ok := item["volume_cost_final"].(float64); ok {
+								sum += cost
+							} else if cost, ok := item["total_price"].(float64); ok {
+								sum += cost
+							}
+						}
+					}
+				}
+			}
+			sumPending(repairList)
+		}
+
 		result[woID] = sum
 	}
 
@@ -270,31 +295,56 @@ func PostBulkPendingApprovals(w http.ResponseWriter, r *http.Request) {
 						repairList = rl
 					}
 
-					var sum float64
-					var sumPending func(items []interface{})
-					sumPending = func(items []interface{}) {
-						for _, itemRaw := range items {
-							item, ok := itemRaw.(map[string]interface{})
-							if !ok {
-								continue
-							}
-							approvedLevel := float64(0)
-							if val, ok := item["approved_level"].(float64); ok {
-								approvedLevel = val
-							}
-							if approvedLevel < 5 {
-								if cost, ok := item["volume_cost_final"].(float64); ok {
-									sum += cost
-								} else if cost, ok := item["total_price"].(float64); ok {
-									sum += cost
-								}
-							}
-							if matRaw, ok := item["material"].([]interface{}); ok {
-								sumPending(matRaw)
+					var isGlobalApproved bool
+					var dataObj map[string]interface{}
+					if d, ok := dynamic["data"].(map[string]interface{}); ok {
+						dataObj = d
+					} else {
+						dataObj = dynamic
+					}
+					if tJobOrder, ok := dataObj["t_job_order"].(map[string]interface{}); ok {
+						if appStatus, ok := tJobOrder["approval_status"].(string); ok {
+							if strings.ToLower(strings.TrimSpace(appStatus)) == "approved" {
+								isGlobalApproved = true
 							}
 						}
 					}
-					sumPending(repairList)
+
+					var sum float64
+					if !isGlobalApproved {
+						var sumPending func(items []interface{})
+						sumPending = func(items []interface{}) {
+							for _, itemRaw := range items {
+								item, ok := itemRaw.(map[string]interface{})
+								if !ok {
+									continue
+								}
+								matRaw, hasMat := item["material"].([]interface{})
+								if hasMat && len(matRaw) > 0 {
+									sumPending(matRaw)
+								} else {
+									approvedLevel := float64(0)
+									if val, ok := item["approved_level"].(float64); ok {
+										approvedLevel = val
+									}
+									
+									statusAppr := ""
+									if val, ok := item["status_approval"].(string); ok {
+										statusAppr = strings.ToLower(strings.TrimSpace(val))
+									}
+	
+									if approvedLevel < 5 && statusAppr != "approved" {
+										if cost, ok := item["volume_cost_final"].(float64); ok {
+											sum += cost
+										} else if cost, ok := item["total_price"].(float64); ok {
+											sum += cost
+										}
+									}
+								}
+							}
+						}
+						sumPending(repairList)
+					}
 					
 					mu.Lock()
 					result[id] = sum

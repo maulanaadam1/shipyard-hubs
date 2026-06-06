@@ -853,7 +853,7 @@ export default function ProjectManagement() {
                       {employees
                         ?.filter(emp => String(emp.is_active).trim() === '1' && emp.position?.toLowerCase().includes('head of project'))
                         .map(emp => (
-                          <option key={emp.id} value={emp.id}>{emp.name} - {emp.position}</option>
+                          <option key={emp.id} value={emp.id}>{emp.name}</option>
                       ))}
                     </select>
                   </div>
@@ -942,7 +942,7 @@ export default function ProjectManagement() {
                     >
                       <option value="">Select Location</option>
                       {locations?.filter(l => l.status === 'Active').map(l => (
-                        <option key={l.id} value={l.name}>{l.name}</option>
+                        <option key={l.id} value={l.id}>{l.name}</option>
                       ))}
                     </select>
                   </div>

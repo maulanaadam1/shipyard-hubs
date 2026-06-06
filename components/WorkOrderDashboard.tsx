@@ -283,6 +283,7 @@ export default function WorkOrderDashboard() {
   const [rawData, setRawData] = useState<any[]>(MOCK_DATA);
   const [isUsingMock, setIsUsingMock] = useState(true);
   const [fileName, setFileName] = useState("Data Contoh (Demo)");
+  const [lastSyncDate, setLastSyncDate] = useState<string>('');
   const isDarkMode = false;
   const [loading, setLoading] = useState(false);
   const [uploadError, setUploadError] = useState("");
@@ -419,6 +420,7 @@ export default function WorkOrderDashboard() {
               setRawData(list);
               setIsUsingMock(false);
               setFileName(`Auto-Synced (${syncConfig.last_sync || 'Baru Saja'})`);
+              setLastSyncDate(syncConfig.last_sync || '');
             }
           }
         }
@@ -1010,9 +1012,15 @@ export default function WorkOrderDashboard() {
         </div>
 
         <div className="flex items-center gap-3">
+          {lastSyncDate && (
+            <div className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold bg-slate-100 text-slate-500 border border-slate-200">
+              <Clock size={12} />
+              <span>{lastSyncDate}</span>
+            </div>
+          )}
           <span className="inline-flex items-center gap-1 px-3 py-1.5 rounded-full text-xs font-semibold bg-emerald-500/10 text-emerald-500 border border-emerald-500/20">
             <span className="h-1.5 w-1.5 rounded-full bg-emerald-500"></span>
-            Terhubung ke Database
+            Terhubung
           </span>
 
           <button
@@ -1022,7 +1030,6 @@ export default function WorkOrderDashboard() {
             className={`flex items-center justify-center p-2 rounded-xl border transition-all shadow-sm ${isSyncing ? 'bg-indigo-100 border-indigo-200 text-indigo-400 cursor-not-allowed' : 'bg-white border-slate-200 hover:bg-indigo-50 text-indigo-600 hover:border-indigo-200'}`}
           >
             <RefreshCw size={18} className={isSyncing ? "animate-spin" : ""} />
-            <span className="ml-2 text-sm font-bold">Sync Data</span>
           </button>
         </div>
       </header>
@@ -1392,27 +1399,35 @@ export default function WorkOrderDashboard() {
                       <div 
                         key={project.name} 
                         onClick={() => handleProjectClick(project.name)}
-                        className={`border-b border-slate-100 dark:border-slate-800/30 pb-2.5 last:border-0 last:pb-0 p-2 rounded-xl cursor-pointer transition-all ${
+                        className={`border-b border-slate-100 dark:border-slate-800/30 pb-2 last:border-0 last:pb-0 p-2 rounded-xl cursor-pointer transition-all ${
                           isCurrentProjectFilter 
                             ? 'bg-indigo-500/10 ring-2 ring-indigo-500 dark:ring-indigo-400' 
                             : 'hover:bg-slate-500/5'
                         }`}
                         title={`Klik untuk menyaring ${project.name}`}
                       >
-                        <div className="flex justify-between text-xs mb-1">
-                          <span className="font-semibold truncate max-w-[210px] text-slate-900 flex items-center gap-1" title={project.name}>
-                            {project.name}
-                            {isCurrentProjectFilter && (
-                              <span className="text-[8px] font-bold px-1.5 py-0.2 rounded bg-indigo-500 text-white uppercase tracking-wider">
-                                Aktif
-                              </span>
-                            )}
-                          </span>
-                          <span className="font-bold text-indigo-500">{project.count} WO</span>
+                        <div className="flex justify-between items-start">
+                          <div className="min-w-0 flex-1">
+                            <p className="text-xs font-semibold text-slate-900 truncate pr-2 flex items-center gap-1" title={project.name}>
+                              {project.name}
+                              {isCurrentProjectFilter && (
+                                <span className="text-[8px] font-bold px-1.5 py-0.2 rounded bg-indigo-500 text-white uppercase tracking-wider">
+                                  Aktif
+                                </span>
+                              )}
+                            </p>
+                            <p className="text-[10px] text-slate-500 font-medium truncate pr-2 mt-0.5">
+                              ID Project: #{project.maxJobOrderId}
+                            </p>
+                          </div>
+                          <div className="text-right pl-2 shrink-0">
+                            <p className="text-xs font-bold text-indigo-500">{project.count} WO</p>
+                            <p className="text-[9px] font-medium text-slate-400 opacity-0">-</p>
+                          </div>
                         </div>
-                        <div className="flex justify-between text-[10px] text-slate-400">
-                          <span>ID Project: #{project.maxJobOrderId}</span>
-                          <span>Tanggal: {project.latestDate ? project.latestDate.split(' ')[0] : 'N/A'}</span>
+                        <div className="flex justify-between text-[9px] text-slate-400 mt-0.5">
+                          <span className="font-mono">Tgl: {project.latestDate ? project.latestDate.split(' ')[0] : 'N/A'}</span>
+                          <span>{project.latestDate ? project.latestDate.split(' ')[0] : 'N/A'}</span>
                         </div>
                       </div>
                     );
@@ -1919,7 +1934,7 @@ export default function WorkOrderDashboard() {
                                         <p className="text-sm sm:text-base font-bold text-slate-800 leading-relaxed" dangerouslySetInnerHTML={{ __html: titleHtml }}></p>
                                         
                                         {/* Parameter / Quantity Display */}
-                                        {(!item.group_flag && item.label?.toLowerCase() !== 'grup') && (
+                                        {(!item.group_flag && item.label?.toLowerCase() !== 'grup' && (!item.material || item.material.length === 0)) && (
                                           <div className="flex flex-wrap gap-x-4 gap-y-2 mt-3 text-xs text-slate-600 font-medium items-center">
                                             <span className="bg-white border border-slate-200 shadow-sm px-2.5 py-1 rounded-md text-[#FDB913]">
                                               Volume: <span className="font-black text-sm">{item.volume || item.act_quantity || item.quantity || 0}</span> {item.volume_unit || item.unit || ''}
