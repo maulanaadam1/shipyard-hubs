@@ -354,6 +354,13 @@ func createTables() {
 	);`)
 
 	seedMasterStatusDock()
+
+	// Migration: Add work_order_details for syncing detailed WO API response
+	DB.Exec(`CREATE TABLE IF NOT EXISTS work_order_details (
+		wo_id TEXT PRIMARY KEY,
+		raw_json TEXT,
+		last_sync DATETIME DEFAULT CURRENT_TIMESTAMP
+	);`)
 }
 
 func seedMasterStatusDock() {

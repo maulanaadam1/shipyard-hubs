@@ -493,6 +493,7 @@ export default function ApiSyncManagement() {
                     >
                       <option value="" disabled>Pilih Modul Tabel / API</option>
                       <option value="WorkOrders">WorkOrders (Data WO Utama)</option>
+                      <option value="WorkOrderDetails">WorkOrderDetails (Rincian Pekerjaan WO)</option>
                       <option value="JobOrders">JobOrders (Data JO Utama)</option>
                       <option value="Locations">Locations (Master Data Slipway/Lokasi)</option>
                       <option value="Services">Services (Master Data Docking Type)</option>
