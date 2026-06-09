@@ -62,6 +62,7 @@ import VesselLayout from '../components/VesselLayout';
 import MasterDockStatus from '../components/MasterDockStatus';
 import MasterLayout from '../components/MasterLayout';
 import WorkOrderDashboard from '../components/WorkOrderDashboard';
+import FinancialDashboard from '../components/FinancialDashboard';
 import ApiSyncManagement from '../components/ApiSyncManagement';
 import MasterService from '../components/MasterService';
 import MasterEmployee from '../components/MasterEmployee';
@@ -81,7 +82,7 @@ function PlaceholderPage({ title }: { title: string }) {
 }
 
 function AppLayout() {
-  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [sidebarOpen, setSidebarOpen] = useState(typeof window !== 'undefined' ? window.innerWidth >= 1024 : false);
 
   return (
     <div className="fixed inset-0 flex bg-slate-50 overflow-hidden">
@@ -93,12 +94,16 @@ function AppLayout() {
         />
       )}
 
-      {/* Sidebar */}
+      {/* Sidebar wrapper */}
       <div className={`
-        fixed lg:relative inset-y-0 left-0 z-40 transition-transform duration-300 h-full overflow-y-auto
-        ${sidebarOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}
+        fixed lg:relative inset-y-0 left-0 z-40 transition-all duration-300 h-full overflow-hidden
+        ${sidebarOpen ? 'w-64 translate-x-0' : 'w-0 -translate-x-full lg:-translate-x-full'}
       `}>
-        <Sidebar onTabChange={() => setSidebarOpen(false)} />
+        <div className="w-64 h-full">
+          <Sidebar onTabChange={() => {
+            if (window.innerWidth < 1024) setSidebarOpen(false);
+          }} />
+        </div>
       </div>
 
       {/* Main content area */}
@@ -190,6 +195,11 @@ createRoot(document.getElementById('root')!).render(
             <Route path="work-order" element={
               <ProtectedRoute resource="Work Order">
                 <WorkOrderDashboard />
+              </ProtectedRoute>
+            } />
+            <Route path="financial-dashboard" element={
+              <ProtectedRoute resource="Work Order">
+                <FinancialDashboard />
               </ProtectedRoute>
             } />
             <Route path="request" element={

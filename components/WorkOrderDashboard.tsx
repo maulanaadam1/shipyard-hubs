@@ -240,32 +240,57 @@ export default function WorkOrderDashboard() {
     fetchMissing();
   }, [detailedRowData, masterComponentsMap]);
 
-  // Auto fetch sync config on mount
-  useEffect(() => {
-    const fetchSyncData = async () => {
-      try {
-        const { data } = await api.from('sync_configs').select('*').eq('id', 'WorkOrders');
-        if (data && data.length > 0) {
-          const syncConfig = data[0];
-          if (syncConfig.last_response) {
-            const parsed = JSON.parse(syncConfig.last_response);
-            let list = [];
-            if (Array.isArray(parsed)) list = parsed;
-            else if (parsed.data && Array.isArray(parsed.data)) list = parsed.data;
-            
-            if (list.length > 0) {
-              setRawData(list);
-              setIsUsingMock(false);
-              setFileName(`Auto-Synced (${syncConfig.last_sync || 'Baru Saja'})`);
-              setLastSyncDate(syncConfig.last_sync || '');
-            }
+  const fetchSyncData = async () => {
+    try {
+      const { data } = await api.from('sync_configs').select('*').eq('id', 'WorkOrders');
+      if (data && data.length > 0) {
+        const syncConfig = data[0];
+        if (syncConfig.last_response) {
+          const parsed = JSON.parse(syncConfig.last_response);
+          let list = [];
+          if (Array.isArray(parsed)) list = parsed;
+          else if (parsed.data && Array.isArray(parsed.data)) list = parsed.data;
+          
+          if (list.length > 0) {
+            setRawData(list);
+            setIsUsingMock(false);
+            setFileName(`Auto-Synced (${syncConfig.last_sync || 'Baru Saja'})`);
+            setLastSyncDate(syncConfig.last_sync || '');
           }
         }
-      } catch(e) {
-        // Fallback to mock data silently
+      }
+    } catch(e) {
+      // Fallback to mock data silently
+    }
+  };
+
+  // Auto fetch sync config on mount
+  useEffect(() => {
+    let isMounted = true;
+    
+    const performAutoSync = async () => {
+      setIsSyncing(true);
+      try {
+        const headers = await getHeaders();
+        const body = JSON.stringify({ id: 'WorkOrders' });
+        const res = await fetch('/api/sync/trigger', { method: 'POST', headers, body });
+        if (res.ok && isMounted) {
+          await fetchSyncData();
+        }
+      } catch (e) {
+        // Silently ignore auto-sync errors
+      } finally {
+        if (isMounted) setIsSyncing(false);
       }
     };
-    fetchSyncData();
+
+    // Load local DB data first for fast rendering
+    fetchSyncData().then(() => {
+      // Then trigger background sync with remote server
+      if (isMounted) performAutoSync();
+    });
+
+    return () => { isMounted = false; };
   }, []);
 
   const triggerManualSync = async () => {
@@ -275,10 +300,10 @@ export default function WorkOrderDashboard() {
       const body = JSON.stringify({ id: 'WorkOrders' });
       const res = await fetch('/api/sync/trigger', { method: 'POST', headers, body });
       if (!res.ok) throw new Error("Gagal");
-      // Give a tiny delay so the animation feels complete
-      setTimeout(() => {
-        window.location.reload();
-      }, 800);
+      
+      // Update data silently without reloading window
+      await fetchSyncData();
+      setIsSyncing(false);
     } catch (e) {
       alert("Gagal melakukan sinkronisasi. Cek log server atau pastikan URL API valid di menu API Sync Config.");
       setIsSyncing(false);
@@ -354,7 +379,7 @@ export default function WorkOrderDashboard() {
     });
 
     const width = 800; // arbitrary base width for SVG viewBox
-    const height = 120; // increased height
+    const height = 145; // increased height
     const padX = 40; // increased padding
     const padY = 30; // increased padding
     
@@ -1798,8 +1823,8 @@ export default function WorkOrderDashboard() {
 
             <div className="flex-1 overflow-y-auto p-5 sm:p-8 space-y-8 custom-scrollbar">
               
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-4 p-5 rounded-xl bg-slate-50 border border-slate-100">
-                <div className="md:col-span-1">
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-6 p-5 rounded-xl bg-slate-50 border border-slate-100">
+                <div>
                   <p className="text-xs text-slate-400 font-bold uppercase tracking-wider mb-2">Status Approval</p>
                   <span className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-semibold ${getStatusBadgeStyles(selectedRow.derivedStatus)}`}>
                     {getStatusIcon(selectedRow.derivedStatus)}
@@ -1807,21 +1832,48 @@ export default function WorkOrderDashboard() {
                   </span>
                 </div>
                 
-                <div className="col-span-2 md:col-span-2">
-                  <p className="text-xs text-slate-400 font-bold uppercase tracking-wider mb-2">Total Biaya (IDR)</p>
+                <div>
+                  <p className="text-xs text-slate-400 font-bold uppercase tracking-wider mb-2">Total Biaya Jasa</p>
                   <p className="text-2xl font-black font-mono text-emerald-600 tracking-tighter">
                     {formatIDR(selectedRow.totalCostNum)}
                   </p>
                 </div>
 
-                <div className="col-span-2 md:col-span-1">
+                {(() => {
+                  const totalMatCost = detailedRowData?.t_requisition_details?.reduce((acc: number, req: any) => {
+                    const reqTotal = req.t_delivery_details?.reduce((sum: number, del: any) => {
+                      const qty = parseFloat(del.quantity || '0');
+                      const price = parseFloat(del.t_receiving_detail?.unit_price || '0');
+                      return sum + (qty * price);
+                    }, 0) || 0;
+                    return acc + reqTotal;
+                  }, 0) || 0;
+
+                  return totalMatCost > 0 ? (
+                    <div>
+                      <p className="text-xs text-slate-400 font-bold uppercase tracking-wider mb-2">Total Material</p>
+                      <p className="text-2xl font-black font-mono text-indigo-600 tracking-tighter" title="Total Biaya Material Terkirim">
+                        {formatIDR(totalMatCost)}
+                      </p>
+                    </div>
+                  ) : (
+                    <div>
+                      <p className="text-xs text-slate-400 font-bold uppercase tracking-wider mb-2">Total Material</p>
+                      <p className="text-2xl font-black font-mono text-slate-300 tracking-tighter">
+                        -
+                      </p>
+                    </div>
+                  );
+                })()}
+
+                <div>
                   <p className="text-xs text-slate-400 font-bold uppercase tracking-wider mb-2">Vendor / Partner</p>
-                  <p className="text-sm font-bold text-slate-800">{selectedRow.vendorName}</p>
+                  <p className="text-sm font-bold text-slate-800 line-clamp-2" title={selectedRow.vendorName}>{selectedRow.vendorName}</p>
                 </div>
 
                 {/* Line Chart: Total Volume Cost Final per Tanggal */}
                 {detailChartConfig && (
-                  <div className="col-span-2 md:col-span-4 mt-2 pt-4 border-t border-slate-200/60">
+                  <div className="col-span-full mt-2 pt-4 border-t border-slate-200/60">
                     <div className="flex items-center justify-between mb-3">
                       <div className="space-y-1">
                         <p className="text-xs text-slate-500 font-bold uppercase tracking-wider">Grafik Pertumbuhan Biaya (Final Cost)</p>
@@ -1842,8 +1894,8 @@ export default function WorkOrderDashboard() {
                       </div>
                       <span className="text-[10px] text-slate-400 font-mono text-right">*Berdasarkan tanggal disetujui<br/>(Approval Level 5)</span>
                     </div>
-                    <div className="relative w-full overflow-x-auto custom-scrollbar pb-2">
-                      <svg width="100%" height="120" viewBox={`0 0 ${detailChartConfig.width} ${detailChartConfig.height}`} preserveAspectRatio="none" className="min-w-[500px]">
+                    <div className="relative w-full overflow-x-auto custom-scrollbar pb-2 mt-2">
+                      <svg width="100%" height="145" viewBox={`0 0 ${detailChartConfig.width} ${detailChartConfig.height}`} preserveAspectRatio="none" className="min-w-[500px]">
                         <defs>
                           <linearGradient id="detail-chart-glow" x1="0" y1="0" x2="0" y2="1">
                             <stop offset="0%" stopColor="#10b981" stopOpacity="0.25" />
@@ -2133,9 +2185,27 @@ export default function WorkOrderDashboard() {
                     {/* Tab Content: Material */}
                     {activeDetailTab === 'material' && (
                       <div className="space-y-4 animate-in fade-in slide-in-from-bottom-2 duration-300">
-                        <h4 className="text-sm font-bold uppercase text-emerald-500 tracking-wider pb-2 border-b-2 border-solid border-emerald-500/20 flex justify-between items-end">
-                          <span>Kebutuhan Material (Requisition)</span>
-                        </h4>
+                        {(() => {
+                          const totalMaterialCost = detailedRowData.t_requisition_details?.reduce((acc: number, req: any) => {
+                            const reqTotal = req.t_delivery_details?.reduce((sum: number, del: any) => {
+                              const qty = parseFloat(del.quantity || '0');
+                              const price = parseFloat(del.t_receiving_detail?.unit_price || '0');
+                              return sum + (qty * price);
+                            }, 0) || 0;
+                            return acc + reqTotal;
+                          }, 0) || 0;
+
+                          return (
+                            <h4 className="text-sm font-bold uppercase text-emerald-500 tracking-wider pb-2 border-b-2 border-solid border-emerald-500/20 flex justify-between items-end">
+                              <span>Kebutuhan Material (Requisition)</span>
+                              {totalMaterialCost > 0 && (
+                                <span className="bg-emerald-500 text-white px-3 py-1 rounded-lg text-xs tracking-normal">
+                                  Total: {formatIDR(totalMaterialCost)}
+                                </span>
+                              )}
+                            </h4>
+                          );
+                        })()}
                         
                         {!detailedRowData.t_requisition_details || detailedRowData.t_requisition_details.length === 0 ? (
                            <p className="text-sm text-slate-500 italic p-6 bg-slate-50 rounded-xl text-center">Tidak ada daftar kebutuhan material tersedia</p>

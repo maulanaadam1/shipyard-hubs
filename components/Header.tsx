@@ -161,7 +161,7 @@ export default function Header({ onMenuClick }: { onMenuClick?: () => void }) {
         {currentUser && (
           <button 
             onClick={onMenuClick}
-            className="lg:hidden p-2 hover:bg-[#FDB913] rounded-lg transition-colors flex flex-col items-center justify-center gap-1.5"
+            className="p-2 hover:bg-[#FDB913] rounded-lg transition-colors flex flex-col items-center justify-center gap-1.5"
           >
             <div className="w-6 h-0.5 bg-white rounded-full"></div>
             <div className="w-6 h-0.5 bg-white rounded-full"></div>

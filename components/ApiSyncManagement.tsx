@@ -71,7 +71,7 @@ export default function ApiSyncManagement() {
         if (baseUrl) {
           const currentUrlObj = new URL(baseUrl);
           queryParams.forEach(p => {
-            if (p.key) currentUrlObj.searchParams.append(p.key, p.value);
+            if (p.key && p.active !== false) currentUrlObj.searchParams.append(p.key, p.value);
           });
           if (currentUrlObj.toString() === extractedUrl) return; 
         }
