@@ -14,6 +14,8 @@ import {
   Eye, 
   X, 
   Ship, 
+  ArrowUp,
+  ArrowDown,
   TrendingUp,
   Briefcase,
   DollarSign,
@@ -73,6 +75,13 @@ export default function WorkOrderDashboard() {
 
   const [isSyncing, setIsSyncing] = useState(false);
   const [pendingApprovals, setPendingApprovals] = useState<Record<string, number>>({});
+  const [finalCosts, setFinalCosts] = useState<Record<string, number>>({});
+  const [finalDates, setFinalDates] = useState<Record<string, string>>({});
+  const [sortColumn, setSortColumn] = useState<string>('updated_at');
+  const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc');
+  const [showChartCum, setShowChartCum] = useState(true);
+  const [showChartDaily, setShowChartDaily] = useState(true);
+  const [selectedDetailDate, setSelectedDetailDate] = useState<string | null>(null);
   const fetchDetail = async (): Promise<boolean> => {
     if (!selectedRow || !selectedRow.id) return false;
     setIsFetchingDetail(true);
@@ -112,7 +121,25 @@ export default function WorkOrderDashboard() {
       });
       if (res.ok) {
         const map = await res.json();
-        setPendingApprovals(prev => ({ ...prev, ...map }));
+        const newPending: Record<string, number> = {};
+        const newFinal: Record<string, number> = {};
+        const newFinalDates: Record<string, string> = {};
+        
+        Object.keys(map).forEach(id => {
+          if (map[id] && typeof map[id] === 'object') {
+            newPending[id] = map[id].pending || 0;
+            newFinal[id] = map[id].final_cost || 0;
+            newFinalDates[id] = map[id].latest_date || '';
+          } else {
+            // Backward compatibility
+            newPending[id] = map[id] || 0;
+            newFinalDates[id] = '';
+          }
+        });
+
+        setPendingApprovals(prev => ({ ...prev, ...newPending }));
+        setFinalCosts(prev => ({ ...prev, ...newFinal }));
+        setFinalDates(prev => ({ ...prev, ...newFinalDates }));
       }
     } catch (e) {}
   };
@@ -146,9 +173,7 @@ export default function WorkOrderDashboard() {
         // Automatically sync to pull the latest details when modal opens
         // If hasLocalData is false, we definitely need it.
         // Even if it's true, we trigger sync in the background so the user always has latest data.
-        if (!hasLocalData) {
-           triggerSyncDetail();
-        }
+        triggerSyncDetail();
       });
     } else {
       setDetailedRowData(null);
@@ -279,6 +304,97 @@ export default function WorkOrderDashboard() {
     });
     return maxTime > 0 ? new Date(maxTime) : new Date("2026-06-02");
   }, [rawData]);
+
+  // Kalkulasi Chart Modal Header
+  const detailChartConfig = useMemo(() => {
+    if (!detailedRowData || !detailedRowData.repair_list) return null;
+    
+    const dailyMap: Record<string, number> = {};
+    const extractItems = (items: any[]) => {
+      items.forEach(item => {
+        // Logika Fallback Approval (sama seperti UI)
+        let isAppr = item.approved_level >= 5;
+        if (!isAppr && selectedRow?.min_approval_level >= 5) {
+          isAppr = true; // Paksa anggap approved jika headernya approved
+        }
+
+        let dateToUse = item.date_approval;
+        if (isAppr && !dateToUse) {
+          // Jika tidak ada date_approval tapi statusnya dipaksa approved, pakai fallback tanggal
+          dateToUse = item.created_at || item.updated_at || detailedRowData?.created_at || selectedRow?.created_at || new Date().toISOString();
+        }
+
+        if (item.volume_cost_final !== undefined && isAppr && dateToUse) {
+           const dateOnly = dateToUse.split(' ')[0]; // YYYY-MM-DD
+           
+           // Kalkulasi riil: cost * volume * (progress / 100)
+           const baseCost = Number(item.volume_cost_final) || 0;
+           const volume = Number(item.volume) || 0;
+           const progress = item.progress !== undefined ? Number(item.progress) : 100;
+           
+           // Hanya tambahkan jika ini bukan parent node (opsional, tapi dengan asumsi volume = 0 di parent, ini otomatis tertangani)
+           const finalCost = baseCost * volume * (progress / 100);
+           
+           dailyMap[dateOnly] = (dailyMap[dateOnly] || 0) + finalCost;
+        }
+        if (item.material && Array.isArray(item.material)) {
+           extractItems(item.material);
+        }
+      });
+    };
+    extractItems(detailedRowData.repair_list);
+    
+    const dates = Object.keys(dailyMap).sort();
+    if (dates.length === 0) return null;
+
+    let cumulative = 0;
+    const chartData = dates.map(d => {
+       cumulative += dailyMap[d];
+       return { date: d, dailyCost: dailyMap[d], cumCost: cumulative };
+    });
+
+    const width = 800; // arbitrary base width for SVG viewBox
+    const height = 120; // increased height
+    const padX = 40; // increased padding
+    const padY = 30; // increased padding
+    
+    const maxCost = Math.max(...chartData.map(d => d.cumCost), 1);
+    const pointDist = dates.length > 1 ? (width - padX * 2) / (dates.length - 1) : width / 2;
+    
+    const cumPoints = chartData.map((d, i) => {
+      const x = dates.length === 1 ? width / 2 : padX + (i * pointDist);
+      const ratio = d.cumCost / maxCost;
+      const y = height - padY - (ratio * (height - padY * 2));
+      const shortDate = d.date.substring(5).replace('-', '/'); // MM/DD
+      return { x, y, label: shortDate, key: d.date, cost: d.cumCost };
+    });
+
+    const dailyPoints = chartData.map((d, i) => {
+      const x = dates.length === 1 ? width / 2 : padX + (i * pointDist);
+      const ratio = d.dailyCost / maxCost;
+      const y = height - padY - (ratio * (height - padY * 2));
+      const shortDate = d.date.substring(5).replace('-', '/');
+      return { x, y, label: shortDate, key: d.date, cost: d.dailyCost };
+    });
+    
+    let cumPathD = "";
+    let cumAreaD = "";
+    let dailyPathD = "";
+
+    if (cumPoints.length > 0) {
+      if (cumPoints.length === 1) {
+        cumPathD = `M ${cumPoints[0].x - 10} ${cumPoints[0].y} L ${cumPoints[0].x + 10} ${cumPoints[0].y}`;
+        cumAreaD = `M ${cumPoints[0].x - 10} ${height} L ${cumPoints[0].x - 10} ${cumPoints[0].y} L ${cumPoints[0].x + 10} ${cumPoints[0].y} L ${cumPoints[0].x + 10} ${height} Z`;
+        dailyPathD = `M ${dailyPoints[0].x - 10} ${dailyPoints[0].y} L ${dailyPoints[0].x + 10} ${dailyPoints[0].y}`;
+      } else {
+        cumPathD = `M ${cumPoints[0].x} ${cumPoints[0].y} ` + cumPoints.slice(1).map(p => `L ${p.x} ${p.y}`).join(" ");
+        cumAreaD = cumPathD + ` L ${cumPoints[cumPoints.length - 1].x} ${height} L ${cumPoints[0].x} ${height} Z`;
+        dailyPathD = `M ${dailyPoints[0].x} ${dailyPoints[0].y} ` + dailyPoints.slice(1).map(p => `L ${p.x} ${p.y}`).join(" ");
+      }
+    }
+    
+    return { cumPoints, dailyPoints, cumPathD, cumAreaD, dailyPathD, width, height, maxCost };
+  }, [detailedRowData]);
 
   // Kalkulasi Rentang Tanggal Efektif berdasarkan Preset
   const effectiveDateRange = useMemo(() => {
@@ -761,10 +877,38 @@ export default function WorkOrderDashboard() {
 
   const totalVendorPages = Math.ceil(masterDirectories.allSortedVendorProjects.length / cardItemsPerPage) || 1;
 
+  const sortedData = useMemo(() => {
+    return [...filteredData].sort((a, b) => {
+      let valA: any = a[sortColumn as keyof typeof a];
+      let valB: any = b[sortColumn as keyof typeof b];
+
+      if (sortColumn === 'pending_approvals') {
+        valA = pendingApprovals[a.id] || 0;
+        valB = pendingApprovals[b.id] || 0;
+      } else if (sortColumn === 'final_costs') {
+        valA = finalCosts[a.id] || 0;
+        valB = finalCosts[b.id] || 0;
+      } else if (sortColumn === 'totalCostNum') {
+        valA = a.totalCostNum || 0;
+        valB = b.totalCostNum || 0;
+      } else if (sortColumn === 'derivedStatus') {
+        valA = a.derivedStatus || '';
+        valB = b.derivedStatus || '';
+      } else {
+        valA = valA || '';
+        valB = valB || '';
+      }
+
+      if (valA < valB) return sortDirection === 'asc' ? -1 : 1;
+      if (valA > valB) return sortDirection === 'asc' ? 1 : -1;
+      return 0;
+    });
+  }, [filteredData, sortColumn, sortDirection, pendingApprovals, finalCosts]);
+
   const paginatedData = useMemo(() => {
     const startIndex = (currentPage - 1) * itemsPerPage;
-    return filteredData.slice(startIndex, startIndex + itemsPerPage);
-  }, [filteredData, currentPage]);
+    return sortedData.slice(startIndex, startIndex + itemsPerPage);
+  }, [sortedData, currentPage]);
 
   useEffect(() => {
     const pageIds = paginatedData.map(d => d.id);
@@ -779,6 +923,20 @@ export default function WorkOrderDashboard() {
       currency: 'IDR',
       minimumFractionDigits: 0
     }).format(value);
+  };
+
+  const handleSort = (column: string) => {
+    if (sortColumn === column) {
+      setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
+    } else {
+      setSortColumn(column);
+      setSortDirection('desc'); // Default ke desc kalau kolom baru
+    }
+  };
+
+  const renderSortIcon = (column: string) => {
+    if (sortColumn !== column) return <span className="text-slate-300 ml-1 opacity-0 group-hover:opacity-100 transition"><ArrowDown size={12} /></span>;
+    return sortDirection === 'asc' ? <ArrowUp size={12} className="ml-1 text-indigo-500" /> : <ArrowDown size={12} className="ml-1 text-indigo-500" />;
   };
 
   const handleApprovalClick = (statusName: string) => {
@@ -1462,14 +1620,33 @@ export default function WorkOrderDashboard() {
               <thead>
                 <tr className="bg-slate-50/50 border-b border-slate-100 text-xs font-bold uppercase tracking-wider text-slate-400">
                   <th className="py-3.5 px-6">No</th>
-                  <th className="py-3.5 px-6">Kode WO (Work Order)</th>
-                  <th className="py-3.5 px-6">Kode JO (Job Order)</th>
-                  <th className="py-3.5 px-6">Proyek (JO - Nama Kapal)</th>
-                  <th className="py-3.5 px-6">Vendor Rekanan</th>
-                  <th className="py-3.5 px-6 text-right">Nilai WO</th>
-                  <th className="py-3.5 px-6 text-right">Pending Approval</th>
-                  <th className="py-3.5 px-6 text-center">Terakhir Diperbarui</th>
-                  <th className="py-3.5 px-6 text-center">Status Approval</th>
+                  <th className="py-3.5 px-6 cursor-pointer group hover:bg-slate-100 transition select-none" onClick={() => handleSort('woCode')}>
+                    <div className="flex items-center">Kode WO {renderSortIcon('woCode')}</div>
+                  </th>
+                  <th className="py-3.5 px-6 cursor-pointer group hover:bg-slate-100 transition select-none" onClick={() => handleSort('joCode')}>
+                    <div className="flex items-center">Kode JO {renderSortIcon('joCode')}</div>
+                  </th>
+                  <th className="py-3.5 px-6 cursor-pointer group hover:bg-slate-100 transition select-none" onClick={() => handleSort('projectName')}>
+                    <div className="flex items-center">Proyek {renderSortIcon('projectName')}</div>
+                  </th>
+                  <th className="py-3.5 px-6 cursor-pointer group hover:bg-slate-100 transition select-none" onClick={() => handleSort('vendorName')}>
+                    <div className="flex items-center">Vendor Rekanan {renderSortIcon('vendorName')}</div>
+                  </th>
+                  <th className="py-3.5 px-6 text-right cursor-pointer group hover:bg-slate-100 transition select-none" onClick={() => handleSort('totalCostNum')}>
+                    <div className="flex items-center justify-end">Nilai WO {renderSortIcon('totalCostNum')}</div>
+                  </th>
+                  <th className="py-3.5 px-6 text-right cursor-pointer group hover:bg-slate-100 transition select-none" onClick={() => handleSort('final_costs')}>
+                    <div className="flex items-center justify-end">Biaya Harian (Terakhir) {renderSortIcon('final_costs')}</div>
+                  </th>
+                  <th className="py-3.5 px-6 text-right cursor-pointer group hover:bg-slate-100 transition select-none" onClick={() => handleSort('pending_approvals')}>
+                    <div className="flex items-center justify-end">Pending Approval {renderSortIcon('pending_approvals')}</div>
+                  </th>
+                  <th className="py-3.5 px-6 text-center cursor-pointer group hover:bg-slate-100 transition select-none" onClick={() => handleSort('updated_at')}>
+                    <div className="flex items-center justify-center">Terakhir Diperbarui {renderSortIcon('updated_at')}</div>
+                  </th>
+                  <th className="py-3.5 px-6 text-center cursor-pointer group hover:bg-slate-100 transition select-none" onClick={() => handleSort('derivedStatus')}>
+                    <div className="flex items-center justify-center">Status Approval {renderSortIcon('derivedStatus')}</div>
+                  </th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-50 text-sm">
@@ -1522,6 +1699,14 @@ export default function WorkOrderDashboard() {
 
                       <td className="py-3.5 px-6 text-right font-semibold font-mono text-xs">
                         {formatIDR(item.totalCostNum)}
+                      </td>
+
+                      {/* Kolom Biaya Harian Terakhir */}
+                      <td className="py-3.5 px-6 text-right font-mono text-xs text-blue-500">
+                        <div className="font-bold">{finalCosts[item.id] !== undefined ? formatIDR(finalCosts[item.id]) : 'Rp 0'}</div>
+                        {finalDates[item.id] && (
+                          <div className="text-[10px] text-slate-400 font-sans font-normal mt-0.5">{finalDates[item.id]}</div>
+                        )}
                       </td>
 
                       {/* Kolom Pending Approval */}
@@ -1633,6 +1818,91 @@ export default function WorkOrderDashboard() {
                   <p className="text-xs text-slate-400 font-bold uppercase tracking-wider mb-2">Vendor / Partner</p>
                   <p className="text-sm font-bold text-slate-800">{selectedRow.vendorName}</p>
                 </div>
+
+                {/* Line Chart: Total Volume Cost Final per Tanggal */}
+                {detailChartConfig && (
+                  <div className="col-span-2 md:col-span-4 mt-2 pt-4 border-t border-slate-200/60">
+                    <div className="flex items-center justify-between mb-3">
+                      <div className="space-y-1">
+                        <p className="text-xs text-slate-500 font-bold uppercase tracking-wider">Grafik Pertumbuhan Biaya (Final Cost)</p>
+                        <div className="flex items-center gap-4 text-[10px] font-semibold text-slate-400">
+                          <button 
+                            onClick={() => setShowChartCum(!showChartCum)} 
+                            className={`flex items-center gap-1.5 transition-opacity hover:opacity-80 ${!showChartCum ? 'opacity-40 grayscale' : ''}`}
+                          >
+                            <div className="w-2 h-2 rounded-full bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]"></div> Kumulatif Total
+                          </button>
+                          <button 
+                            onClick={() => setShowChartDaily(!showChartDaily)}
+                            className={`flex items-center gap-1.5 transition-opacity hover:opacity-80 ${!showChartDaily ? 'opacity-40 grayscale' : ''}`}
+                          >
+                            <div className="w-2 h-2 rounded-full bg-blue-400"></div> Harian (Non-Kumulatif)
+                          </button>
+                        </div>
+                      </div>
+                      <span className="text-[10px] text-slate-400 font-mono text-right">*Berdasarkan tanggal disetujui<br/>(Approval Level 5)</span>
+                    </div>
+                    <div className="relative w-full overflow-x-auto custom-scrollbar pb-2">
+                      <svg width="100%" height="120" viewBox={`0 0 ${detailChartConfig.width} ${detailChartConfig.height}`} preserveAspectRatio="none" className="min-w-[500px]">
+                        <defs>
+                          <linearGradient id="detail-chart-glow" x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="0%" stopColor="#10b981" stopOpacity="0.25" />
+                            <stop offset="100%" stopColor="#10b981" stopOpacity="0" />
+                          </linearGradient>
+                        </defs>
+                        
+                        {showChartCum && detailChartConfig.cumAreaD && (
+                          <path d={detailChartConfig.cumAreaD} fill="url(#detail-chart-glow)" className="transition-all duration-500" />
+                        )}
+                        
+                        {/* Daily Path */}
+                        {showChartDaily && detailChartConfig.dailyPathD && (
+                          <path d={detailChartConfig.dailyPathD} fill="none" stroke="#60a5fa" strokeWidth="2" strokeDasharray="4 4" strokeLinecap="round" strokeLinejoin="round" className="transition-all duration-500 opacity-60" />
+                        )}
+
+                        {/* Cumulative Path */}
+                        {showChartCum && detailChartConfig.cumPathD && (
+                          <path d={detailChartConfig.cumPathD} fill="none" stroke="#10b981" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="transition-all duration-500 drop-shadow-sm" />
+                        )}
+                        
+                        {/* Daily Points */}
+                        {showChartDaily && detailChartConfig.dailyPoints.map((pt, idx) => (
+                          <g key={`daily-${idx}`} className="group">
+                            <circle cx={pt.x} cy={pt.y} r="3" fill="#ffffff" stroke="#3b82f6" strokeWidth="1.5" className="transition-all duration-200" />
+                            <circle cx={pt.x} cy={pt.y} r="15" fill="transparent" className="cursor-crosshair" title={`Tanggal: ${pt.label}\nBiaya Harian: ${formatIDR(pt.cost)}`} />
+                            <text x={pt.x} y={pt.y - 8} fill="#3b82f6" fontSize="9" textAnchor="middle" className="opacity-0 group-hover:opacity-100 transition-opacity font-mono font-bold drop-shadow-sm bg-white px-1">
+                              {formatIDR(pt.cost)}
+                            </text>
+                          </g>
+                        ))}
+
+                        {/* Cumulative Points */}
+                        {showChartCum && detailChartConfig.cumPoints.map((pt, idx) => (
+                          <g key={`cum-${idx}`} className="group">
+                            <circle cx={pt.x} cy={pt.y} r="4.5" fill="#ffffff" stroke="#10b981" strokeWidth="2" className="transition-all duration-200 group-hover:r-[6px]" />
+                            <circle cx={pt.x} cy={pt.y} r="15" fill="transparent" className="cursor-crosshair" title={`Tanggal: ${pt.label}\nTotal Kumulatif: ${formatIDR(pt.cost)}`} />
+                            <text x={pt.x} y={pt.y - 12} fill="#059669" fontSize="10" textAnchor="middle" className="opacity-0 group-hover:opacity-100 transition-opacity font-mono font-extrabold drop-shadow-md bg-white/80 px-1">
+                              {formatIDR(pt.cost)}
+                            </text>
+                          </g>
+                        ))}
+                        
+                        {/* Timeline Date Labels (Unconditional) */}
+                        {detailChartConfig.cumPoints.map((pt, idx) => {
+                          const isSelected = selectedDetailDate === pt.key;
+                          return (
+                            <g key={`label-${idx}`} className="cursor-pointer transition-all hover:opacity-70" onClick={() => setSelectedDetailDate(isSelected ? null : pt.key)}>
+                              <rect x={pt.x - 20} y={detailChartConfig.height - 14} width="40" height="14" rx="4" fill={isSelected ? '#FDB913' : 'transparent'} />
+                              <text x={pt.x} y={detailChartConfig.height - 4} fill={isSelected ? '#ffffff' : '#94a3b8'} fontSize="10" textAnchor="middle" fontWeight={isSelected ? "800" : "600"}>
+                                {pt.label}
+                              </text>
+                            </g>
+                          );
+                        })}
+                      </svg>
+                    </div>
+                  </div>
+                )}
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
@@ -1674,8 +1944,12 @@ export default function WorkOrderDashboard() {
                       <p className="font-semibold text-slate-800">{selectedRow.created_name || 'N/A'}</p>
                     </div>
                     <div>
-                      <span className="text-xs text-slate-400 block mb-1">Disetujui Terakhir:</span>
-                      <p className="font-semibold text-emerald-500">{selectedRow.last_approved || '-'}</p>
+                      <span className="text-xs text-slate-400 block mb-1">
+                        {selectedRow.derivedStatus === 'Waiting' ? 'Dibuat Pada:' : 'Disetujui Terakhir:'}
+                      </span>
+                      <p className={`font-semibold ${selectedRow.derivedStatus === 'Waiting' ? 'text-amber-500' : 'text-emerald-500'}`}>
+                        {selectedRow.derivedStatus === 'Waiting' ? (selectedRow.createdAtStr || '-') : (selectedRow.last_approved || '-')}
+                      </p>
                     </div>
                   </div>
                 </div>
@@ -1724,8 +1998,33 @@ export default function WorkOrderDashboard() {
                            <p className="text-sm text-slate-500 italic p-6 bg-slate-50 rounded-xl text-center">Tidak ada detail pekerjaan tersedia</p>
                         ) : (
                           <div className="space-y-3">
+                            {selectedDetailDate && (
+                              <div className="bg-[#FDB913]/10 border border-[#FDB913]/30 rounded-lg p-3 flex items-center justify-between animate-in fade-in slide-in-from-top-2">
+                                <p className="text-sm font-semibold text-slate-700 flex items-center gap-2">
+                                  <Calendar size={16} className="text-[#FDB913]" />
+                                  Menampilkan pekerjaan pada: <span className="font-bold text-[#FDB913]">{selectedDetailDate}</span>
+                                </p>
+                                <button onClick={() => setSelectedDetailDate(null)} className="text-xs font-bold text-rose-500 hover:bg-rose-50 px-2 py-1 rounded transition">Reset Filter</button>
+                              </div>
+                            )}
                             {(() => {
+                              const matchesDateFilter = (node: any): boolean => {
+                                if (!selectedDetailDate) return true;
+                                const d = node.date_approval ? node.date_approval.split(' ')[0] : 
+                                          (node.created_at || node.updated_at || detailedRowData?.created_at)?.split(' ')[0];
+                                if (d === selectedDetailDate) return true;
+                                if (node.material && node.material.length > 0) {
+                                  return node.material.some(matchesDateFilter);
+                                }
+                                return false;
+                              };
+
                               const renderItem = (item: any, depth = 0): React.ReactNode => {
+                                const match = matchesDateFilter(item);
+                                
+                                // Aturan: Repair List Induk (depth 0) selalu muncul, hanya detail anak yang disembunyikan
+                                if (depth > 0 && !match) return null;
+
                                 let titleHtml = '';
                                 if (item.group_flag || item.label?.toLowerCase() === 'grup') {
                                   titleHtml = item.description || item.label;
@@ -1754,10 +2053,17 @@ export default function WorkOrderDashboard() {
                                                 else if (item.approved_level > 0) statusStr = `approved level ${item.approved_level}`;
                                                 else if (item.approved_level === 0) statusStr = "waiting";
                                               }
-                                              if (detailedRowData?.min_approval_level >= 5) {
+                                              
+                                              // Fallback: Paksa mengikuti master header (selectedRow) jika detail masih tertinggal
+                                              if (selectedRow?.min_approval_level >= 5) {
                                                 statusStr = "approved";
-                                              } else if (detailedRowData?.min_approval_level > 0 && (!statusStr || statusStr === "waiting")) {
-                                                statusStr = `approved level ${detailedRowData.min_approval_level}`;
+                                              } else if (selectedRow?.min_approval_level > 0 && (!statusStr || statusStr === "waiting" || statusStr.includes('level'))) {
+                                                // Jangan turunkan level jika item sudah lebih tinggi dari header
+                                                const currentLevelMatch = statusStr?.match(/level\s+(\d+)/i);
+                                                const currentLevel = currentLevelMatch ? parseInt(currentLevelMatch[1]) : 0;
+                                                if (currentLevel < selectedRow.min_approval_level) {
+                                                  statusStr = `approved level ${selectedRow.min_approval_level}`;
+                                                }
                                               }
 
                                               if (!statusStr) return null;
@@ -1770,15 +2076,39 @@ export default function WorkOrderDashboard() {
                                               );
                                             })()}
                                             {item.progress !== undefined && <span className="text-[#e5a611] font-bold bg-[#FDB913]/10 px-2 py-0.5 rounded">Progress: {item.progress}%</span>}
+                                            {item.date_approval ? (
+                                              <span className="text-slate-500 text-[10px] bg-slate-100 px-2 py-0.5 rounded flex items-center gap-1">
+                                                <Calendar size={10} /> Disetujui: {item.date_approval}
+                                              </span>
+                                            ) : (item.created_at || item.updated_at || detailedRowData?.created_at) ? (
+                                              <span className="text-slate-500 text-[10px] bg-slate-100 px-2 py-0.5 rounded flex items-center gap-1">
+                                                <Calendar size={10} /> Dibuat: {item.created_at || item.updated_at || detailedRowData?.created_at}
+                                              </span>
+                                            ) : null}
                                           </div>
                                         )}
                                       </div>
                                       
                                       {(item.volume_cost_final > 0 || item.total_price > 0 || item.price > 0) && (
-                                        <div className="text-left md:text-right shrink-0 mt-2 md:mt-0 bg-white px-3 py-2 rounded-lg border border-slate-100">
+                                        <div className="text-left md:text-right shrink-0 mt-2 md:mt-0 bg-white px-3 py-2 rounded-lg border border-slate-100 flex flex-col md:items-end justify-center">
+                                          {item.volume_cost_final > 0 && (
+                                            <span className="text-[9px] text-slate-400 font-mono mb-1 bg-slate-50 px-1.5 py-0.5 rounded border border-slate-100">
+                                              Satuan: {formatIDR(item.volume_cost_final)}
+                                            </span>
+                                          )}
                                           <span className="text-[10px] text-slate-400 block mb-0.5 uppercase tracking-wider font-bold">Total Harga</span>
                                           <p className="text-base font-black text-emerald-600 font-mono tracking-tight">
-                                            {formatIDR(item.volume_cost_final || item.total_price || item.price || 0)}
+                                            {(() => {
+                                              let costToDisplay = 0;
+                                              if (item.volume_cost_final > 0) {
+                                                const vol = Number(item.volume) || 0;
+                                                const prog = item.progress !== undefined ? Number(item.progress) : 100;
+                                                costToDisplay = Number(item.volume_cost_final) * vol * (prog / 100);
+                                              } else {
+                                                costToDisplay = item.total_price || item.price || 0;
+                                              }
+                                              return formatIDR(costToDisplay);
+                                            })()}
                                           </p>
                                         </div>
                                       )}

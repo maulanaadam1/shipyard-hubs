@@ -244,14 +244,25 @@ func PostBulkPendingApprovals(w http.ResponseWriter, r *http.Request) {
 		json.Unmarshal([]byte(headersStr), &reqHeaders)
 	}
 
+	type BulkResult struct {
+		Pending    float64 `json:"pending"`
+		FinalCost  float64 `json:"final_cost"`
+		LatestDate string  `json:"latest_date"`
+	}
+
 	var wg sync.WaitGroup
 	var mu sync.Mutex
-	result := make(map[string]float64)
+	result := make(map[string]BulkResult)
 
 	for _, woID := range reqBody.IDs {
 		wg.Add(1)
 		go func(id string) {
 			defer wg.Done()
+
+			// Inisialisasi default agar selalu ada balikan
+			mu.Lock()
+			result[id] = BulkResult{Pending: 0, FinalCost: 0, LatestDate: ""}
+			mu.Unlock()
 
 			var rawJson []byte
 			err := db.DB.QueryRow("SELECT raw_json FROM work_order_details WHERE wo_id = ?", id).Scan(&rawJson)
@@ -302,6 +313,15 @@ func PostBulkPendingApprovals(w http.ResponseWriter, r *http.Request) {
 					} else {
 						dataObj = dynamic
 					}
+					
+					var rootCreatedAt, rootUpdatedAt string
+					if val, ok := dataObj["created_at"].(string); ok {
+						rootCreatedAt = val
+					}
+					if val, ok := dataObj["updated_at"].(string); ok {
+						rootUpdatedAt = val
+					}
+
 					if tJobOrder, ok := dataObj["t_job_order"].(map[string]interface{}); ok {
 						if appStatus, ok := tJobOrder["approval_status"].(string); ok {
 							if strings.ToLower(strings.TrimSpace(appStatus)) == "approved" {
@@ -310,44 +330,95 @@ func PostBulkPendingApprovals(w http.ResponseWriter, r *http.Request) {
 						}
 					}
 
-					var sum float64
-					if !isGlobalApproved {
-						var sumPending func(items []interface{})
-						sumPending = func(items []interface{}) {
-							for _, itemRaw := range items {
-								item, ok := itemRaw.(map[string]interface{})
-								if !ok {
-									continue
+					var pendingSum float64
+					dailyCosts := make(map[string]float64)
+
+					var processItems func(items []interface{})
+					processItems = func(items []interface{}) {
+						for _, itemRaw := range items {
+							item, ok := itemRaw.(map[string]interface{})
+							if !ok {
+								continue
+							}
+							matRaw, hasMat := item["material"].([]interface{})
+							if hasMat && len(matRaw) > 0 {
+								processItems(matRaw)
+							} else {
+								approvedLevel := float64(0)
+								if val, ok := item["approved_level"].(float64); ok {
+									approvedLevel = val
 								}
-								matRaw, hasMat := item["material"].([]interface{})
-								if hasMat && len(matRaw) > 0 {
-									sumPending(matRaw)
+								
+								statusAppr := ""
+								if val, ok := item["status_approval"].(string); ok {
+									statusAppr = strings.ToLower(strings.TrimSpace(val))
+								}
+
+								// Base cost calculation
+								costToAdd := float64(0)
+								if baseCost, ok := item["volume_cost_final"].(float64); ok && baseCost > 0 {
+									vol := float64(0)
+									if v, ok := item["volume"].(float64); ok {
+										vol = v
+									}
+									prog := float64(100)
+									if p, ok := item["progress"].(float64); ok {
+										prog = p
+									}
+									costToAdd = baseCost * vol * (prog / 100)
+								} else if tPrice, ok := item["total_price"].(float64); ok && tPrice > 0 {
+									costToAdd = tPrice
+								} else if pPrice, ok := item["price"].(float64); ok && pPrice > 0 {
+									costToAdd = pPrice
+								}
+
+								isAppr := approvedLevel >= 5 || isGlobalApproved || statusAppr == "approved"
+
+								if !isAppr {
+									pendingSum += costToAdd
 								} else {
-									approvedLevel := float64(0)
-									if val, ok := item["approved_level"].(float64); ok {
-										approvedLevel = val
+									dateToUse := ""
+									if val, ok := item["date_approval"].(string); ok && val != "" {
+										dateToUse = val
+									} else if val, ok := item["updated_at"].(string); ok && val != "" {
+										dateToUse = val
+									} else if val, ok := item["created_at"].(string); ok && val != "" {
+										dateToUse = val
 									}
-									
-									statusAppr := ""
-									if val, ok := item["status_approval"].(string); ok {
-										statusAppr = strings.ToLower(strings.TrimSpace(val))
+
+									if dateToUse == "" && rootUpdatedAt != "" {
+										dateToUse = rootUpdatedAt
 									}
-	
-									if approvedLevel < 5 && statusAppr != "approved" {
-										if cost, ok := item["volume_cost_final"].(float64); ok {
-											sum += cost
-										} else if cost, ok := item["total_price"].(float64); ok {
-											sum += cost
-										}
+									if dateToUse == "" && rootCreatedAt != "" {
+										dateToUse = rootCreatedAt
+									}
+
+									if dateToUse != "" {
+										dateOnly := strings.Split(dateToUse, " ")[0]
+										dailyCosts[dateOnly] += costToAdd
 									}
 								}
 							}
 						}
-						sumPending(repairList)
+					}
+					processItems(repairList)
+					
+					var latestDate string
+					var finalDailyCost float64
+					for d, cost := range dailyCosts {
+						// Abaikan tanggal yang nilainya 0
+						if cost > 0 && d > latestDate {
+							latestDate = d
+							finalDailyCost = cost
+						}
 					}
 					
 					mu.Lock()
-					result[id] = sum
+					result[id] = BulkResult{
+						Pending:    pendingSum,
+						FinalCost:  finalDailyCost,
+						LatestDate: latestDate,
+					}
 					mu.Unlock()
 				}
 			}
