@@ -18,7 +18,9 @@ import {
   Zap,
   Database,
   ChevronLeft,
-  ChevronRight
+  ChevronRight,
+  Upload,
+  Download
 } from 'lucide-react';
 import { api, getHeaders } from '@/lib/api-client';
 import { useData } from '@/context/DataContext';
@@ -134,6 +136,60 @@ export default function ApiSyncManagement() {
       console.error(e);
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const handleExport = () => {
+    if (configs.length === 0) {
+      alert("Tidak ada konfigurasi untuk diekspor.");
+      return;
+    }
+    const dataStr = JSON.stringify(configs, null, 2);
+    const blob = new Blob([dataStr], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `api_sync_configs_${new Date().toISOString().split('T')[0]}.json`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
+
+  const handleImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    try {
+      const text = await file.text();
+      const importedConfigs = JSON.parse(text);
+      
+      if (!Array.isArray(importedConfigs)) {
+         throw new Error("Format file JSON tidak valid (harus array dari konfigurasi).");
+      }
+
+      setIsLoading(true);
+      for (const config of importedConfigs) {
+        const payload = {
+          id: config.id,
+          name: config.name,
+          url: config.url,
+          headers: config.headers,
+          interval_type: config.interval_type,
+          interval_value: config.interval_value,
+          last_sync: config.last_sync,
+          is_active: config.is_active
+        };
+        await api.from('sync_configs').upsert(payload, { onConflict: 'id' });
+      }
+      
+      alert(`Berhasil mengimpor ${importedConfigs.length} konfigurasi!`);
+      fetchConfigs();
+    } catch (err: any) {
+      alert("Gagal mengimpor file: " + err.message);
+    } finally {
+      setIsLoading(false);
+      e.target.value = '';
     }
   };
 
@@ -312,6 +368,27 @@ export default function ApiSyncManagement() {
           <p className="text-sm text-slate-500 mt-1">Kelola integrasi dengan API eksternal secara otomatis dan berkala.</p>
         </div>
         <div className="flex items-center gap-3">
+          <input 
+             type="file" 
+             id="import-config" 
+             accept=".json" 
+             className="hidden" 
+             onChange={handleImport} 
+          />
+          <button 
+            onClick={() => document.getElementById('import-config')?.click()}
+            className="flex items-center justify-center gap-2 px-4 py-2.5 bg-slate-100 text-slate-700 rounded-xl text-sm font-bold hover:bg-slate-200 transition-all border border-slate-200"
+            title="Import JSON Configuration"
+          >
+            <Download className="w-4 h-4" /> Import
+          </button>
+          <button 
+            onClick={handleExport}
+            className="flex items-center justify-center gap-2 px-4 py-2.5 bg-slate-100 text-slate-700 rounded-xl text-sm font-bold hover:bg-slate-200 transition-all border border-slate-200"
+            title="Export JSON Configuration"
+          >
+            <Upload className="w-4 h-4" /> Export
+          </button>
           <button 
             onClick={() => triggerManualSync()}
             className="flex items-center justify-center gap-2 px-6 py-2.5 bg-slate-100 text-slate-700 rounded-xl text-sm font-bold hover:bg-slate-200 transition-all border border-slate-200"
