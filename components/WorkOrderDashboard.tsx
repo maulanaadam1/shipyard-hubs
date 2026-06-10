@@ -29,14 +29,16 @@ import {
   DownloadCloud
 } from 'lucide-react';
 import { api, getHeaders } from '@/lib/api-client';
+import { useData } from '@/context/DataContext';
 
 const MOCK_DATA: any[] = [];
 
 export default function WorkOrderDashboard() {
-  const [rawData, setRawData] = useState<any[]>(MOCK_DATA);
-  const [isUsingMock, setIsUsingMock] = useState(true);
-  const [fileName, setFileName] = useState("Data Contoh (Demo)");
-  const [lastSyncDate, setLastSyncDate] = useState<string>('');
+  const { syncCache, setSyncCache, syncDates, setSyncDates } = useData();
+  const [rawData, setRawData] = useState<any[]>(syncCache['WorkOrders'] || MOCK_DATA);
+  const [isUsingMock, setIsUsingMock] = useState(!syncCache['WorkOrders']);
+  const [fileName, setFileName] = useState(syncDates['WorkOrders'] ? `Auto-Synced (${syncDates['WorkOrders']})` : "Data Contoh (Demo)");
+  const [lastSyncDate, setLastSyncDate] = useState<string>(syncDates['WorkOrders'] || '');
   const isDarkMode = false;
   const [loading, setLoading] = useState(false);
   const [uploadError, setUploadError] = useState("");
@@ -256,6 +258,10 @@ export default function WorkOrderDashboard() {
             setIsUsingMock(false);
             setFileName(`Auto-Synced (${syncConfig.last_sync || 'Baru Saja'})`);
             setLastSyncDate(syncConfig.last_sync || '');
+
+            // Update global cache
+            setSyncCache(prev => ({ ...prev, WorkOrders: list }));
+            setSyncDates(prev => ({ ...prev, WorkOrders: syncConfig.last_sync || '' }));
           }
         }
       }
@@ -284,11 +290,17 @@ export default function WorkOrderDashboard() {
       }
     };
 
-    // Load local DB data first for fast rendering
-    fetchSyncData().then(() => {
-      // Then trigger background sync with remote server
-      if (isMounted) performAutoSync();
-    });
+    // If cache already exists, we skip parsing local DB to avoid thread locking,
+    // and just do background remote sync.
+    if (syncCache['WorkOrders']) {
+      performAutoSync();
+    } else {
+      // Load local DB data first for fast rendering
+      fetchSyncData().then(() => {
+        // Then trigger background sync with remote server
+        if (isMounted) performAutoSync();
+      });
+    }
 
     return () => { isMounted = false; };
   }, []);
@@ -1001,8 +1013,8 @@ export default function WorkOrderDashboard() {
       <header className={`sticky top-0 z-30 border-b backdrop-blur-md px-6 py-4 flex flex-wrap justify-between items-center gap-4 ${isDarkMode ? 'bg-slate-900/80 border-slate-800' : 'bg-white/80 border-slate-200'}`}>
         <div className="flex items-center gap-3">
           <div>
-            <h2 className={`font-display font-bold text-2xl tracking-tight ${isDarkMode ? 'text-white' : 'text-slate-800'}`}>Work Order Dashboard</h2>
-            <p className="text-sm text-slate-500 mt-1">Resume & Analitika Work Order Logistik Perkapalan</p>
+            <h2 className={`font-display font-bold text-xl md:text-2xl tracking-tight ${isDarkMode ? 'text-white' : 'text-slate-800'}`}>Work Order Dashboard</h2>
+            <p className="text-xs md:text-sm text-slate-500 mt-1">Resume & Analitika Work Order Logistik Perkapalan</p>
           </div>
         </div>
 
@@ -1031,49 +1043,49 @@ export default function WorkOrderDashboard() {
 
       <main className="w-full p-4 md:p-8 space-y-6">
 
-        {/* SECTION 2: TOP METRICS (4 Columns) */}
-        <section className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          <div className={`p-5 rounded-2xl border flex items-center gap-4 transition-all ${isDarkMode ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-200 shadow-sm'}`}>
-            <div className="p-3 rounded-xl bg-blue-500/10 text-blue-500">
-              <FileText size={24} />
+        {/* SECTION 2: SUMMARY METRICS STATS */}
+        <section className="grid grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4">
+          <div className={`p-4 md:p-5 rounded-2xl border flex flex-col md:flex-row md:items-center gap-3 md:gap-4 transition-all ${isDarkMode ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-200 shadow-sm'}`}>
+            <div className="p-2 md:p-3 rounded-xl bg-blue-500/10 text-blue-500 w-fit">
+              <FileText className="w-5 h-5 md:w-6 md:h-6" />
             </div>
-            <div>
-              <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Total WO</p>
-              <h3 className="text-2xl font-bold mt-1">{stats.totalWOs}</h3>
-              <p className="text-[10px] text-slate-400 mt-1">Work Orders Terfilter</p>
-            </div>
-          </div>
-
-          <div className={`p-5 rounded-2xl border flex items-center gap-4 transition-all ${isDarkMode ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-200 shadow-sm'}`}>
-            <div className="p-3 rounded-xl bg-purple-500/10 text-purple-500">
-              <Layers size={24} />
-            </div>
-            <div>
-              <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Total JO Unik</p>
-              <h3 className="text-2xl font-bold mt-1">{stats.totalJOs}</h3>
-              <p className="text-[10px] text-slate-400 mt-1">Kode Job Order Berbeda</p>
+            <div className="min-w-0 flex-1">
+              <p className="text-[10px] md:text-xs font-semibold text-slate-400 uppercase tracking-wider truncate">Total WO</p>
+              <h3 className="text-xl md:text-2xl font-bold mt-0.5 md:mt-1 truncate">{stats.totalWOs}</h3>
+              <p className="text-[9px] md:text-[10px] text-slate-400 mt-0.5 md:mt-1 truncate">Work Orders Terfilter</p>
             </div>
           </div>
 
-          <div className={`p-5 rounded-2xl border flex items-center gap-4 transition-all ${isDarkMode ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-200 shadow-sm'}`}>
-            <div className="p-3 rounded-xl bg-cyan-500/10 text-cyan-500">
-              <Ship size={24} />
+          <div className={`p-4 md:p-5 rounded-2xl border flex flex-col md:flex-row md:items-center gap-3 md:gap-4 transition-all ${isDarkMode ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-200 shadow-sm'}`}>
+            <div className="p-2 md:p-3 rounded-xl bg-purple-500/10 text-purple-500 w-fit">
+              <Layers className="w-5 h-5 md:w-6 md:h-6" />
             </div>
-            <div>
-              <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Total Project</p>
-              <h3 className="text-2xl font-bold mt-1">{stats.totalProjects}</h3>
-              <p className="text-[10px] text-slate-400 mt-1">Kombinasi JO & Kapal</p>
+            <div className="min-w-0 flex-1">
+              <p className="text-[10px] md:text-xs font-semibold text-slate-400 uppercase tracking-wider truncate">Total JO Unik</p>
+              <h3 className="text-xl md:text-2xl font-bold mt-0.5 md:mt-1 truncate">{stats.totalJOs}</h3>
+              <p className="text-[9px] md:text-[10px] text-slate-400 mt-0.5 md:mt-1 truncate">Kode Job Order Berbeda</p>
             </div>
           </div>
 
-          <div className={`p-5 rounded-2xl border flex items-center gap-4 transition-all ${isDarkMode ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-200 shadow-sm'}`}>
-            <div className="p-3 rounded-xl bg-emerald-500/10 text-emerald-500">
-              <Users size={24} />
+          <div className={`p-4 md:p-5 rounded-2xl border flex flex-col md:flex-row md:items-center gap-3 md:gap-4 transition-all ${isDarkMode ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-200 shadow-sm'}`}>
+            <div className="p-2 md:p-3 rounded-xl bg-cyan-500/10 text-cyan-500 w-fit">
+              <Ship className="w-5 h-5 md:w-6 md:h-6" />
             </div>
-            <div>
-              <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Total Vendor</p>
-              <h3 className="text-2xl font-bold mt-1">{stats.totalVendors}</h3>
-              <p className="text-[10px] text-slate-400 mt-1">Vendor Aktif Tergabung</p>
+            <div className="min-w-0 flex-1">
+              <p className="text-[10px] md:text-xs font-semibold text-slate-400 uppercase tracking-wider truncate">Total Project</p>
+              <h3 className="text-xl md:text-2xl font-bold mt-0.5 md:mt-1 truncate">{stats.totalProjects}</h3>
+              <p className="text-[9px] md:text-[10px] text-slate-400 mt-0.5 md:mt-1 truncate">Kombinasi JO & Kapal</p>
+            </div>
+          </div>
+
+          <div className={`p-4 md:p-5 rounded-2xl border flex flex-col md:flex-row md:items-center gap-3 md:gap-4 transition-all ${isDarkMode ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-200 shadow-sm'}`}>
+            <div className="p-2 md:p-3 rounded-xl bg-emerald-500/10 text-emerald-500 w-fit">
+              <Users className="w-5 h-5 md:w-6 md:h-6" />
+            </div>
+            <div className="min-w-0 flex-1">
+              <p className="text-[10px] md:text-xs font-semibold text-slate-400 uppercase tracking-wider truncate">Total Vendor</p>
+              <h3 className="text-xl md:text-2xl font-bold mt-0.5 md:mt-1 truncate">{stats.totalVendors}</h3>
+              <p className="text-[9px] md:text-[10px] text-slate-400 mt-0.5 md:mt-1 truncate">Vendor Aktif Tergabung</p>
             </div>
           </div>
         </section>
@@ -1091,7 +1103,7 @@ export default function WorkOrderDashboard() {
                 <span className="text-[10px] font-bold text-emerald-500 uppercase tracking-widest bg-emerald-500/10 px-2.5 py-1 rounded-lg">Aktual Cost</span>
               </div>
               <p className="text-xs font-bold text-slate-600 uppercase tracking-wider">Estimasi & Aktual Pengeluaran</p>
-              <h2 className="text-3xl font-extrabold tracking-tight mt-2 text-slate-900 break-all">
+              <h2 className="text-2xl md:text-3xl font-extrabold tracking-tight mt-1 md:mt-2 text-slate-900 break-all truncate" title={formatIDR(stats.totalCostValue)}>
                 {formatIDR(stats.totalCostValue)}
               </h2>
               <p className="text-xs text-slate-500 dark:text-slate-400 mt-2.5 leading-relaxed">

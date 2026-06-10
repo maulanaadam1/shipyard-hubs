@@ -339,6 +339,10 @@ interface DataContextType {
   setServices: React.Dispatch<React.SetStateAction<ServiceMaster[]>>;
   employees: EmployeeMaster[];
   setEmployees: React.Dispatch<React.SetStateAction<EmployeeMaster[]>>;
+  syncCache: Record<string, any[]>;
+  setSyncCache: React.Dispatch<React.SetStateAction<Record<string, any[]>>>;
+  syncDates: Record<string, string>;
+  setSyncDates: React.Dispatch<React.SetStateAction<Record<string, string>>>;
 }
 
 const DataContext = createContext<DataContextType | undefined>(undefined);
@@ -365,6 +369,8 @@ export function DataProvider({ children }: { children: ReactNode }) {
   const [dockStatuses, setDockStatuses] = useState<DockStatusMaster[]>([]);
   const [services, setServices] = useState<ServiceMaster[]>([]);
   const [employees, setEmployees] = useState<EmployeeMaster[]>([]);
+  const [syncCache, setSyncCache] = useState<Record<string, any[]>>({});
+  const [syncDates, setSyncDates] = useState<Record<string, string>>({});
   const [isAuthLoading, setIsAuthLoading] = useState(true);
   const [isLoading, setIsLoading] = useState(true);
   const [hasInitialLoaded, setHasInitialLoaded] = useState(false);
@@ -632,6 +638,8 @@ export function DataProvider({ children }: { children: ReactNode }) {
       workflows, setWorkflows,
       services, setServices,
       employees, setEmployees,
+      syncCache, setSyncCache,
+      syncDates, setSyncDates,
       notifications, markNotificationRead, createNotification,
       currentUser, setCurrentUser,
       dockStatuses, setDockStatuses,

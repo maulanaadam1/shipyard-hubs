@@ -12,13 +12,15 @@ import {
   PieChart
 } from 'lucide-react';
 import { api, getHeaders } from '@/lib/api-client';
+import { useData } from '@/context/DataContext';
 
 const MOCK_DATA: any[] = [];
 
 export default function FinancialDashboard() {
-  const [rawData, setRawData] = useState<any[]>([]);
+  const { syncCache, setSyncCache, syncDates, setSyncDates } = useData();
+  const [rawData, setRawData] = useState<any[]>(syncCache['WorkOrders'] || []);
   const [isSyncing, setIsSyncing] = useState(false);
-  const [lastSyncDate, setLastSyncDate] = useState("");
+  const [lastSyncDate, setLastSyncDate] = useState<string>(syncDates['WorkOrders'] || '');
   const [financialData, setFinancialData] = useState<Record<string, { pending: number, final_cost: number, latest_date: string }>>({});
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 10;
@@ -58,6 +60,10 @@ export default function FinancialDashboard() {
           if (list.length > 0) {
             setRawData(list);
             setLastSyncDate(syncConfig.last_sync || '');
+
+            // Update global cache
+            setSyncCache(prev => ({ ...prev, WorkOrders: list }));
+            setSyncDates(prev => ({ ...prev, WorkOrders: syncConfig.last_sync || '' }));
           }
         }
       }
@@ -85,9 +91,13 @@ export default function FinancialDashboard() {
       }
     };
 
-    fetchSyncData().then(() => {
-      if (isMounted) performAutoSync();
-    });
+    if (syncCache['WorkOrders']) {
+      performAutoSync();
+    } else {
+      fetchSyncData().then(() => {
+        if (isMounted) performAutoSync();
+      });
+    }
 
     return () => { isMounted = false; };
   }, []);
@@ -463,10 +473,10 @@ export default function FinancialDashboard() {
   return (
     <div className="min-h-screen bg-slate-50 font-sans p-4 md:p-8 space-y-6">
       
-      <header className="flex flex-wrap justify-between items-center gap-4 border-b pb-4">
+      <header className="flex flex-wrap justify-between items-start md:items-center gap-4 border-b pb-4">
         <div>
-          <h2 className="font-display font-bold text-2xl tracking-tight text-slate-800">Financial Dashboard</h2>
-          <p className="text-sm text-slate-500 mt-1">Monitoring Arus Kas & Pembayaran Mingguan (Berdasarkan Approval Date)</p>
+          <h2 className="font-display font-bold text-xl md:text-2xl tracking-tight text-slate-800">Financial Dashboard</h2>
+          <p className="text-xs md:text-sm text-slate-500 mt-1">Monitoring Arus Kas & Pembayaran Mingguan (Berdasarkan Approval Date)</p>
         </div>
         <div className="flex items-center gap-3">
           {lastSyncDate && (
@@ -487,33 +497,33 @@ export default function FinancialDashboard() {
       </header>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <div className="p-6 rounded-2xl border bg-white shadow-sm flex items-center gap-4">
-          <div className="p-4 rounded-2xl bg-blue-500/10 text-blue-500">
-            <DollarSign size={28} />
+        <div className="p-4 md:p-6 rounded-2xl border bg-white shadow-sm flex items-center gap-3 md:gap-4">
+          <div className="p-3 md:p-4 rounded-2xl bg-blue-500/10 text-blue-500">
+            <DollarSign className="w-6 h-6 md:w-7 md:h-7" />
           </div>
-          <div>
-            <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Total Pembayaran Valid</p>
-            <h3 className="text-2xl font-bold mt-1 font-mono text-slate-800">{formatIDR(totalPaymentValue)}</h3>
+          <div className="min-w-0 flex-1">
+            <p className="text-[10px] md:text-xs font-semibold text-slate-400 uppercase tracking-wider leading-tight">Total Pembayaran Valid</p>
+            <h3 className="text-lg md:text-xl lg:text-2xl font-bold mt-1 font-mono text-slate-800 leading-none break-all">{formatIDR(totalPaymentValue)}</h3>
           </div>
         </div>
         
-        <div className="p-6 rounded-2xl border bg-white shadow-sm flex items-center gap-4">
-          <div className="p-4 rounded-2xl bg-emerald-500/10 text-emerald-500">
-            <TrendingUp size={28} />
+        <div className="p-4 md:p-6 rounded-2xl border bg-white shadow-sm flex items-center gap-3 md:gap-4">
+          <div className="p-3 md:p-4 rounded-2xl bg-emerald-500/10 text-emerald-500">
+            <TrendingUp className="w-6 h-6 md:w-7 md:h-7" />
           </div>
-          <div>
-            <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Jumlah Transaksi (WO)</p>
-            <h3 className="text-2xl font-bold mt-1 text-slate-800">{dateFilteredData.length} Dokumen</h3>
+          <div className="min-w-0 flex-1">
+            <p className="text-[10px] md:text-xs font-semibold text-slate-400 uppercase tracking-wider leading-tight">Jumlah Transaksi (WO)</p>
+            <h3 className="text-lg md:text-xl lg:text-2xl font-bold mt-1 text-slate-800 leading-none break-words">{dateFilteredData.length} Dokumen</h3>
           </div>
         </div>
 
-        <div className="p-6 rounded-2xl border bg-white shadow-sm flex items-center gap-4">
-          <div className="p-4 rounded-2xl bg-indigo-500/10 text-indigo-500">
-            <CalendarIcon size={28} />
+        <div className="p-4 md:p-6 rounded-2xl border bg-white shadow-sm flex items-center gap-3 md:gap-4">
+          <div className="p-3 md:p-4 rounded-2xl bg-indigo-500/10 text-indigo-500">
+            <CalendarIcon className="w-6 h-6 md:w-7 md:h-7" />
           </div>
-          <div>
-            <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Jumlah Job Order (JO)</p>
-            <h3 className="text-2xl font-bold mt-1 text-slate-800">{totalJO} Dokumen</h3>
+          <div className="min-w-0 flex-1">
+            <p className="text-[10px] md:text-xs font-semibold text-slate-400 uppercase tracking-wider leading-tight">Jumlah Job Order (JO)</p>
+            <h3 className="text-lg md:text-xl lg:text-2xl font-bold mt-1 text-slate-800 leading-none break-words">{totalJO} Dokumen</h3>
           </div>
         </div>
       </div>

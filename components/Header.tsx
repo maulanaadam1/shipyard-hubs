@@ -156,7 +156,7 @@ export default function Header({ onMenuClick }: { onMenuClick?: () => void }) {
   };
 
   return (
-    <header className="h-14 md:h-16 shrink-0 bg-[#FDB913] text-slate-900 flex items-center justify-between px-4 md:px-8 z-30 shadow-sm">
+    <header className="relative h-14 md:h-16 shrink-0 bg-[#FDB913] text-slate-900 flex items-center justify-between px-4 md:px-8 z-50 shadow-sm">
       <div className="flex items-center gap-4 md:gap-8">
         {currentUser && (
           <button 
@@ -190,12 +190,18 @@ export default function Header({ onMenuClick }: { onMenuClick?: () => void }) {
 
             <AnimatePresence>
               {isNotificationsOpen && (
-                <motion.div 
-                  initial={{ opacity: 0, y: 10, scale: 0.95 }}
-                  animate={{ opacity: 1, y: 0, scale: 1 }}
-                  exit={{ opacity: 0, y: 10, scale: 0.95 }}
-                  className="absolute top-full right-0 mt-2 w-80 bg-white rounded-2xl shadow-2xl border border-slate-200 overflow-hidden z-50 text-slate-800"
-                >
+                <>
+                  <div 
+                    className="fixed inset-0 z-40" 
+                    onClick={() => setIsNotificationsOpen(false)}
+                  />
+                  <motion.div 
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: 10 }}
+                    transition={{ duration: 0.15, ease: 'easeOut' }}
+                    className="absolute top-full right-0 mt-4 md:mt-5 w-80 bg-white rounded-2xl shadow-2xl border border-slate-200 overflow-hidden z-50 text-slate-800"
+                  >
                   <div className="p-4 bg-slate-50 border-b border-slate-100 flex items-center justify-between">
                     <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">
                       Notifications
@@ -237,7 +243,8 @@ export default function Header({ onMenuClick }: { onMenuClick?: () => void }) {
                       View All Notifications
                     </button>
                   </div>
-                </motion.div>
+                  </motion.div>
+                </>
               )}
             </AnimatePresence>
           </div>
@@ -277,12 +284,18 @@ export default function Header({ onMenuClick }: { onMenuClick?: () => void }) {
 
             <AnimatePresence>
               {isUserSwitcherOpen && (
-                <motion.div 
-                  initial={{ opacity: 0, y: 10, scale: 0.95 }}
-                  animate={{ opacity: 1, y: 0, scale: 1 }}
-                  exit={{ opacity: 0, y: 10, scale: 0.95 }}
-                  className="absolute top-full right-0 mt-2 w-48 bg-white rounded-2xl shadow-2xl border border-slate-200 overflow-hidden z-50 text-slate-800"
-                >
+                <>
+                  <div 
+                    className="fixed inset-0 z-40" 
+                    onClick={() => setIsUserSwitcherOpen(false)}
+                  />
+                  <motion.div 
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: 10 }}
+                    transition={{ duration: 0.15, ease: 'easeOut' }}
+                    className="absolute top-full right-0 mt-4 md:mt-5 w-48 bg-white rounded-2xl shadow-2xl border border-slate-200 overflow-hidden z-50 text-slate-800"
+                  >
                   <div className="p-3 bg-slate-50 border-b border-slate-100">
                     <p className="text-xs font-bold text-slate-800 truncate">
                       {currentUser.name}
@@ -307,7 +320,8 @@ export default function Header({ onMenuClick }: { onMenuClick?: () => void }) {
                       <LogOut className="w-4 h-4" /> Sign Out
                     </button>
                   </div>
-                </motion.div>
+                  </motion.div>
+                </>
               )}
             </AnimatePresence>
           </div>
