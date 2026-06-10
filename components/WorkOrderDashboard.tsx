@@ -350,7 +350,7 @@ export default function WorkOrderDashboard() {
     const extractItems = (items: any[]) => {
       items.forEach(item => {
         // Logika Fallback Approval (sama seperti UI)
-        let isAppr = item.approved_level >= 5;
+        let isAppr = item.approved_level >= 5 || item.status_approval === 'approved' || item.status_approval === 'approved level 5';
         if (!isAppr && selectedRow?.min_approval_level >= 5) {
           isAppr = true; // Paksa anggap approved jika headernya approved
         }
@@ -361,18 +361,25 @@ export default function WorkOrderDashboard() {
           dateToUse = item.created_at || item.updated_at || detailedRowData?.created_at || selectedRow?.created_at || new Date().toISOString();
         }
 
-        if (item.volume_cost_final !== undefined && isAppr && dateToUse) {
+        if (isAppr && dateToUse) {
            const dateOnly = dateToUse.split(' ')[0]; // YYYY-MM-DD
            
-           // Kalkulasi riil: cost * volume * (progress / 100)
-           const baseCost = Number(item.volume_cost_final) || 0;
-           const volume = Number(item.volume) || 0;
-           const progress = item.progress !== undefined ? Number(item.progress) : 100;
-           
-           // Hanya tambahkan jika ini bukan parent node (opsional, tapi dengan asumsi volume = 0 di parent, ini otomatis tertangani)
-           const finalCost = baseCost * volume * (progress / 100);
-           
-           dailyMap[dateOnly] = (dailyMap[dateOnly] || 0) + finalCost;
+           let finalCost = 0;
+           if (item.volume_cost_final > 0) {
+             const baseCost = Number(item.volume_cost_final) || 0;
+             const volume = Number(item.volume) || 0;
+             const progress = item.progress !== undefined ? Number(item.progress) : 100;
+             finalCost = baseCost * volume * (progress / 100);
+           } else if (item.total_price > 0) {
+             finalCost = Number(item.total_price);
+           } else if (item.price > 0 && (!item.material || item.material.length === 0)) {
+             const vol = Number(item.quantity) || Number(item.volume) || 1;
+             finalCost = Number(item.price) * vol;
+           }
+
+           if (finalCost > 0) {
+             dailyMap[dateOnly] = (dailyMap[dateOnly] || 0) + finalCost;
+           }
         }
         if (item.material && Array.isArray(item.material)) {
            extractItems(item.material);
@@ -1673,7 +1680,7 @@ export default function WorkOrderDashboard() {
                     <div className="flex items-center justify-end">Nilai WO {renderSortIcon('totalCostNum')}</div>
                   </th>
                   <th className="py-3.5 px-6 text-right cursor-pointer group hover:bg-slate-100 transition select-none" onClick={() => handleSort('final_costs')}>
-                    <div className="flex items-center justify-end">Biaya Harian (Terakhir) {renderSortIcon('final_costs')}</div>
+                    <div className="flex items-center justify-end">Biaya Minggu Ini {renderSortIcon('final_costs')}</div>
                   </th>
                   <th className="py-3.5 px-6 text-right cursor-pointer group hover:bg-slate-100 transition select-none" onClick={() => handleSort('pending_approvals')}>
                     <div className="flex items-center justify-end">Pending Approval {renderSortIcon('pending_approvals')}</div>
