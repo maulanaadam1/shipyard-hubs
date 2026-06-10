@@ -39,7 +39,7 @@ export default function Sidebar({ onTabChange }: { onTabChange: () => void }) {
       title: 'Main',
       items: [
         { icon: LayoutDashboard, label: 'Dashboard', path: '/dashboard', resource: 'Dashboard' },
-        { icon: BarChart3, label: 'Financial Dashboard', path: '/financial-dashboard', resource: 'Work Order' },
+        { icon: BarChart3, label: 'Financial Dashboard', path: '/financial-dashboard', resource: 'Financial Dashboard' },
         { icon: MapIcon, label: 'Vessel Layout', path: '/vessel-layout', resource: 'Vessel Layout' },
         { icon: Activity, label: 'Utility', path: '/utility', resource: 'Utility' },
         { icon: Briefcase, label: 'Job Order', path: '/job-order', resource: 'Job Order' },
@@ -70,16 +70,16 @@ export default function Sidebar({ onTabChange }: { onTabChange: () => void }) {
         { icon: Truck, label: 'Master Vendor', path: '/master-vendor', resource: 'Master Vendor' },
         { icon: Building2, label: 'Master Company', path: '/master-company', resource: 'Master Company' },
         { icon: Anchor, label: 'Master Kapal', path: '/master-kapal', resource: 'Master Kapal' },
-        { icon: Ship, label: 'Master Ship Type', path: '/master-ship-type', resource: 'Master Kapal' },
+        { icon: Ship, label: 'Master Ship Type', path: '/master-ship-type', resource: 'Master Ship Type' },
         { icon: Package, label: 'Master Component', path: '/master-component', resource: 'Master Component' },
         { icon: MapPin, label: 'Master Location', path: '/master-location', resource: 'Master Location' },
-        { icon: Wrench, label: 'Master Service', path: '/master-service', resource: 'Master Location' },
-        { icon: Users, label: 'Master Employee', path: '/master-employee', resource: 'User Management' },
+        { icon: Wrench, label: 'Master Service', path: '/master-service', resource: 'Master Service' },
+        { icon: Users, label: 'Master Employee', path: '/master-employee', resource: 'Master Employee' },
         { icon: Activity, label: 'Master Dock Status', path: '/master-dock-status', resource: 'Master Dock Status' },
         { icon: Layout, label: 'Master Layout', path: '/master-layout', resource: 'Master Layout' },
         { icon: ClipboardList, label: 'Approval Workflow', path: '/master-workflow', resource: 'Master Workflow' },
         { icon: Settings, label: 'Master Configuration', path: '/master-config', resource: 'Master Configuration' },
-        { icon: Server, label: 'API Sync Config', path: '/master-api-sync', resource: 'Master Configuration' },
+        { icon: Server, label: 'API Sync Config', path: '/master-api-sync', resource: 'API Sync Config' },
         { icon: Shield, label: 'Role Management', path: '/master-roles', resource: 'Role Management' },
         { icon: Users, label: 'User Management', path: '/user-management', resource: 'User Management' },
       ]
@@ -122,11 +122,11 @@ export default function Sidebar({ onTabChange }: { onTabChange: () => void }) {
                     : 'text-slate-500 hover:bg-slate-50 hover:text-slate-900'
                 }`}
               >
-                <div className="flex items-center gap-3">
-                  <item.icon className="w-5 h-5" />
-                  <span className="text-sm">{item.label}</span>
+                <div className="flex items-center gap-3 min-w-0 flex-1">
+                  <item.icon className="w-5 h-5 shrink-0" />
+                  <span className="text-sm text-left leading-tight break-words pr-2">{item.label}</span>
                 </div>
-                {location.pathname === item.path && <ChevronRight className="w-4 h-4" />}
+                {location.pathname === item.path && <ChevronRight className="w-4 h-4 shrink-0" />}
               </motion.button>
             ))}
           </div>

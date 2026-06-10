@@ -4,7 +4,7 @@
 @theme {
   --font-sans: "Inter", sans-serif;
   --font-display: "Plus Jakarta Sans", sans-serif;
-  --font-mono: "JetBrains Mono", monospace;
+  --font-mono: "Plus Jakarta Sans", sans-serif;
 }
 
 body {

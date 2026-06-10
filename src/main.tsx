@@ -101,14 +101,14 @@ function AppLayout() {
       {/* Mobile sidebar overlay */}
       {sidebarOpen && (
         <div
-          className="fixed inset-0 bg-black/40 z-30 lg:hidden"
+          className="fixed inset-0 bg-black/40 z-[100] lg:hidden backdrop-blur-sm"
           onClick={() => setSidebarOpen(false)}
         />
       )}
 
       {/* Sidebar wrapper */}
       <div className={`
-        fixed lg:relative inset-y-0 left-0 z-40 transition-all duration-300 h-full overflow-hidden
+        fixed lg:relative inset-y-0 left-0 z-[110] transition-all duration-300 h-full overflow-hidden
         ${sidebarOpen ? 'w-64 translate-x-0' : 'w-0 -translate-x-full lg:-translate-x-full'}
       `}>
         <div className="w-64 h-full">

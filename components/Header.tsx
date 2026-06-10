@@ -200,7 +200,7 @@ export default function Header({ onMenuClick }: { onMenuClick?: () => void }) {
                     animate={{ opacity: 1, y: 0 }}
                     exit={{ opacity: 0, y: 10 }}
                     transition={{ duration: 0.15, ease: 'easeOut' }}
-                    className="absolute top-full right-0 mt-4 md:mt-5 w-80 bg-white rounded-2xl shadow-2xl border border-slate-200 overflow-hidden z-50 text-slate-800"
+                    className="fixed sm:absolute left-4 sm:left-auto right-4 sm:right-0 top-[4.5rem] sm:top-full sm:mt-4 md:mt-5 sm:w-80 bg-white rounded-2xl shadow-2xl border border-slate-200 overflow-hidden z-50 text-slate-800"
                   >
                   <div className="p-4 bg-slate-50 border-b border-slate-100 flex items-center justify-between">
                     <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">
@@ -294,7 +294,7 @@ export default function Header({ onMenuClick }: { onMenuClick?: () => void }) {
                     animate={{ opacity: 1, y: 0 }}
                     exit={{ opacity: 0, y: 10 }}
                     transition={{ duration: 0.15, ease: 'easeOut' }}
-                    className="absolute top-full right-0 mt-4 md:mt-5 w-48 bg-white rounded-2xl shadow-2xl border border-slate-200 overflow-hidden z-50 text-slate-800"
+                    className="fixed sm:absolute left-4 sm:left-auto right-4 sm:right-0 top-[4.5rem] sm:top-full sm:mt-4 md:mt-5 sm:w-48 bg-white rounded-2xl shadow-2xl border border-slate-200 overflow-hidden z-50 text-slate-800"
                   >
                   <div className="p-3 bg-slate-50 border-b border-slate-100">
                     <p className="text-xs font-bold text-slate-800 truncate">

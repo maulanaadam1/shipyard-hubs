@@ -22,6 +22,7 @@ import { api } from '@/lib/api-client';
 
 const RESOURCES = [
   { id: 'Dashboard', type: 'menu' },
+  { id: 'Financial Dashboard', type: 'menu' },
   { id: 'Utility', type: 'menu' },
   { id: 'Job Order', type: 'menu' },
   { id: 'Work Order', type: 'menu' },
@@ -36,12 +37,18 @@ const RESOURCES = [
   { id: 'Master Vendor', type: 'menu' },
   { id: 'Master Company', type: 'menu' },
   { id: 'Master Kapal', type: 'menu' },
+  { id: 'Master Ship Type', type: 'menu' },
+  { id: 'Master Component', type: 'menu' },
   { id: 'Master Location', type: 'menu' },
+  { id: 'Master Service', type: 'menu' },
+  { id: 'Master Employee', type: 'menu' },
   { id: 'Master Workflow', type: 'menu' },
   { id: 'Master Configuration', type: 'menu' },
+  { id: 'API Sync Config', type: 'menu' },
   { id: 'User Management', type: 'menu' },
   { id: 'Role Management', type: 'menu' },
   { id: 'Master Dock Status', type: 'menu' },
+  { id: 'Master Layout', type: 'menu' },
   { id: 'Vessel Layout', type: 'menu' },
 ];
 
