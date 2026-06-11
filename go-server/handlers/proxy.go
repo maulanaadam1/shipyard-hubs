@@ -404,19 +404,20 @@ func PostBulkPendingApprovals(w http.ResponseWriter, r *http.Request) {
 					processItems(repairList)
 					
 					var latestDate string
-					var finalDailyCost float64
+					var cumulativeCost float64
 					for d, cost := range dailyCosts {
-						// Abaikan tanggal yang nilainya 0
-						if cost > 0 && d > latestDate {
-							latestDate = d
-							finalDailyCost = cost
+						if cost > 0 {
+							cumulativeCost += cost
+							if d > latestDate {
+								latestDate = d
+							}
 						}
 					}
 					
 					mu.Lock()
 					result[id] = BulkResult{
 						Pending:    pendingSum,
-						FinalCost:  finalDailyCost,
+						FinalCost:  cumulativeCost,
 						LatestDate: latestDate,
 					}
 					mu.Unlock()

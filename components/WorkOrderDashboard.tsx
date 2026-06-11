@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { 
   Search, 
   FileText, 
@@ -347,6 +347,7 @@ export default function WorkOrderDashboard() {
     if (!detailedRowData || !detailedRowData.repair_list) return null;
     
     const dailyMap: Record<string, number> = {};
+    let unapprovedCost = 0;
     const extractItems = (items: any[]) => {
       items.forEach(item => {
         // Logika Fallback Approval (sama seperti UI)
@@ -361,24 +362,25 @@ export default function WorkOrderDashboard() {
           dateToUse = item.created_at || item.updated_at || detailedRowData?.created_at || selectedRow?.created_at || new Date().toISOString();
         }
 
-        if (isAppr && dateToUse) {
-           const dateOnly = dateToUse.split(' ')[0]; // YYYY-MM-DD
-           
-           let finalCost = 0;
-           if (item.volume_cost_final > 0) {
-             const baseCost = Number(item.volume_cost_final) || 0;
-             const volume = Number(item.volume) || 0;
-             const progress = item.progress !== undefined ? Number(item.progress) : 100;
-             finalCost = baseCost * volume * (progress / 100);
-           } else if (item.total_price > 0) {
-             finalCost = Number(item.total_price);
-           } else if (item.price > 0 && (!item.material || item.material.length === 0)) {
-             const vol = Number(item.quantity) || Number(item.volume) || 1;
-             finalCost = Number(item.price) * vol;
-           }
+        let finalCost = 0;
+        if (item.volume_cost_final > 0) {
+          const baseCost = Number(item.volume_cost_final) || 0;
+          const volume = Number(item.volume) || 0;
+          const progress = item.progress !== undefined ? Number(item.progress) : 100;
+          finalCost = baseCost * volume * (progress / 100);
+        } else if (item.total_price > 0) {
+          finalCost = Number(item.total_price);
+        } else if (item.price > 0 && (!item.material || item.material.length === 0)) {
+          const vol = Number(item.quantity) || Number(item.volume) || 1;
+          finalCost = Number(item.price) * vol;
+        }
 
-           if (finalCost > 0) {
+        if (finalCost > 0) {
+           if (isAppr && dateToUse) {
+             const dateOnly = dateToUse.split(' ')[0]; // YYYY-MM-DD
              dailyMap[dateOnly] = (dailyMap[dateOnly] || 0) + finalCost;
+           } else if (!isAppr) {
+             unapprovedCost += finalCost;
            }
         }
         if (item.material && Array.isArray(item.material)) {
@@ -437,7 +439,7 @@ export default function WorkOrderDashboard() {
       }
     }
     
-    return { cumPoints, dailyPoints, cumPathD, cumAreaD, dailyPathD, width, height, maxCost };
+    return { cumPoints, dailyPoints, cumPathD, cumAreaD, dailyPathD, width, height, maxCost, unapprovedCost };
   }, [detailedRowData]);
 
   // Kalkulasi Rentang Tanggal Efektif berdasarkan Preset
@@ -954,9 +956,16 @@ export default function WorkOrderDashboard() {
     return sortedData.slice(startIndex, startIndex + itemsPerPage);
   }, [sortedData, currentPage]);
 
+  const fetchedIdsRef = useRef<Set<string>>(new Set());
+
   useEffect(() => {
-    const pageIds = paginatedData.map(d => d.id);
-    fetchPendingApprovals(pageIds);
+    const pageIds = paginatedData.map(d => String(d.id));
+    const newIds = pageIds.filter(id => !fetchedIdsRef.current.has(id));
+    
+    if (newIds.length > 0) {
+      newIds.forEach(id => fetchedIdsRef.current.add(id));
+      fetchPendingApprovals(newIds);
+    }
   }, [paginatedData]);
 
   const totalPages = Math.ceil(filteredData.length / itemsPerPage) || 1;
@@ -1853,9 +1862,16 @@ export default function WorkOrderDashboard() {
                 
                 <div>
                   <p className="text-xs text-slate-400 font-bold uppercase tracking-wider mb-2">Total Biaya Jasa</p>
-                  <p className="text-2xl font-black font-mono text-emerald-600 tracking-tighter">
-                    {formatIDR(selectedRow.totalCostNum)}
-                  </p>
+                  <div className="flex flex-col">
+                    <p className="text-2xl font-black font-mono text-emerald-600 tracking-tighter">
+                      {formatIDR(selectedRow.totalCostNum)}
+                    </p>
+                    {detailChartConfig && detailChartConfig.unapprovedCost > 0 && (
+                      <p className="text-xs font-mono font-medium text-amber-500 mt-1 bg-amber-50 px-2 py-0.5 rounded w-fit border border-amber-100" title="Estimasi biaya yang belum mencapai Approval Level 5">
+                        + {formatIDR(detailChartConfig.unapprovedCost)} (Pending)
+                      </p>
+                    )}
+                  </div>
                 </div>
 
                 {(() => {
