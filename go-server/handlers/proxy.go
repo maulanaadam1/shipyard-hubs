@@ -467,11 +467,13 @@ func PostBulkPendingApprovals(w http.ResponseWriter, r *http.Request) {
 									}
 								}
 
-								isAppr5 := approvedLevel >= 5 || isGlobalApproved || statusAppr == "approved" || statusAppr == "approved level 5"
-								isLevel1To4 := approvedLevel >= 1 && approvedLevel <= 4 || strings.HasPrefix(statusAppr, "level") || strings.HasPrefix(statusAppr, "approved level")
+								isRejected := statusAppr == "rejected"
+								isAppr5 := !isRejected && (approvedLevel >= 5 || isGlobalApproved || statusAppr == "approved" || statusAppr == "approved level 5")
+								isLevel1To4 := !isRejected && (approvedLevel >= 1 && approvedLevel <= 4 || strings.HasPrefix(statusAppr, "level") || strings.HasPrefix(statusAppr, "approved level"))
 								isAppr := isAppr5 || (allowLevel1To4 && isLevel1To4)
 
-								if !isAppr {
+								if !isAppr && !isRejected {
+
 									pendingSum += costToAdd
 								} else {
 									dateToUse := ""

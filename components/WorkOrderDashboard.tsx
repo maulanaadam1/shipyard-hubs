@@ -327,11 +327,13 @@ export default function WorkOrderDashboard() {
 
     const scanDates = (items: any[]) => {
       items.forEach(item => {
-        let isAppr5 = item.approved_level >= 5 || item.status_approval === 'approved' || item.status_approval === 'approved level 5';
-        if (!isAppr5 && selectedRow?.min_approval_level >= 5) {
+        let statusAppr = (item.status_approval || "").toLowerCase();
+        let isRejected = statusAppr === 'rejected';
+        let isAppr5 = !isRejected && (item.approved_level >= 5 || statusAppr === 'approved' || statusAppr === 'approved level 5');
+        if (!isRejected && !isAppr5 && selectedRow?.min_approval_level >= 5) {
           isAppr5 = true;
         }
-        let isWaiting = item.approved_level === 0 || item.status_approval === 'waiting';
+        let isWaiting = !isRejected && (item.approved_level === 0 || statusAppr === 'waiting');
 
         let dateToUse = item.date_approval || item.updated_at || item.created_at || detailedRowData?.created_at || selectedRow?.created_at || new Date().toISOString();
 
@@ -352,14 +354,16 @@ export default function WorkOrderDashboard() {
 
     const extractItems = (items: any[]) => {
       items.forEach(item => {
+        let statusAppr = (item.status_approval || "").toLowerCase();
+        let isRejected = statusAppr === 'rejected';
+        
         // Logika Fallback Approval (sama seperti UI)
-        let isAppr5 = item.approved_level >= 5 || item.status_approval === 'approved' || item.status_approval === 'approved level 5';
-        if (!isAppr5 && selectedRow?.min_approval_level >= 5) {
+        let isAppr5 = !isRejected && (item.approved_level >= 5 || statusAppr === 'approved' || statusAppr === 'approved level 5');
+        if (!isRejected && !isAppr5 && selectedRow?.min_approval_level >= 5) {
           isAppr5 = true; // Paksa anggap approved jika headernya approved
         }
         
-        let statusAppr = (item.status_approval || "").toLowerCase();
-        let isLevel1To4 = (item.approved_level >= 1 && item.approved_level <= 4) || statusAppr.startsWith("level") || statusAppr.startsWith("approved level");
+        let isLevel1To4 = !isRejected && ((item.approved_level >= 1 && item.approved_level <= 4) || statusAppr.startsWith("level") || statusAppr.startsWith("approved level"));
         
         let isAppr = isAppr5 || (allowLevel1To4 && isLevel1To4);
 
@@ -383,7 +387,7 @@ export default function WorkOrderDashboard() {
            if (isAppr && dateToUse) {
              const dateOnly = dateToUse.split(' ')[0]; // YYYY-MM-DD
              dailyMap[dateOnly] = (dailyMap[dateOnly] || 0) + finalCost;
-           } else if (!isAppr) {
+           } else if (!isAppr && !isRejected) {
              unapprovedCost += finalCost;
            }
         }
@@ -2145,15 +2149,17 @@ export default function WorkOrderDashboard() {
                                   let statusMatch = true;
                                   if (selectedDetailStatus) {
                                     let statusStr = node.status_approval;
-                                    if (node.approved_level !== undefined && node.approved_level !== null) {
+                                    let isRejected = (statusStr || "").toLowerCase() === 'rejected';
+                                    
+                                    if (!isRejected && node.approved_level !== undefined && node.approved_level !== null) {
                                       if (node.approved_level >= 5) statusStr = "approved";
                                       else if (node.approved_level > 0) statusStr = `approved level ${node.approved_level}`;
                                       else if (node.approved_level === 0) statusStr = "waiting";
                                     }
                                     
-                                    if (selectedRow?.min_approval_level >= 5) {
+                                    if (!isRejected && selectedRow?.min_approval_level >= 5) {
                                       statusStr = "approved";
-                                    } else if (selectedRow?.min_approval_level > 0 && (!statusStr || statusStr === "waiting" || statusStr.includes('level'))) {
+                                    } else if (!isRejected && selectedRow?.min_approval_level > 0 && (!statusStr || statusStr === "waiting" || statusStr.includes('level'))) {
                                       const currentLevelMatch = statusStr?.match(/level\s+(\d+)/i);
                                       const currentLevel = currentLevelMatch ? parseInt(currentLevelMatch[1]) : 0;
                                       if (currentLevel < selectedRow.min_approval_level) {
@@ -2205,15 +2211,17 @@ export default function WorkOrderDashboard() {
                                 let statusMatch = true;
                                 if (selectedDetailStatus) {
                                   let statusStr = node.status_approval;
-                                  if (node.approved_level !== undefined && node.approved_level !== null) {
+                                  let isRejected = (statusStr || "").toLowerCase() === 'rejected';
+
+                                  if (!isRejected && node.approved_level !== undefined && node.approved_level !== null) {
                                     if (node.approved_level >= 5) statusStr = "approved";
                                     else if (node.approved_level > 0) statusStr = `approved level ${node.approved_level}`;
                                     else if (node.approved_level === 0) statusStr = "waiting";
                                   }
                                   
-                                  if (selectedRow?.min_approval_level >= 5) {
+                                  if (!isRejected && selectedRow?.min_approval_level >= 5) {
                                     statusStr = "approved";
-                                  } else if (selectedRow?.min_approval_level > 0 && (!statusStr || statusStr === "waiting" || statusStr.includes('level'))) {
+                                  } else if (!isRejected && selectedRow?.min_approval_level > 0 && (!statusStr || statusStr === "waiting" || statusStr.includes('level'))) {
                                     const currentLevelMatch = statusStr?.match(/level\s+(\d+)/i);
                                     const currentLevel = currentLevelMatch ? parseInt(currentLevelMatch[1]) : 0;
                                     if (currentLevel < selectedRow.min_approval_level) {
@@ -2246,7 +2254,9 @@ export default function WorkOrderDashboard() {
                                 if (depth > 0 && !match) return null;
 
                                 let titleHtml = '';
-                                if (item.group_flag || item.label?.toLowerCase() === 'grup') {
+                                if (item.parameter?.path_name) {
+                                  titleHtml = item.parameter.path_name.replace(/\t/g, ' ').replace(/\s+/g, ' ').trim();
+                                } else if (item.group_flag || item.label?.toLowerCase() === 'grup') {
                                   titleHtml = item.description || item.label;
                                 } else {
                                   titleHtml = item.label || item.description;
@@ -2268,16 +2278,18 @@ export default function WorkOrderDashboard() {
                                             </span>
                                             {(() => {
                                               let statusStr = item.status_approval;
-                                              if (item.approved_level !== undefined && item.approved_level !== null) {
+                                              let isRejected = (statusStr || "").toLowerCase() === 'rejected';
+
+                                              if (!isRejected && item.approved_level !== undefined && item.approved_level !== null) {
                                                 if (item.approved_level >= 5) statusStr = "approved";
                                                 else if (item.approved_level > 0) statusStr = `approved level ${item.approved_level}`;
                                                 else if (item.approved_level === 0) statusStr = "waiting";
                                               }
                                               
                                               // Fallback: Paksa mengikuti master header (selectedRow) jika detail masih tertinggal
-                                              if (selectedRow?.min_approval_level >= 5) {
+                                              if (!isRejected && selectedRow?.min_approval_level >= 5) {
                                                 statusStr = "approved";
-                                              } else if (selectedRow?.min_approval_level > 0 && (!statusStr || statusStr === "waiting" || statusStr.includes('level'))) {
+                                              } else if (!isRejected && selectedRow?.min_approval_level > 0 && (!statusStr || statusStr === "waiting" || statusStr.includes('level'))) {
                                                 // Jangan turunkan level jika item sudah lebih tinggi dari header
                                                 const currentLevelMatch = statusStr?.match(/level\s+(\d+)/i);
                                                 const currentLevel = currentLevelMatch ? parseInt(currentLevelMatch[1]) : 0;
@@ -2293,7 +2305,7 @@ export default function WorkOrderDashboard() {
 
                                               return (
                                                 <div className="flex items-center gap-2">
-                                                  <span className={`uppercase tracking-wider font-black ${isAppr ? 'text-emerald-600' : 'text-amber-500'}`}>
+                                                  <span className={`uppercase tracking-wider font-black ${isAppr ? 'text-emerald-600' : isRejected ? 'text-rose-600' : 'text-amber-500'}`}>
                                                     [{statusStr}]
                                                   </span>
                                                   {dateStr && isAppr && (
