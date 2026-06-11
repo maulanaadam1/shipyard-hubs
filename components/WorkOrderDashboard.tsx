@@ -2289,10 +2289,19 @@ export default function WorkOrderDashboard() {
                                               if (!statusStr) return null;
                                               
                                               const isAppr = statusStr.toLowerCase().includes('approved');
+                                              const dateStr = item.date_approval;
+
                                               return (
-                                                <span className={`uppercase tracking-wider font-black ${isAppr ? 'text-emerald-600' : 'text-amber-500'}`}>
-                                                  [{statusStr}]
-                                                </span>
+                                                <div className="flex items-center gap-2">
+                                                  <span className={`uppercase tracking-wider font-black ${isAppr ? 'text-emerald-600' : 'text-amber-500'}`}>
+                                                    [{statusStr}]
+                                                  </span>
+                                                  {dateStr && isAppr && (
+                                                    <span className="text-slate-500 text-[11px] bg-slate-100 px-2 py-0.5 rounded">
+                                                      Disetujui: <span className="font-bold text-slate-700">{dateStr}</span>
+                                                    </span>
+                                                  )}
+                                                </div>
                                               );
                                             })()}
                                             
