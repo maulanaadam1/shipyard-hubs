@@ -84,6 +84,7 @@ export default function WorkOrderDashboard() {
   const [showChartCum, setShowChartCum] = useState(true);
   const [showChartDaily, setShowChartDaily] = useState(true);
   const [selectedDetailDate, setSelectedDetailDate] = useState<string | null>(null);
+  const [selectedDetailStatus, setSelectedDetailStatus] = useState<string | null>(null);
   const fetchDetail = async (): Promise<boolean> => {
     if (!selectedRow || !selectedRow.id) return false;
     setIsFetchingDetail(true);
@@ -348,13 +349,46 @@ export default function WorkOrderDashboard() {
     
     const dailyMap: Record<string, number> = {};
     let unapprovedCost = 0;
+    let latestApprove5Date = "";
+    let latestWaitingDate = "";
+
+    const scanDates = (items: any[]) => {
+      items.forEach(item => {
+        let isAppr5 = item.approved_level >= 5 || item.status_approval === 'approved' || item.status_approval === 'approved level 5';
+        if (!isAppr5 && selectedRow?.min_approval_level >= 5) {
+          isAppr5 = true;
+        }
+        let isWaiting = item.approved_level === 0 || item.status_approval === 'waiting';
+
+        let dateToUse = item.date_approval || item.updated_at || item.created_at || detailedRowData?.created_at || selectedRow?.created_at || new Date().toISOString();
+
+        if (isAppr5 && dateToUse > latestApprove5Date) latestApprove5Date = dateToUse;
+        if (isWaiting && dateToUse > latestWaitingDate) latestWaitingDate = dateToUse;
+
+        if (item.material && Array.isArray(item.material)) {
+          scanDates(item.material);
+        }
+      });
+    };
+    scanDates(detailedRowData.repair_list);
+
+    let allowLevel1To4 = false;
+    if (latestWaitingDate === "" || latestWaitingDate <= latestApprove5Date) {
+      allowLevel1To4 = true;
+    }
+
     const extractItems = (items: any[]) => {
       items.forEach(item => {
         // Logika Fallback Approval (sama seperti UI)
-        let isAppr = item.approved_level >= 5 || item.status_approval === 'approved' || item.status_approval === 'approved level 5';
-        if (!isAppr && selectedRow?.min_approval_level >= 5) {
-          isAppr = true; // Paksa anggap approved jika headernya approved
+        let isAppr5 = item.approved_level >= 5 || item.status_approval === 'approved' || item.status_approval === 'approved level 5';
+        if (!isAppr5 && selectedRow?.min_approval_level >= 5) {
+          isAppr5 = true; // Paksa anggap approved jika headernya approved
         }
+        
+        let statusAppr = (item.status_approval || "").toLowerCase();
+        let isLevel1To4 = (item.approved_level >= 1 && item.approved_level <= 4) || statusAppr.startsWith("level") || statusAppr.startsWith("approved level");
+        
+        let isAppr = isAppr5 || (allowLevel1To4 && isLevel1To4);
 
         let dateToUse = item.date_approval;
         if (isAppr && !dateToUse) {
@@ -2077,37 +2111,152 @@ export default function WorkOrderDashboard() {
                     {/* Tab Content: Pekerjaan */}
                     {activeDetailTab === 'pekerjaan' && (
                       <div className="space-y-4 animate-in fade-in slide-in-from-bottom-2 duration-300">
-                        <h4 className="text-sm font-bold uppercase text-[#FDB913] tracking-wider pb-2 border-b-2 border-solid border-[#FDB913]/20 flex justify-between items-end">
+                        <h4 className="text-sm font-bold uppercase text-[#FDB913] tracking-wider pb-2 border-b-2 border-solid border-[#FDB913]/20 flex flex-wrap justify-between items-center gap-4">
                           <span>Daftar Pekerjaan (Repair List)</span>
+                          <div className="flex items-center gap-2">
+                            <Filter size={14} className="text-slate-400" />
+                            <select
+                              value={selectedDetailStatus || ''}
+                              onChange={(e) => setSelectedDetailStatus(e.target.value || null)}
+                              className="text-xs font-semibold px-2 py-1 rounded bg-white border border-slate-200 text-slate-600 focus:outline-none focus:border-[#FDB913]"
+                            >
+                              <option value="">Semua Status Approval</option>
+                              <option value="approved">Approved</option>
+                              <option value="waiting">Waiting</option>
+                              <option value="level 1">Level 1</option>
+                              <option value="level 2">Level 2</option>
+                              <option value="level 3">Level 3</option>
+                              <option value="level 4">Level 4</option>
+                            </select>
+                          </div>
                         </h4>
                         
                         {!detailedRowData.repair_list || detailedRowData.repair_list.length === 0 ? (
                            <p className="text-sm text-slate-500 italic p-6 bg-slate-50 rounded-xl text-center">Tidak ada detail pekerjaan tersedia</p>
                         ) : (
                           <div className="space-y-3">
-                            {selectedDetailDate && (
+                            {(selectedDetailDate || selectedDetailStatus) && (
                               <div className="bg-[#FDB913]/10 border border-[#FDB913]/30 rounded-lg p-3 flex items-center justify-between animate-in fade-in slide-in-from-top-2">
-                                <p className="text-sm font-semibold text-slate-700 flex items-center gap-2">
-                                  <Calendar size={16} className="text-[#FDB913]" />
-                                  Menampilkan pekerjaan pada: <span className="font-bold text-[#FDB913]">{selectedDetailDate}</span>
+                                <p className="text-sm font-semibold text-slate-700 flex flex-wrap items-center gap-2">
+                                  <Filter size={16} className="text-[#FDB913]" />
+                                  Filter Aktif: 
+                                  {selectedDetailDate && <span className="font-bold text-[#FDB913]">Tanggal {selectedDetailDate}</span>}
+                                  {selectedDetailDate && selectedDetailStatus && <span className="text-slate-400">|</span>}
+                                  {selectedDetailStatus && <span className="font-bold text-[#FDB913]">Status {selectedDetailStatus.toUpperCase()}</span>}
                                 </p>
-                                <button onClick={() => setSelectedDetailDate(null)} className="text-xs font-bold text-rose-500 hover:bg-rose-50 px-2 py-1 rounded transition">Reset Filter</button>
+                                <button onClick={() => { setSelectedDetailDate(null); setSelectedDetailStatus(null); }} className="text-xs font-bold text-rose-500 hover:bg-rose-50 px-2 py-1 rounded transition">Reset Filter</button>
                               </div>
                             )}
                             {(() => {
-                              const matchesDateFilter = (node: any): boolean => {
-                                if (!selectedDetailDate) return true;
-                                const d = node.date_approval ? node.date_approval.split(' ')[0] : 
-                                          (node.created_at || node.updated_at || detailedRowData?.created_at)?.split(' ')[0];
-                                if (d === selectedDetailDate) return true;
+                              let totalFilteredCost = 0;
+                              const calculateFilteredCost = (nodes: any[]) => {
+                                nodes.forEach(node => {
+                                  let dateMatch = true;
+                                  if (selectedDetailDate) {
+                                    const d = node.date_approval ? node.date_approval.split(' ')[0] : 
+                                              (node.created_at || node.updated_at || detailedRowData?.created_at)?.split(' ')[0];
+                                    dateMatch = d === selectedDetailDate;
+                                  }
+
+                                  let statusMatch = true;
+                                  if (selectedDetailStatus) {
+                                    let statusStr = node.status_approval;
+                                    if (node.approved_level !== undefined && node.approved_level !== null) {
+                                      if (node.approved_level >= 5) statusStr = "approved";
+                                      else if (node.approved_level > 0) statusStr = `approved level ${node.approved_level}`;
+                                      else if (node.approved_level === 0) statusStr = "waiting";
+                                    }
+                                    
+                                    if (selectedRow?.min_approval_level >= 5) {
+                                      statusStr = "approved";
+                                    } else if (selectedRow?.min_approval_level > 0 && (!statusStr || statusStr === "waiting" || statusStr.includes('level'))) {
+                                      const currentLevelMatch = statusStr?.match(/level\s+(\d+)/i);
+                                      const currentLevel = currentLevelMatch ? parseInt(currentLevelMatch[1]) : 0;
+                                      if (currentLevel < selectedRow.min_approval_level) {
+                                        statusStr = `approved level ${selectedRow.min_approval_level}`;
+                                      }
+                                    }
+
+                                    const nodeStatus = statusStr?.toLowerCase() || '';
+                                    const filterVal = selectedDetailStatus.toLowerCase();
+                                    
+                                    if (filterVal === 'approved') {
+                                      statusMatch = nodeStatus.includes('approved') && !nodeStatus.includes('level 1') && !nodeStatus.includes('level 2') && !nodeStatus.includes('level 3') && !nodeStatus.includes('level 4'); 
+                                    } else {
+                                      statusMatch = nodeStatus.includes(filterVal);
+                                    }
+                                  }
+
+                                  const nodeMatches = dateMatch && statusMatch;
+
+                                  if (nodeMatches) {
+                                    let costToAdd = 0;
+                                    if (node.volume_cost_final > 0) {
+                                      const vol = Number(node.volume) || 0;
+                                      const prog = node.progress !== undefined ? Number(node.progress) : 100;
+                                      costToAdd = Number(node.volume_cost_final) * vol * (prog / 100);
+                                    } else {
+                                      costToAdd = node.total_price || 0;
+                                    }
+                                    totalFilteredCost += costToAdd;
+                                  }
+
+                                  if (node.material && node.material.length > 0) {
+                                    calculateFilteredCost(node.material);
+                                  }
+                                });
+                              };
+                              if (detailedRowData.repair_list) {
+                                calculateFilteredCost(detailedRowData.repair_list);
+                              }
+
+                              const matchesFilters = (node: any): boolean => {
+                                let dateMatch = true;
+                                if (selectedDetailDate) {
+                                  const d = node.date_approval ? node.date_approval.split(' ')[0] : 
+                                            (node.created_at || node.updated_at || detailedRowData?.created_at)?.split(' ')[0];
+                                  dateMatch = d === selectedDetailDate;
+                                }
+
+                                let statusMatch = true;
+                                if (selectedDetailStatus) {
+                                  let statusStr = node.status_approval;
+                                  if (node.approved_level !== undefined && node.approved_level !== null) {
+                                    if (node.approved_level >= 5) statusStr = "approved";
+                                    else if (node.approved_level > 0) statusStr = `approved level ${node.approved_level}`;
+                                    else if (node.approved_level === 0) statusStr = "waiting";
+                                  }
+                                  
+                                  if (selectedRow?.min_approval_level >= 5) {
+                                    statusStr = "approved";
+                                  } else if (selectedRow?.min_approval_level > 0 && (!statusStr || statusStr === "waiting" || statusStr.includes('level'))) {
+                                    const currentLevelMatch = statusStr?.match(/level\s+(\d+)/i);
+                                    const currentLevel = currentLevelMatch ? parseInt(currentLevelMatch[1]) : 0;
+                                    if (currentLevel < selectedRow.min_approval_level) {
+                                      statusStr = `approved level ${selectedRow.min_approval_level}`;
+                                    }
+                                  }
+
+                                  const nodeStatus = statusStr?.toLowerCase() || '';
+                                  const filterVal = selectedDetailStatus.toLowerCase();
+                                  
+                                  if (filterVal === 'approved') {
+                                    statusMatch = nodeStatus.includes('approved') && !nodeStatus.includes('level 1') && !nodeStatus.includes('level 2') && !nodeStatus.includes('level 3') && !nodeStatus.includes('level 4'); 
+                                  } else {
+                                    statusMatch = nodeStatus.includes(filterVal);
+                                  }
+                                }
+
+                                if (dateMatch && statusMatch) return true;
+
                                 if (node.material && node.material.length > 0) {
-                                  return node.material.some(matchesDateFilter);
+                                  return node.material.some(matchesFilters);
                                 }
                                 return false;
                               };
 
                               const renderItem = (item: any, depth = 0): React.ReactNode => {
-                                const match = matchesDateFilter(item);
+                                const match = matchesFilters(item);
                                 
                                 // Aturan: Repair List Induk (depth 0) selalu muncul, hanya detail anak yang disembunyikan
                                 if (depth > 0 && !match) return null;
@@ -2162,21 +2311,12 @@ export default function WorkOrderDashboard() {
                                                 </span>
                                               );
                                             })()}
-                                            {item.progress !== undefined && <span className="text-[#e5a611] font-bold bg-[#FDB913]/10 px-2 py-0.5 rounded">Progress: {item.progress}%</span>}
-                                            {item.date_approval ? (
-                                              <span className="text-slate-500 text-[10px] bg-slate-100 px-2 py-0.5 rounded flex items-center gap-1">
-                                                <Calendar size={10} /> Disetujui: {item.date_approval}
-                                              </span>
-                                            ) : (item.created_at || item.updated_at || detailedRowData?.created_at) ? (
-                                              <span className="text-slate-500 text-[10px] bg-slate-100 px-2 py-0.5 rounded flex items-center gap-1">
-                                                <Calendar size={10} /> Dibuat: {item.created_at || item.updated_at || detailedRowData?.created_at}
-                                              </span>
-                                            ) : null}
+                                            
                                           </div>
                                         )}
                                       </div>
                                       
-                                      {(item.volume_cost_final > 0 || item.total_price > 0 || item.price > 0) && (
+                                      {(item.volume_cost_final > 0 || item.total_price > 0) && (
                                         <div className="text-left md:text-right shrink-0 mt-2 md:mt-0 bg-white px-3 py-2 rounded-lg border border-slate-100 flex flex-col md:items-end justify-center">
                                           {item.volume_cost_final > 0 && (
                                             <span className="text-[9px] text-slate-400 font-mono mb-1 bg-slate-50 px-1.5 py-0.5 rounded border border-slate-100">
@@ -2192,7 +2332,7 @@ export default function WorkOrderDashboard() {
                                                 const prog = item.progress !== undefined ? Number(item.progress) : 100;
                                                 costToDisplay = Number(item.volume_cost_final) * vol * (prog / 100);
                                               } else {
-                                                costToDisplay = item.total_price || item.price || 0;
+                                                costToDisplay = item.total_price || 0;
                                               }
                                               return formatIDR(costToDisplay);
                                             })()}
@@ -2210,7 +2350,17 @@ export default function WorkOrderDashboard() {
                                   </div>
                                 );
                               };
-                              return detailedRowData.repair_list.map((m: any) => renderItem(m, 0));
+                              return (
+                                <>
+                                  {totalFilteredCost > 0 && (
+                                    <div className="bg-emerald-50 border border-emerald-200 rounded-lg p-3 flex justify-between items-center mb-2 shadow-sm">
+                                      <span className="text-sm font-bold text-emerald-800">Total Biaya Pekerjaan (Terfilter):</span>
+                                      <span className="text-lg font-black text-emerald-600 font-mono">{formatIDR(totalFilteredCost)}</span>
+                                    </div>
+                                  )}
+                                  {detailedRowData.repair_list.map((m: any) => renderItem(m, 0))}
+                                </>
+                              );
                             })()}
                           </div>
                         )}

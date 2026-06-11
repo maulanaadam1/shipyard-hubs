@@ -330,6 +330,63 @@ func PostBulkPendingApprovals(w http.ResponseWriter, r *http.Request) {
 						}
 					}
 
+					var latestApprove5Date string
+					var latestWaitingDate string
+
+					var scanDates func(items []interface{})
+					scanDates = func(items []interface{}) {
+						for _, itemRaw := range items {
+							item, ok := itemRaw.(map[string]interface{})
+							if !ok {
+								continue
+							}
+							matRaw, hasMat := item["material"].([]interface{})
+							if hasMat && len(matRaw) > 0 {
+								scanDates(matRaw)
+							} else {
+								approvedLevel := float64(0)
+								if val, ok := item["approved_level"].(float64); ok {
+									approvedLevel = val
+								}
+								statusAppr := ""
+								if val, ok := item["status_approval"].(string); ok {
+									statusAppr = strings.ToLower(strings.TrimSpace(val))
+								}
+
+								dateToUse := ""
+								if val, ok := item["date_approval"].(string); ok && val != "" {
+									dateToUse = val
+								} else if val, ok := item["updated_at"].(string); ok && val != "" {
+									dateToUse = val
+								} else if val, ok := item["created_at"].(string); ok && val != "" {
+									dateToUse = val
+								}
+								if dateToUse == "" && rootUpdatedAt != "" {
+									dateToUse = rootUpdatedAt
+								}
+								if dateToUse == "" && rootCreatedAt != "" {
+									dateToUse = rootCreatedAt
+								}
+
+								isAppr5 := approvedLevel >= 5 || isGlobalApproved || statusAppr == "approved" || statusAppr == "approved level 5"
+								isWaiting := approvedLevel == 0 || statusAppr == "waiting"
+
+								if isAppr5 && dateToUse > latestApprove5Date {
+									latestApprove5Date = dateToUse
+								}
+								if isWaiting && dateToUse > latestWaitingDate {
+									latestWaitingDate = dateToUse
+								}
+							}
+						}
+					}
+					scanDates(repairList)
+
+					allowLevel1To4 := false
+					if latestWaitingDate == "" || latestWaitingDate <= latestApprove5Date {
+						allowLevel1To4 = true
+					}
+
 					var pendingSum float64
 					dailyCosts := make(map[string]float64)
 
@@ -372,7 +429,9 @@ func PostBulkPendingApprovals(w http.ResponseWriter, r *http.Request) {
 									costToAdd = pPrice
 								}
 
-								isAppr := approvedLevel >= 5 || isGlobalApproved || statusAppr == "approved"
+								isAppr5 := approvedLevel >= 5 || isGlobalApproved || statusAppr == "approved" || statusAppr == "approved level 5"
+								isLevel1To4 := approvedLevel >= 1 && approvedLevel <= 4 || strings.HasPrefix(statusAppr, "level") || strings.HasPrefix(statusAppr, "approved level")
+								isAppr := isAppr5 || (allowLevel1To4 && isLevel1To4)
 
 								if !isAppr {
 									pendingSum += costToAdd
@@ -404,20 +463,23 @@ func PostBulkPendingApprovals(w http.ResponseWriter, r *http.Request) {
 					processItems(repairList)
 					
 					var latestDate string
-					var cumulativeCost float64
 					for d, cost := range dailyCosts {
 						if cost > 0 {
-							cumulativeCost += cost
 							if d > latestDate {
 								latestDate = d
 							}
 						}
 					}
 					
+					var finalCost float64
+					if latestDate != "" {
+						finalCost = dailyCosts[latestDate]
+					}
+					
 					mu.Lock()
 					result[id] = BulkResult{
 						Pending:    pendingSum,
-						FinalCost:  cumulativeCost,
+						FinalCost:  finalCost,
 						LatestDate: latestDate,
 					}
 					mu.Unlock()
