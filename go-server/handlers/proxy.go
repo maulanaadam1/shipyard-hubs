@@ -427,6 +427,7 @@ func PostBulkPendingApprovals(w http.ResponseWriter, r *http.Request) {
 					}
 
 					var pendingSum float64
+					var finalCostSum float64
 					dailyCosts := make(map[string]float64)
 
 					var processItems func(items []interface{})
@@ -496,6 +497,10 @@ func PostBulkPendingApprovals(w http.ResponseWriter, r *http.Request) {
 										dateOnly := strings.Split(dateToUse, " ")[0]
 										dailyCosts[dateOnly] += costToAdd
 									}
+									
+									if isAppr5 {
+										finalCostSum += costToAdd
+									}
 								}
 							}
 						}
@@ -510,7 +515,11 @@ func PostBulkPendingApprovals(w http.ResponseWriter, r *http.Request) {
 					}
 					
 					if pendingSum == 0 && rootTotalCost > 0 && len(dailyCosts) == 0 {
-						pendingSum = rootTotalCost
+						if isGlobalApproved {
+							finalCostSum = rootTotalCost
+						} else {
+							pendingSum = rootTotalCost
+						}
 					}
 					
 					var latestDate string
@@ -522,10 +531,7 @@ func PostBulkPendingApprovals(w http.ResponseWriter, r *http.Request) {
 						}
 					}
 					
-					var finalCost float64
-					if latestDate != "" {
-						finalCost = dailyCosts[latestDate]
-					}
+					var finalCost float64 = finalCostSum
 					
 					mu.Lock()
 					result[id] = BulkResult{

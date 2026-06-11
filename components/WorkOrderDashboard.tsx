@@ -12,6 +12,7 @@ import {
   ChevronLeft, 
   ChevronRight, 
   Eye, 
+  EyeOff,
   X, 
   Ship, 
   ArrowUp,
@@ -80,8 +81,26 @@ export default function WorkOrderDashboard() {
   const [pendingApprovals, setPendingApprovals] = useState<Record<string, number>>({});
   const [finalCosts, setFinalCosts] = useState<Record<string, number>>({});
   const [finalDates, setFinalDates] = useState<Record<string, string>>({});
-  const [sortColumn, setSortColumn] = useState<string>('updated_at');
+  const [sortColumn, setSortColumn] = useState('created_at');
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc');
+
+  const [isNominalHidden, setIsNominalHidden] = useState(true);
+
+  useEffect(() => {
+    const saved = localStorage.getItem('hideNominal_WO');
+    if (saved === 'false') {
+      setIsNominalHidden(false);
+    } else {
+      setIsNominalHidden(true);
+    }
+  }, []);
+
+  const toggleHideNominal = () => {
+    const newVal = !isNominalHidden;
+    setIsNominalHidden(newVal);
+    localStorage.setItem('hideNominal_WO', newVal.toString());
+  };
+
   const [showChartCum, setShowChartCum] = useState(true);
   const [showChartDaily, setShowChartDaily] = useState(true);
   const [selectedDetailDate, setSelectedDetailDate] = useState<string | null>(null);
@@ -993,6 +1012,7 @@ export default function WorkOrderDashboard() {
   const totalPages = Math.ceil(filteredData.length / itemsPerPage) || 1;
 
   const formatIDR = (value: number) => {
+    if (isNominalHidden) return 'Rp ****';
     return new Intl.NumberFormat('id-ID', {
       style: 'currency',
       currency: 'IDR',
@@ -1067,6 +1087,14 @@ export default function WorkOrderDashboard() {
             <span className="h-1.5 w-1.5 rounded-full bg-emerald-500"></span>
             Terhubung
           </span>
+
+          <button
+            onClick={toggleHideNominal}
+            title={isNominalHidden ? "Tampilkan Nominal" : "Sembunyikan Nominal"}
+            className={`flex items-center justify-center p-2 rounded-xl border transition-all shadow-sm ${isNominalHidden ? 'bg-amber-100 border-amber-200 text-amber-600' : 'bg-white border-slate-200 text-slate-500 hover:text-slate-800 hover:border-slate-300'}`}
+          >
+            {isNominalHidden ? <EyeOff size={18} /> : <Eye size={18} />}
+          </button>
 
           <button
             onClick={triggerManualSync}
@@ -1153,7 +1181,7 @@ export default function WorkOrderDashboard() {
               <div className="border-r border-slate-100">
                 <p className="text-[10px] font-bold text-slate-600 uppercase">Rata-Rata WO</p>
                 <p className="text-sm font-bold text-slate-800 mt-1">
-                  {stats.totalWOs > 0 ? formatIDR(Math.round(stats.totalCostValue / stats.totalWOs)) : "Rp 0"}
+                  {stats.totalWOs > 0 ? formatIDR(Math.round(stats.totalCostValue / stats.totalWOs)) : formatIDR(0)}
                 </p>
               </div>
               <div>
@@ -1778,7 +1806,7 @@ export default function WorkOrderDashboard() {
 
                       {/* Kolom Biaya Harian Terakhir */}
                       <td className="py-3.5 px-6 text-right font-mono text-xs text-blue-500">
-                        <div className="font-bold">{finalCosts[item.id] !== undefined ? formatIDR(finalCosts[item.id]) : 'Rp 0'}</div>
+                        <div className="font-bold">{finalCosts[item.id] !== undefined ? formatIDR(finalCosts[item.id]) : formatIDR(0)}</div>
                         {finalDates[item.id] && (
                           <div className="text-[10px] text-slate-400 font-sans font-normal mt-0.5">{finalDates[item.id]}</div>
                         )}
@@ -1786,7 +1814,7 @@ export default function WorkOrderDashboard() {
 
                       {/* Kolom Pending Approval */}
                       <td className="py-3.5 px-6 text-right font-bold font-mono text-xs text-amber-500">
-                        {pendingApprovals[item.id] !== undefined ? formatIDR(pendingApprovals[item.id]) : 'Rp 0'}
+                        {pendingApprovals[item.id] !== undefined ? formatIDR(pendingApprovals[item.id]) : formatIDR(0)}
                       </td>
 
                       {/* Kolom Terakhir Diperbarui */}

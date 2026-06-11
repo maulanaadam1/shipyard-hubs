@@ -16,7 +16,9 @@ import {
   DownloadCloud,
   CheckCircle,
   UserCheck,
-  Copy
+  Copy,
+  Eye,
+  EyeOff
 } from 'lucide-react';
 import { api, getHeaders } from '@/lib/api-client';
 import { useData } from '@/context/DataContext';
@@ -39,6 +41,23 @@ export default function FinancialDashboard() {
   const [globalYear, setGlobalYear] = useState("all");
   const [globalProject, setGlobalProject] = useState("all");
   const [globalVendor, setGlobalVendor] = useState("all");
+
+  const [isNominalHidden, setIsNominalHidden] = useState(true);
+
+  useEffect(() => {
+    const saved = localStorage.getItem('hideNominal_WO');
+    if (saved === 'false') {
+      setIsNominalHidden(false);
+    } else {
+      setIsNominalHidden(true);
+    }
+  }, []);
+
+  const toggleHideNominal = () => {
+    const newVal = !isNominalHidden;
+    setIsNominalHidden(newVal);
+    localStorage.setItem('hideNominal_WO', newVal.toString());
+  };
 
   // Cross-filtering states
   const [selectedWeekFilter, setSelectedWeekFilter] = useState<string | null>(null);
@@ -551,6 +570,7 @@ export default function FinancialDashboard() {
   const totalPages = Math.ceil(crossFilteredData.length / itemsPerPage) || 1;
 
   const formatIDR = (value: number) => {
+    if (isNominalHidden) return 'Rp ****';
     return new Intl.NumberFormat('id-ID', {
       style: 'currency',
       currency: 'IDR',
@@ -728,6 +748,14 @@ export default function FinancialDashboard() {
             <span className="h-1.5 w-1.5 rounded-full bg-emerald-500"></span>
             Terhubung
           </span>
+
+          <button
+            onClick={toggleHideNominal}
+            title={isNominalHidden ? "Tampilkan Nominal" : "Sembunyikan Nominal"}
+            className={`flex items-center justify-center p-2 rounded-xl border transition-all shadow-sm ${isNominalHidden ? 'bg-amber-100 border-amber-200 text-amber-600' : 'bg-white border-slate-200 text-slate-500 hover:text-slate-800 hover:border-slate-300'}`}
+          >
+            {isNominalHidden ? <EyeOff size={18} /> : <Eye size={18} />}
+          </button>
 
           <button
             onClick={triggerManualSync}
