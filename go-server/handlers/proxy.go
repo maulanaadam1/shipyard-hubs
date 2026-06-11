@@ -10,6 +10,7 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"strconv"
 
 	"github.com/go-chi/chi/v5"
 
@@ -217,6 +218,25 @@ type BulkPendingReq struct {
 	IDs []string `json:"ids"`
 }
 
+func parseFloatAny(val interface{}) float64 {
+	if val == nil {
+		return 0
+	}
+	switch v := val.(type) {
+	case float64:
+		return v
+	case int:
+		return float64(v)
+	case int64:
+		return float64(v)
+	case string:
+		if f, err := strconv.ParseFloat(strings.TrimSpace(v), 64); err == nil {
+			return f
+		}
+	}
+	return 0
+}
+
 // PostBulkPendingApprovals gets pending approval sum for specific IDs.
 // If not in local DB, fetches from API concurrently.
 func PostBulkPendingApprovals(w http.ResponseWriter, r *http.Request) {
@@ -254,6 +274,9 @@ func PostBulkPendingApprovals(w http.ResponseWriter, r *http.Request) {
 	var mu sync.Mutex
 	result := make(map[string]BulkResult)
 
+	// Semaphore to limit concurrent API requests (max 3 at a time)
+	sem := make(chan struct{}, 3)
+
 	for _, woID := range reqBody.IDs {
 		wg.Add(1)
 		go func(id string) {
@@ -277,19 +300,35 @@ func PostBulkPendingApprovals(w http.ResponseWriter, r *http.Request) {
 						fetchUrl = fmt.Sprintf("%s/%s", strings.TrimRight(urlStr, "/"), id)
 					}
 
-					req, _ := http.NewRequest("GET", fetchUrl, nil)
-					for k, v := range reqHeaders {
-						req.Header.Set(k, v)
-					}
-					client := &http.Client{Timeout: 10 * time.Second}
-					resp, reqErr := client.Do(req)
-					if reqErr == nil {
-						defer resp.Body.Close()
+					// Acquire semaphore slot
+					sem <- struct{}{}
+					defer func() { <-sem }()
+
+					client := &http.Client{Timeout: 30 * time.Second}
+					
+					// Retry up to 2 times
+					for attempt := 0; attempt < 2; attempt++ {
+						req, reqErr := http.NewRequest("GET", fetchUrl, nil)
+						if reqErr != nil {
+							break
+						}
+						for k, v := range reqHeaders {
+							req.Header.Set(k, v)
+						}
+						resp, doErr := client.Do(req)
+						if doErr != nil {
+							time.Sleep(500 * time.Millisecond)
+							continue
+						}
 						if resp.StatusCode == 200 {
 							bodyBytes, _ := io.ReadAll(resp.Body)
+							resp.Body.Close()
 							rawJson = bodyBytes
 							db.DB.Exec("INSERT INTO work_order_details (wo_id, raw_json, last_sync) VALUES (?, ?, CURRENT_TIMESTAMP) ON CONFLICT(wo_id) DO UPDATE SET raw_json = excluded.raw_json, last_sync = CURRENT_TIMESTAMP", id, string(bodyBytes))
+							break
 						}
+						resp.Body.Close()
+						break
 					}
 				}
 			}
@@ -413,20 +452,19 @@ func PostBulkPendingApprovals(w http.ResponseWriter, r *http.Request) {
 
 								// Base cost calculation
 								costToAdd := float64(0)
-								if baseCost, ok := item["volume_cost_final"].(float64); ok && baseCost > 0 {
-									vol := float64(0)
-									if v, ok := item["volume"].(float64); ok {
-										vol = v
-									}
+								baseCost := parseFloatAny(item["volume_cost_final"])
+								if baseCost > 0 {
+									vol := parseFloatAny(item["volume"])
 									prog := float64(100)
-									if p, ok := item["progress"].(float64); ok {
-										prog = p
+									if _, hasProg := item["progress"]; hasProg {
+										prog = parseFloatAny(item["progress"])
 									}
 									costToAdd = baseCost * vol * (prog / 100)
-								} else if tPrice, ok := item["total_price"].(float64); ok && tPrice > 0 {
-									costToAdd = tPrice
-								} else if pPrice, ok := item["price"].(float64); ok && pPrice > 0 {
-									costToAdd = pPrice
+								} else {
+									tPrice := parseFloatAny(item["total_price"])
+									if tPrice > 0 {
+										costToAdd = tPrice
+									}
 								}
 
 								isAppr5 := approvedLevel >= 5 || isGlobalApproved || statusAppr == "approved" || statusAppr == "approved level 5"
@@ -461,6 +499,17 @@ func PostBulkPendingApprovals(w http.ResponseWriter, r *http.Request) {
 						}
 					}
 					processItems(repairList)
+					
+					var rootTotalCost float64
+					if val, ok := dataObj["total_cost"].(float64); ok {
+						rootTotalCost = val
+					} else if valStr, ok := dataObj["total_cost"].(string); ok {
+						rootTotalCost, _ = strconv.ParseFloat(valStr, 64)
+					}
+					
+					if pendingSum == 0 && rootTotalCost > 0 && len(dailyCosts) == 0 {
+						pendingSum = rootTotalCost
+					}
 					
 					var latestDate string
 					for d, cost := range dailyCosts {

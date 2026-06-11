@@ -24,7 +24,14 @@ type SyncConfig struct {
 }
 
 func StartSyncWorker() {
-	// Check every minute instead of every 5 minutes
+	// Run once immediately on startup
+	go func() {
+		time.Sleep(3 * time.Second) // Small delay to let DB fully initialize
+		log.Println("SyncWorker: Running initial sync check on startup...")
+		RunSyncJob(false, "")
+	}()
+
+	// Then check every minute
 	ticker := time.NewTicker(1 * time.Minute)
 	go func() {
 		for {
@@ -78,9 +85,14 @@ func RunSyncJob(force bool, targetId string) {
 				}
 				
 				if time.Now().Before(nextSync) {
+					remaining := time.Until(nextSync).Round(time.Second)
+					log.Printf("SyncWorker: [%s] skipped - next sync in %v (interval: %d %s)", id, remaining, intervalValue, intervalType)
 					continue // Not time yet
 				}
+				log.Printf("SyncWorker: [%s] interval reached - syncing now (last: %s, interval: %d %s)", id, lastSyncStr, intervalValue, intervalType)
 			}
+		} else if lastSyncStr == "" {
+			log.Printf("SyncWorker: [%s] never synced before - syncing now", id)
 		}
 
 		var headers map[string]string

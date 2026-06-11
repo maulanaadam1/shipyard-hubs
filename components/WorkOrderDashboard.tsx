@@ -26,7 +26,8 @@ import {
   ExternalLink,
   Settings,
   CloudLightning,
-  DownloadCloud
+  DownloadCloud,
+  Copy
 } from 'lucide-react';
 import { api, getHeaders } from '@/lib/api-client';
 import { useData } from '@/context/DataContext';
@@ -50,7 +51,7 @@ export default function WorkOrderDashboard() {
   const [selectedVendor, setSelectedVendor] = useState("All");
   
   // Date Filtering States
-  const [datePreset, setDatePreset] = useState("week"); // Options: "week", "month", "3months", "6months", "year", "all", "custom"
+  const [datePreset, setDatePreset] = useState("3months"); // Options: "week", "month", "3months", "6months", "year", "all", "custom"
   const [customStartDate, setCustomStartDate] = useState("");
   const [customEndDate, setCustomEndDate] = useState("");
 
@@ -271,39 +272,11 @@ export default function WorkOrderDashboard() {
     }
   };
 
-  // Auto fetch sync config on mount
+  // Load data from local DB on mount (no auto remote sync)
   useEffect(() => {
-    let isMounted = true;
-    
-    const performAutoSync = async () => {
-      setIsSyncing(true);
-      try {
-        const headers = await getHeaders();
-        const body = JSON.stringify({ id: 'WorkOrders' });
-        const res = await fetch('/api/sync/trigger', { method: 'POST', headers, body });
-        if (res.ok && isMounted) {
-          await fetchSyncData();
-        }
-      } catch (e) {
-        // Silently ignore auto-sync errors
-      } finally {
-        if (isMounted) setIsSyncing(false);
-      }
-    };
-
-    // If cache already exists, we skip parsing local DB to avoid thread locking,
-    // and just do background remote sync.
-    if (syncCache['WorkOrders']) {
-      performAutoSync();
-    } else {
-      // Load local DB data first for fast rendering
-      fetchSyncData().then(() => {
-        // Then trigger background sync with remote server
-        if (isMounted) performAutoSync();
-      });
+    if (!syncCache['WorkOrders']) {
+      fetchSyncData();
     }
-
-    return () => { isMounted = false; };
   }, []);
 
   const triggerManualSync = async () => {
@@ -404,9 +377,6 @@ export default function WorkOrderDashboard() {
           finalCost = baseCost * volume * (progress / 100);
         } else if (item.total_price > 0) {
           finalCost = Number(item.total_price);
-        } else if (item.price > 0 && (!item.material || item.material.length === 0)) {
-          const vol = Number(item.quantity) || Number(item.volume) || 1;
-          finalCost = Number(item.price) * vol;
         }
 
         if (finalCost > 0) {
@@ -425,7 +395,12 @@ export default function WorkOrderDashboard() {
     extractItems(detailedRowData.repair_list);
     
     const dates = Object.keys(dailyMap).sort();
-    if (dates.length === 0) return null;
+    if (dates.length === 0) {
+       if (unapprovedCost === 0 && selectedRow?.totalCostNum > 0) {
+          unapprovedCost = selectedRow.totalCostNum;
+       }
+       return { cumPoints: [], dailyPoints: [], cumPathD: '', cumAreaD: '', dailyPathD: '', width: 800, height: 145, maxCost: 0, unapprovedCost };
+    }
 
     let cumulative = 0;
     const chartData = dates.map(d => {
@@ -784,7 +759,7 @@ export default function WorkOrderDashboard() {
     if (datePreset === "week") return "daily";
     if (datePreset === "2weeks") return "daily";
     if (datePreset === "month") return "weekly";
-    if (datePreset === "3months") return "weekly"; // 3 bulan dikelompokkan mingguan
+    if (datePreset === "3months") return "monthly"; // 3 bulan dikelompokkan bulanan
     if (datePreset === "6months") return "monthly"; // 6 bulan dikelompokkan bulanan (Sintaks telah diperbaiki dari kesalahan return=)
     if (datePreset === "year") return "monthly";
     
@@ -999,6 +974,15 @@ export default function WorkOrderDashboard() {
     if (newIds.length > 0) {
       newIds.forEach(id => fetchedIdsRef.current.add(id));
       fetchPendingApprovals(newIds);
+      
+      // Retry after 8s for IDs that still have no data (API may have been slow the first time)
+      const retryTimer = setTimeout(() => {
+        const retryIds = newIds.filter(id => !finalCosts[id] && !pendingApprovals[id]);
+        if (retryIds.length > 0) {
+          fetchPendingApprovals(retryIds);
+        }
+      }, 8000);
+      return () => clearTimeout(retryTimer);
     }
   }, [paginatedData]);
 
@@ -2484,15 +2468,27 @@ export default function WorkOrderDashboard() {
 
                 <div className="space-y-2 mt-8 pt-6 border-t border-slate-200">
                   <span className="text-xs font-bold uppercase text-slate-500 tracking-wider flex items-center justify-between cursor-pointer hover:text-slate-800 transition-colors" onClick={(e) => {
-                    const pre = e.currentTarget.nextElementSibling;
-                    if (pre) pre.classList.toggle('hidden');
+                    const wrapper = e.currentTarget.nextElementSibling;
+                    if (wrapper) wrapper.classList.toggle('hidden');
                   }}>
                     <span>Lihat Raw JSON Response (Mode Debug)</span>
                     <span className="text-[10px] bg-slate-200 px-2 py-0.5 rounded-md text-slate-600 shadow-inner">KLIK UNTUK TOGGLE</span>
                   </span>
-                  <pre className="hidden text-xs p-5 rounded-xl overflow-x-auto font-mono bg-slate-950 text-emerald-400 max-h-96 border border-slate-800 custom-scrollbar shadow-inner mt-2">
-                    {JSON.stringify(detailedRowData || selectedRow, null, 2)}
-                  </pre>
+                  <div className="hidden relative mt-2">
+                    <button
+                      onClick={() => {
+                        navigator.clipboard.writeText(JSON.stringify(detailedRowData || selectedRow, null, 2));
+                        alert('JSON dicopy ke clipboard!');
+                      }}
+                      className="absolute top-3 right-8 p-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-md transition border border-slate-700"
+                      title="Copy JSON"
+                    >
+                      <Copy size={14} />
+                    </button>
+                    <pre className="text-xs p-5 pt-10 rounded-xl overflow-x-auto font-mono bg-slate-950 text-emerald-400 max-h-96 border border-slate-800 custom-scrollbar shadow-inner">
+                      {JSON.stringify(detailedRowData || selectedRow, null, 2)}
+                    </pre>
+                  </div>
                 </div>
               </div>
             </div>
