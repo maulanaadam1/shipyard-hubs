@@ -9,7 +9,13 @@ import {
   TrendingUp,
   Clock,
   Filter,
-  PieChart
+  PieChart,
+  ExternalLink,
+  X,
+  Layers,
+  DownloadCloud,
+  CheckCircle,
+  UserCheck
 } from 'lucide-react';
 import { api, getHeaders } from '@/lib/api-client';
 import { useData } from '@/context/DataContext';
@@ -45,6 +51,195 @@ export default function FinancialDashboard() {
     setSelectedShipFilter(null);
     setCurrentPage(1);
   }, [datePreset, customStartDate, customEndDate]);
+
+  // --- Modal States ---
+  const [selectedRow, setSelectedRow] = useState<any>(null);
+  const [detailedRowData, setDetailedRowData] = useState<any>(null);
+  const [isFetchingDetail, setIsFetchingDetail] = useState(false);
+  const [isSyncingDetail, setIsSyncingDetail] = useState(false);
+  const [detailFetchError, setDetailFetchError] = useState<string | null>(null);
+  const [activeDetailTab, setActiveDetailTab] = useState<'pekerjaan' | 'material'>('pekerjaan');
+  const [masterComponentsMap, setMasterComponentsMap] = useState<Record<string, any>>({});
+  const [showChartCum, setShowChartCum] = useState(true);
+  const [showChartDaily, setShowChartDaily] = useState(true);
+  const [selectedDetailDate, setSelectedDetailDate] = useState<string | null>(null);
+
+  const fetchDetail = async (): Promise<boolean> => {
+    if (!selectedRow || !selectedRow.id) return false;
+    setIsFetchingDetail(true);
+    setDetailedRowData(null);
+    setDetailFetchError(null);
+    try {
+      const headers = await getHeaders();
+      const res = await fetch(`/api/work-orders/${selectedRow.id}/detail`, { headers });
+      if (res.ok) {
+        const result = await res.json();
+        setDetailedRowData(result.data || result);
+        return true;
+      } else if (res.status === 404) {
+        return false;
+      } else {
+        const txt = await res.text();
+        setDetailFetchError(`API Error ${res.status}: ${txt}`);
+        return false;
+      }
+    } catch (err: any) {
+      setDetailFetchError(`Network error: ${err.message}`);
+      return false;
+    } finally {
+      setIsFetchingDetail(false);
+    }
+  };
+
+  useEffect(() => {
+    if (selectedRow) {
+      fetchDetail();
+    }
+  }, [selectedRow]);
+
+  useEffect(() => {
+    if (selectedRow && !Object.keys(masterComponentsMap).length) {
+      api.from('m_components').select('*')
+        .then(({ data }) => {
+          if (data && data.length) {
+            const map: Record<string, any> = {};
+            data.forEach(item => { map[item.id.toString()] = item; });
+            setMasterComponentsMap(map);
+          }
+        });
+    }
+  }, [selectedRow]);
+
+  const triggerSyncDetail = async () => {
+    if (!selectedRow || !selectedRow.id) return;
+    setIsSyncingDetail(true);
+    setDetailFetchError(null);
+    try {
+      const headers = await getHeaders();
+      const res = await fetch(`/api/work-orders/${selectedRow.id}/sync`, { method: 'POST', headers });
+      if (res.ok) {
+        await fetchDetail();
+      } else {
+        const txt = await res.text();
+        setDetailFetchError(`Gagal sync: ${res.status} ${txt}`);
+      }
+    } catch (err: any) {
+      setDetailFetchError(`Network error: ${err.message}`);
+    } finally {
+      setIsSyncingDetail(false);
+    }
+  };
+
+  const getStatusBadgeStyles = (status: string) => {
+    if (!status) return 'bg-amber-100 text-amber-700 border border-amber-200';
+    if (status.includes('Approved Level 5') || status.toLowerCase().includes('approved')) return 'bg-emerald-100 text-emerald-700 border border-emerald-200';
+    if (status.includes('Level')) return 'bg-blue-100 text-blue-700 border border-blue-200';
+    return 'bg-amber-100 text-amber-700 border border-amber-200';
+  };
+
+  const getStatusIcon = (status: string) => {
+    if (!status) return <Clock size={14} className="mr-1" />;
+    if (status.includes('Approved Level 5') || status.toLowerCase().includes('approved')) return <CheckCircle size={14} className="mr-1" />;
+    if (status.includes('Level')) return <UserCheck size={14} className="mr-1" />;
+    return <Clock size={14} className="mr-1" />;
+  };
+
+  const detailChartConfig = useMemo(() => {
+    if (!detailedRowData || !detailedRowData.repair_list) return null;
+    
+    const dailyMap: Record<string, number> = {};
+    let unapprovedCost = 0;
+    const extractItems = (items: any[]) => {
+      items.forEach(item => {
+        let isAppr = item.approved_level >= 5 || item.status_approval === 'approved' || item.status_approval === 'approved level 5';
+        if (!isAppr && selectedRow?.min_approval_level >= 5) {
+          isAppr = true;
+        }
+
+        let dateToUse = item.date_approval;
+        if (isAppr && !dateToUse) {
+          dateToUse = item.created_at || item.updated_at || detailedRowData?.created_at || selectedRow?.created_at || new Date().toISOString();
+        }
+
+        let finalCost = 0;
+        if (item.volume_cost_final > 0) {
+          const baseCost = Number(item.volume_cost_final) || 0;
+          const volume = Number(item.volume) || 0;
+          const progress = item.progress !== undefined ? Number(item.progress) : 100;
+          finalCost = baseCost * volume * (progress / 100);
+        } else if (item.total_price > 0) {
+          finalCost = Number(item.total_price);
+        } else if (item.price > 0 && (!item.material || item.material.length === 0)) {
+          const vol = Number(item.quantity) || Number(item.volume) || 1;
+          finalCost = Number(item.price) * vol;
+        }
+
+        if (finalCost > 0) {
+           if (isAppr && dateToUse) {
+             const dateOnly = dateToUse.split(' ')[0];
+             dailyMap[dateOnly] = (dailyMap[dateOnly] || 0) + finalCost;
+           } else if (!isAppr) {
+             unapprovedCost += finalCost;
+           }
+        }
+        if (item.material && Array.isArray(item.material)) {
+           extractItems(item.material);
+        }
+      });
+    };
+    extractItems(detailedRowData.repair_list);
+    
+    const dates = Object.keys(dailyMap).sort();
+    if (dates.length === 0) return null;
+
+    let cumulative = 0;
+    const chartData = dates.map(d => {
+       cumulative += dailyMap[d];
+       return { date: d, dailyCost: dailyMap[d], cumCost: cumulative };
+    });
+
+    const width = 800;
+    const height = 145;
+    const padX = 40;
+    const padY = 30;
+    
+    const maxCost = Math.max(...chartData.map(d => d.cumCost), 1);
+    const pointDist = dates.length > 1 ? (width - padX * 2) / (dates.length - 1) : width / 2;
+    
+    const cumPoints = chartData.map((d, i) => {
+      const x = dates.length === 1 ? width / 2 : padX + (i * pointDist);
+      const ratio = d.cumCost / maxCost;
+      const y = height - padY - (ratio * (height - padY * 2));
+      const shortDate = d.date.substring(5).replace('-', '/');
+      return { x, y, label: shortDate, key: d.date, cost: d.cumCost };
+    });
+
+    const dailyPoints = chartData.map((d, i) => {
+      const x = dates.length === 1 ? width / 2 : padX + (i * pointDist);
+      const ratio = d.dailyCost / maxCost;
+      const y = height - padY - (ratio * (height - padY * 2));
+      const shortDate = d.date.substring(5).replace('-', '/');
+      return { x, y, label: shortDate, key: d.date, cost: d.dailyCost };
+    });
+    
+    let cumPathD = "";
+    let cumAreaD = "";
+    let dailyPathD = "";
+
+    if (cumPoints.length > 0) {
+      if (cumPoints.length === 1) {
+        cumPathD = `M ${cumPoints[0].x - 10} ${cumPoints[0].y} L ${cumPoints[0].x + 10} ${cumPoints[0].y}`;
+        cumAreaD = `M ${cumPoints[0].x - 10} ${height} L ${cumPoints[0].x - 10} ${cumPoints[0].y} L ${cumPoints[0].x + 10} ${cumPoints[0].y} L ${cumPoints[0].x + 10} ${height} Z`;
+        dailyPathD = `M ${dailyPoints[0].x - 10} ${dailyPoints[0].y} L ${dailyPoints[0].x + 10} ${dailyPoints[0].y}`;
+      } else {
+        cumPathD = `M ${cumPoints[0].x} ${cumPoints[0].y} ` + cumPoints.slice(1).map(p => `L ${p.x} ${p.y}`).join(" ");
+        cumAreaD = cumPathD + ` L ${cumPoints[cumPoints.length - 1].x} ${height} L ${cumPoints[0].x} ${height} Z`;
+        dailyPathD = `M ${dailyPoints[0].x} ${dailyPoints[0].y} ` + dailyPoints.slice(1).map(p => `L ${p.x} ${p.y}`).join(" ");
+      }
+    }
+    
+    return { cumPoints, dailyPoints, cumPathD, cumAreaD, dailyPathD, width, height, maxCost, unapprovedCost };
+  }, [detailedRowData]);
 
   const fetchSyncData = async () => {
     try {
@@ -151,14 +346,23 @@ export default function FinancialDashboard() {
       const jo = item.jo_code || "N/A";
       const ship = item.m_ship_name || "N/A";
       
+      const levelStatus = item.min_approval_level >= 5 ? "Approved Level 5" : 
+                         (item.min_approval_level > 0 ? `Approved Level ${item.min_approval_level}` : "Waiting");
+      const combProjectName = `${jo.toUpperCase()} - ${ship.toUpperCase()}`;
+      
       return {
         ...item,
         shipName: ship,
         joCode: jo.toUpperCase(),
+        woCode: item.code || "N/A",
         vendorName: item.m_vendor_name || "Tanpa Vendor",
         final_cost: fin.final_cost,
         latest_date: fin.latest_date,
-        pending: fin.pending
+        pending: fin.pending,
+        derivedStatus: levelStatus,
+        totalCostNum: Number(item.total_cost || 0),
+        projectName: combProjectName,
+        createdAtStr: item.created_at ? item.created_at.split(' ')[0] : 'N/A'
       };
     }).sort((a, b) => new Date(b.latest_date).getTime() - new Date(a.latest_date).getTime());
   }, [rawData, financialData]);
@@ -692,9 +896,21 @@ export default function FinancialDashboard() {
                 </tr>
               ) : (
                 paginatedData.map(item => (
-                  <tr key={item.id} className="hover:bg-slate-50 transition">
+                  <tr key={item.id} className="hover:bg-slate-50 transition cursor-pointer" onClick={() => setSelectedRow(item)}>
                     <td className="py-3 px-6 font-semibold text-slate-700">{item.latest_date.split(' ')[0]}</td>
-                    <td className="py-3 px-6 font-mono text-xs">{item.woCode || item.code}</td>
+                    <td className="py-3 px-6 font-mono text-xs text-indigo-600 hover:text-indigo-800 transition">
+                      <a 
+                        href={`https://shipyard-siaga.samudera.id/v2/work-orders/progress/${item.id}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="flex items-center gap-1 hover:underline"
+                        onClick={(e) => e.stopPropagation()}
+                        title="Buka detail WO di Samudera Shipyard"
+                      >
+                        {item.woCode || item.code}
+                        <ExternalLink size={12} />
+                      </a>
+                    </td>
                     <td className="py-3 px-6 font-mono text-xs text-slate-500">{item.joCode}</td>
                     <td className="py-3 px-6 text-slate-600 truncate max-w-[200px]">{item.shipName}</td>
                     <td className="py-3 px-6 text-slate-600 truncate max-w-[200px]">{item.vendorName}</td>
@@ -734,6 +950,541 @@ export default function FinancialDashboard() {
         </div>
       </section>
       </main>
+
+      {/* DETAILED ROW MODAL */}
+      {selectedRow && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6">
+          <div 
+            className="absolute inset-0 bg-slate-950/60 backdrop-blur-sm transition-opacity"
+            onClick={() => setSelectedRow(null)}
+          ></div>
+
+          <div className="relative w-full max-w-6xl max-h-[95vh] flex flex-col shadow-2xl rounded-2xl overflow-hidden bg-white border border-slate-200 text-slate-800">
+            
+            <div className="p-5 sm:p-6 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
+              <div className="space-y-1">
+                <span className="text-xs uppercase font-bold tracking-wider text-slate-400 px-2 py-0.5 rounded bg-slate-500/10">Detail Work Order</span>
+                <h3 className="text-xl sm:text-2xl font-bold font-mono text-[#FDB913] mt-1 flex items-center gap-2">
+                  {selectedRow.woCode}
+                  <a 
+                    href={`https://shipyard-siaga.samudera.id/v2/work-orders/progress/${selectedRow.id}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-slate-400 hover:text-[#FDB913] transition"
+                    title="Buka detail WO di Samudera Shipyard"
+                  >
+                    <ExternalLink size={20} />
+                  </a>
+                </h3>
+              </div>
+              <button 
+                onClick={() => setSelectedRow(null)}
+                className="p-2 rounded-full hover:bg-slate-200 text-slate-400 hover:text-rose-500 transition"
+              >
+                <X size={24} />
+              </button>
+            </div>
+
+            <div className="flex-1 overflow-y-auto p-5 sm:p-8 space-y-8 custom-scrollbar">
+              
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-6 p-5 rounded-xl bg-slate-50 border border-slate-100">
+                <div>
+                  <p className="text-xs text-slate-400 font-bold uppercase tracking-wider mb-2">Status Approval</p>
+                  <span className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-semibold ${getStatusBadgeStyles(selectedRow.derivedStatus)}`}>
+                    {getStatusIcon(selectedRow.derivedStatus)}
+                    {selectedRow.derivedStatus}
+                  </span>
+                </div>
+                
+                <div>
+                  <p className="text-xs text-slate-400 font-bold uppercase tracking-wider mb-2">Total Biaya Jasa</p>
+                  <div className="flex flex-col">
+                    <p className="text-2xl font-black font-mono text-emerald-600 tracking-tighter">
+                      {formatIDR(selectedRow.totalCostNum)}
+                    </p>
+                    {detailChartConfig && detailChartConfig.unapprovedCost > 0 && (
+                      <p className="text-xs font-mono font-medium text-amber-500 mt-1 bg-amber-50 px-2 py-0.5 rounded w-fit border border-amber-100" title="Estimasi biaya yang belum mencapai Approval Level 5">
+                        + {formatIDR(detailChartConfig.unapprovedCost)} (Pending)
+                      </p>
+                    )}
+                  </div>
+                </div>
+
+                {(() => {
+                  const totalMatCost = detailedRowData?.t_requisition_details?.reduce((acc: number, req: any) => {
+                    const reqTotal = req.t_delivery_details?.reduce((sum: number, del: any) => {
+                      const qty = parseFloat(del.quantity || '0');
+                      const price = parseFloat(del.t_receiving_detail?.unit_price || '0');
+                      return sum + (qty * price);
+                    }, 0) || 0;
+                    return acc + reqTotal;
+                  }, 0) || 0;
+
+                  return totalMatCost > 0 ? (
+                    <div>
+                      <p className="text-xs text-slate-400 font-bold uppercase tracking-wider mb-2">Total Material</p>
+                      <p className="text-2xl font-black font-mono text-indigo-600 tracking-tighter" title="Total Biaya Material Terkirim">
+                        {formatIDR(totalMatCost)}
+                      </p>
+                    </div>
+                  ) : (
+                    <div>
+                      <p className="text-xs text-slate-400 font-bold uppercase tracking-wider mb-2">Total Material</p>
+                      <p className="text-2xl font-black font-mono text-slate-300 tracking-tighter">
+                        -
+                      </p>
+                    </div>
+                  );
+                })()}
+
+                <div>
+                  <p className="text-xs text-slate-400 font-bold uppercase tracking-wider mb-2">Vendor / Partner</p>
+                  <p className="text-sm font-bold text-slate-800 line-clamp-2" title={selectedRow.vendorName}>{selectedRow.vendorName}</p>
+                </div>
+
+                {/* Line Chart: Total Volume Cost Final per Tanggal */}
+                {detailChartConfig && (
+                  <div className="col-span-full mt-2 pt-4 border-t border-slate-200/60">
+                    <div className="flex items-center justify-between mb-3">
+                      <div className="space-y-1">
+                        <p className="text-xs text-slate-500 font-bold uppercase tracking-wider">Grafik Pertumbuhan Biaya (Final Cost)</p>
+                        <div className="flex items-center gap-4 text-[10px] font-semibold text-slate-400">
+                          <button 
+                            onClick={() => setShowChartCum(!showChartCum)} 
+                            className={`flex items-center gap-1.5 transition-opacity hover:opacity-80 ${!showChartCum ? 'opacity-40 grayscale' : ''}`}
+                          >
+                            <div className="w-2 h-2 rounded-full bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]"></div> Kumulatif Total
+                          </button>
+                          <button 
+                            onClick={() => setShowChartDaily(!showChartDaily)}
+                            className={`flex items-center gap-1.5 transition-opacity hover:opacity-80 ${!showChartDaily ? 'opacity-40 grayscale' : ''}`}
+                          >
+                            <div className="w-2 h-2 rounded-full bg-blue-400"></div> Harian (Non-Kumulatif)
+                          </button>
+                        </div>
+                      </div>
+                      <span className="text-[10px] text-slate-400 font-mono text-right">*Berdasarkan tanggal disetujui<br/>(Approval Level 5)</span>
+                    </div>
+                    <div className="relative w-full overflow-x-auto custom-scrollbar pb-2 mt-2">
+                      <svg width="100%" height="145" viewBox={`0 0 ${detailChartConfig.width} ${detailChartConfig.height}`} preserveAspectRatio="none" className="min-w-[500px]">
+                        <defs>
+                          <linearGradient id="detail-chart-glow" x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="0%" stopColor="#10b981" stopOpacity="0.25" />
+                            <stop offset="100%" stopColor="#10b981" stopOpacity="0" />
+                          </linearGradient>
+                        </defs>
+                        
+                        {showChartCum && detailChartConfig.cumAreaD && (
+                          <path d={detailChartConfig.cumAreaD} fill="url(#detail-chart-glow)" className="transition-all duration-500" />
+                        )}
+                        
+                        {/* Daily Path */}
+                        {showChartDaily && detailChartConfig.dailyPathD && (
+                          <path d={detailChartConfig.dailyPathD} fill="none" stroke="#60a5fa" strokeWidth="2" strokeDasharray="4 4" strokeLinecap="round" strokeLinejoin="round" className="transition-all duration-500 opacity-60" />
+                        )}
+
+                        {/* Cumulative Path */}
+                        {showChartCum && detailChartConfig.cumPathD && (
+                          <path d={detailChartConfig.cumPathD} fill="none" stroke="#10b981" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="transition-all duration-500 drop-shadow-sm" />
+                        )}
+                        
+                        {/* Daily Points */}
+                        {showChartDaily && detailChartConfig.dailyPoints.map((pt: any, idx: number) => (
+                          <g key={`daily-${idx}`} className="group">
+                            <circle cx={pt.x} cy={pt.y} r="3" fill="#ffffff" stroke="#3b82f6" strokeWidth="1.5" className="transition-all duration-200" />
+                            <circle cx={pt.x} cy={pt.y} r="15" fill="transparent" className="cursor-crosshair" title={`Tanggal: ${pt.label}\nBiaya Harian: ${formatIDR(pt.cost)}`} />
+                            <text x={pt.x} y={pt.y - 8} fill="#3b82f6" fontSize="9" textAnchor="middle" className="opacity-0 group-hover:opacity-100 transition-opacity font-mono font-bold drop-shadow-sm bg-white px-1">
+                              {formatIDR(pt.cost)}
+                            </text>
+                          </g>
+                        ))}
+
+                        {/* Cumulative Points */}
+                        {showChartCum && detailChartConfig.cumPoints.map((pt: any, idx: number) => (
+                          <g key={`cum-${idx}`} className="group">
+                            <circle cx={pt.x} cy={pt.y} r="4.5" fill="#ffffff" stroke="#10b981" strokeWidth="2" className="transition-all duration-200 group-hover:r-[6px]" />
+                            <circle cx={pt.x} cy={pt.y} r="15" fill="transparent" className="cursor-crosshair" title={`Tanggal: ${pt.label}\nTotal Kumulatif: ${formatIDR(pt.cost)}`} />
+                            <text x={pt.x} y={pt.y - 12} fill="#059669" fontSize="10" textAnchor="middle" className="opacity-0 group-hover:opacity-100 transition-opacity font-mono font-extrabold drop-shadow-md bg-white/80 px-1">
+                              {formatIDR(pt.cost)}
+                            </text>
+                          </g>
+                        ))}
+                        
+                        {/* Timeline Date Labels (Unconditional) */}
+                        {detailChartConfig.cumPoints.map((pt: any, idx: number) => {
+                          const isSelected = selectedDetailDate === pt.key;
+                          return (
+                            <g key={`label-${idx}`} className="cursor-pointer transition-all hover:opacity-70" onClick={() => setSelectedDetailDate(isSelected ? null : pt.key)}>
+                              <rect x={pt.x - 20} y={detailChartConfig.height - 14} width="40" height="14" rx="4" fill={isSelected ? '#FDB913' : 'transparent'} />
+                              <text x={pt.x} y={detailChartConfig.height - 4} fill={isSelected ? '#ffffff' : '#94a3b8'} fontSize="10" textAnchor="middle" fontWeight={isSelected ? "800" : "600"}>
+                                {pt.label}
+                              </text>
+                            </g>
+                          );
+                        })}
+                      </svg>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                <div className="space-y-4">
+                  <h4 className="text-sm font-bold uppercase text-slate-400 tracking-wider pb-2 border-b border-dashed border-slate-200">Informasi Proyek & Kapal</h4>
+                  
+                  <div className="space-y-4 text-sm">
+                    <div>
+                      <span className="text-xs text-slate-400 block mb-1">Nama Proyek (Gabungan):</span>
+                      <p className="font-bold text-[#FDB913]">{selectedRow.projectName}</p>
+                    </div>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <span className="text-xs text-slate-400 block mb-1">Nama Kapal (m_ship_name):</span>
+                        <p className="font-bold text-slate-800">{selectedRow.shipName}</p>
+                      </div>
+                      <div>
+                        <span className="text-xs text-slate-400 block mb-1">Kode Job Order (jo_code):</span>
+                        <p className="font-bold font-mono text-slate-700">{selectedRow.joCode}</p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="space-y-4">
+                  <h4 className="text-sm font-bold uppercase text-slate-400 tracking-wider pb-2 border-b border-dashed border-slate-200">Detail Teknis & Manajemen</h4>
+                  
+                  <div className="grid grid-cols-2 gap-y-4 gap-x-6 text-sm">
+                    <div>
+                      <span className="text-xs text-slate-400 block mb-1">Tipe Billing:</span>
+                      <p className="font-semibold text-slate-800">{selectedRow.billing_type || '-'}</p>
+                    </div>
+                    <div>
+                      <span className="text-xs text-slate-400 block mb-1">Jumlah Man Power:</span>
+                      <p className="font-bold text-slate-800">{selectedRow.man_power} Orang</p>
+                    </div>
+                    <div>
+                      <span className="text-xs text-slate-400 block mb-1">Dibuat Oleh:</span>
+                      <p className="font-semibold text-slate-800">{selectedRow.created_name || 'N/A'}</p>
+                    </div>
+                    <div>
+                      <span className="text-xs text-slate-400 block mb-1">
+                        {selectedRow.derivedStatus === 'Waiting' ? 'Dibuat Pada:' : 'Disetujui Terakhir:'}
+                      </span>
+                      <p className={`font-semibold ${selectedRow.derivedStatus === 'Waiting' ? 'text-amber-500' : 'text-emerald-500'}`}>
+                        {selectedRow.derivedStatus === 'Waiting' ? (selectedRow.createdAtStr || '-') : (selectedRow.last_approved || '-')}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Rincian API Detail */}
+              <div className="mt-8 pt-6 border-t border-slate-200">
+                <h3 className="text-lg font-bold text-slate-800 mb-6 flex items-center gap-2">
+                  <Layers className="text-[#FDB913]" />
+                  Rincian Item Pekerjaan & Material (Samudera API)
+                </h3>
+
+                {isFetchingDetail ? (
+                  <div className="py-12 flex flex-col items-center justify-center gap-4 bg-slate-50 rounded-2xl border border-dashed border-slate-200">
+                    <div className="w-8 h-8 border-4 border-[#FDB913] border-t-transparent rounded-full animate-spin"></div>
+                    <p className="text-sm font-medium text-slate-500 animate-pulse">Memeriksa Database Lokal...</p>
+                  </div>
+                ) : detailedRowData ? (
+                  <div className="space-y-6">
+                    {/* Tabs Header */}
+                    <div className="flex border-b border-slate-200">
+                      <button
+                        onClick={() => setActiveDetailTab('pekerjaan')}
+                        className={`px-6 py-3 text-sm font-bold border-b-2 transition-colors flex items-center gap-2 ${activeDetailTab === 'pekerjaan' ? 'border-[#FDB913] text-[#FDB913]' : 'border-transparent text-slate-500 hover:text-slate-800 hover:border-slate-300'}`}
+                      >
+                        Daftar Pekerjaan
+                        <span className="text-xs px-2 py-0.5 rounded-full bg-slate-100 text-slate-600">{detailedRowData.repair_list?.length || 0}</span>
+                      </button>
+                      <button
+                        onClick={() => setActiveDetailTab('material')}
+                        className={`px-6 py-3 text-sm font-bold border-b-2 transition-colors flex items-center gap-2 ${activeDetailTab === 'material' ? 'border-emerald-500 text-emerald-600' : 'border-transparent text-slate-500 hover:text-slate-800 hover:border-slate-300'}`}
+                      >
+                        Kebutuhan Material
+                        <span className="text-xs px-2 py-0.5 rounded-full bg-slate-100 text-slate-600">{detailedRowData.t_requisition_details?.length || 0}</span>
+                      </button>
+                    </div>
+
+                    {/* Tab Content: Pekerjaan */}
+                    {activeDetailTab === 'pekerjaan' && (
+                      <div className="space-y-4 animate-in fade-in slide-in-from-bottom-2 duration-300">
+                        <h4 className="text-sm font-bold uppercase text-[#FDB913] tracking-wider pb-2 border-b-2 border-solid border-[#FDB913]/20 flex justify-between items-end">
+                          <span>Daftar Pekerjaan (Repair List)</span>
+                        </h4>
+                        
+                        {!detailedRowData.repair_list || detailedRowData.repair_list.length === 0 ? (
+                           <p className="text-sm text-slate-500 italic p-6 bg-slate-50 rounded-xl text-center">Tidak ada detail pekerjaan tersedia</p>
+                        ) : (
+                          <div className="space-y-3">
+                            {selectedDetailDate && (
+                              <div className="bg-[#FDB913]/10 border border-[#FDB913]/30 rounded-lg p-3 flex items-center justify-between animate-in fade-in slide-in-from-top-2">
+                                <p className="text-sm font-semibold text-slate-700 flex items-center gap-2">
+                                  <CalendarIcon size={16} className="text-[#FDB913]" />
+                                  Menampilkan pekerjaan pada: <span className="font-bold text-[#FDB913]">{selectedDetailDate}</span>
+                                </p>
+                                <button onClick={() => setSelectedDetailDate(null)} className="text-xs font-bold text-rose-500 hover:bg-rose-50 px-2 py-1 rounded transition">Reset Filter</button>
+                              </div>
+                            )}
+                            {(() => {
+                              const matchesDateFilter = (node: any): boolean => {
+                                if (!selectedDetailDate) return true;
+                                const d = node.date_approval ? node.date_approval.split(' ')[0] : 
+                                          (node.created_at || node.updated_at || detailedRowData?.created_at)?.split(' ')[0];
+                                if (d === selectedDetailDate) return true;
+                                if (node.material && node.material.length > 0) {
+                                  return node.material.some(matchesDateFilter);
+                                }
+                                return false;
+                              };
+
+                              const renderItem = (item: any, depth = 0): React.ReactNode => {
+                                const match = matchesDateFilter(item);
+                                
+                                // Aturan: Repair List Induk (depth 0) selalu muncul, hanya detail anak yang disembunyikan
+                                if (depth > 0 && !match) return null;
+
+                                let titleHtml = '';
+                                if (item.group_flag || item.label?.toLowerCase() === 'grup') {
+                                  titleHtml = item.description || item.label;
+                                } else {
+                                  titleHtml = item.label || item.description;
+                                }
+                                
+                                if (!titleHtml) titleHtml = 'Pekerjaan / Item';
+
+                                return (
+                                  <div key={item.id || item.uniqcode || Math.random()} className={`mt-3 ${depth > 0 ? 'ml-4 md:ml-8 border-l-2 border-[#FDB913]/20 pl-4 md:pl-6' : ''}`}>
+                                    <div className={`p-4 rounded-xl border transition-colors flex flex-col md:flex-row justify-between items-start gap-4 shadow-sm ${depth === 0 ? 'bg-[#FDB913]/5 border-[#FDB913]/30' : 'bg-white border-slate-200 hover:border-[#FDB913]/50'}`}>
+                                      <div className="flex-1 min-w-0">
+                                        <p className="text-sm sm:text-base font-bold text-slate-800 leading-relaxed" dangerouslySetInnerHTML={{ __html: titleHtml }}></p>
+                                        
+                                        {/* Parameter / Quantity Display */}
+                                        {(!item.group_flag && item.label?.toLowerCase() !== 'grup' && (!item.material || item.material.length === 0)) && (
+                                          <div className="flex flex-wrap gap-x-4 gap-y-2 mt-3 text-xs text-slate-600 font-medium items-center">
+                                            <span className="bg-white border border-slate-200 shadow-sm px-2.5 py-1 rounded-md text-[#FDB913]">
+                                              Volume: <span className="font-black text-sm">{item.volume || item.act_quantity || item.quantity || 0}</span> {item.volume_unit || item.unit || ''}
+                                            </span>
+                                            {(() => {
+                                              let statusStr = item.status_approval;
+                                              if (item.approved_level !== undefined && item.approved_level !== null) {
+                                                if (item.approved_level >= 5) statusStr = "approved";
+                                                else if (item.approved_level > 0) statusStr = `approved level ${item.approved_level}`;
+                                                else if (item.approved_level === 0) statusStr = "waiting";
+                                              }
+                                              
+                                              // Fallback: Paksa mengikuti master header (selectedRow) jika detail masih tertinggal
+                                              if (selectedRow?.min_approval_level >= 5) {
+                                                statusStr = "approved";
+                                              } else if (selectedRow?.min_approval_level > 0 && (!statusStr || statusStr === "waiting" || statusStr.includes('level'))) {
+                                                // Jangan turunkan level jika item sudah lebih tinggi dari header
+                                                const currentLevelMatch = statusStr?.match(/level\s+(\d+)/i);
+                                                const currentLevel = currentLevelMatch ? parseInt(currentLevelMatch[1]) : 0;
+                                                if (currentLevel < selectedRow.min_approval_level) {
+                                                  statusStr = `approved level ${selectedRow.min_approval_level}`;
+                                                }
+                                              }
+
+                                              if (!statusStr) return null;
+                                              
+                                              const isAppr = statusStr.toLowerCase().includes('approved');
+                                              return (
+                                                <span className={`uppercase tracking-wider font-black ${isAppr ? 'text-emerald-600' : 'text-amber-500'}`}>
+                                                  [{statusStr}]
+                                                </span>
+                                              );
+                                            })()}
+                                            {item.progress !== undefined && <span className="text-[#e5a611] font-bold bg-[#FDB913]/10 px-2 py-0.5 rounded">Progress: {item.progress}%</span>}
+                                            {item.date_approval ? (
+                                              <span className="text-slate-500 text-[10px] bg-slate-100 px-2 py-0.5 rounded flex items-center gap-1">
+                                                <CalendarIcon size={10} /> Disetujui: {item.date_approval}
+                                              </span>
+                                            ) : (item.created_at || item.updated_at || detailedRowData?.created_at) ? (
+                                              <span className="text-slate-500 text-[10px] bg-slate-100 px-2 py-0.5 rounded flex items-center gap-1">
+                                                <CalendarIcon size={10} /> Dibuat: {item.created_at || item.updated_at || detailedRowData?.created_at}
+                                              </span>
+                                            ) : null}
+                                          </div>
+                                        )}
+                                      </div>
+                                      
+                                      {(item.volume_cost_final > 0 || item.total_price > 0 || item.price > 0) && (
+                                        <div className="text-left md:text-right shrink-0 mt-2 md:mt-0 bg-white px-3 py-2 rounded-lg border border-slate-100 flex flex-col md:items-end justify-center">
+                                          {item.volume_cost_final > 0 && (
+                                            <span className="text-[9px] text-slate-400 font-mono mb-1 bg-slate-50 px-1.5 py-0.5 rounded border border-slate-100">
+                                              Satuan: {formatIDR(item.volume_cost_final)}
+                                            </span>
+                                          )}
+                                          <span className="text-[10px] text-slate-400 block mb-0.5 uppercase tracking-wider font-bold">Total Harga</span>
+                                          <p className="text-base font-black text-emerald-600 font-mono tracking-tight">
+                                            {(() => {
+                                              let costToDisplay = 0;
+                                              if (item.volume_cost_final > 0) {
+                                                const vol = Number(item.volume) || 0;
+                                                const prog = item.progress !== undefined ? Number(item.progress) : 100;
+                                                costToDisplay = Number(item.volume_cost_final) * vol * (prog / 100);
+                                              } else {
+                                                costToDisplay = item.total_price || item.price || 0;
+                                              }
+                                              return formatIDR(costToDisplay);
+                                            })()}
+                                          </p>
+                                        </div>
+                                      )}
+                                    </div>
+                                    
+                                    {/* Recursion for Children */}
+                                    {item.material && item.material.length > 0 && (
+                                      <div className="mt-2 space-y-2">
+                                        {item.material.map((m: any) => renderItem(m, depth + 1))}
+                                      </div>
+                                    )}
+                                  </div>
+                                );
+                              };
+                              return detailedRowData.repair_list.map((m: any) => renderItem(m, 0));
+                            })()}
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    {/* Tab Content: Material */}
+                    {activeDetailTab === 'material' && (
+                      <div className="space-y-4 animate-in fade-in slide-in-from-bottom-2 duration-300">
+                        {(() => {
+                          const totalMaterialCost = detailedRowData.t_requisition_details?.reduce((acc: number, req: any) => {
+                            const reqTotal = req.t_delivery_details?.reduce((sum: number, del: any) => {
+                              const qty = parseFloat(del.quantity || '0');
+                              const price = parseFloat(del.t_receiving_detail?.unit_price || '0');
+                              return sum + (qty * price);
+                            }, 0) || 0;
+                            return acc + reqTotal;
+                          }, 0) || 0;
+
+                          return (
+                            <h4 className="text-sm font-bold uppercase text-emerald-500 tracking-wider pb-2 border-b-2 border-solid border-emerald-500/20 flex justify-between items-end">
+                              <span>Kebutuhan Material (Requisition)</span>
+                              {totalMaterialCost > 0 && (
+                                <span className="bg-emerald-500 text-white px-3 py-1 rounded-lg text-xs tracking-normal">
+                                  Total: {formatIDR(totalMaterialCost)}
+                                </span>
+                              )}
+                            </h4>
+                          );
+                        })()}
+                        
+                        {!detailedRowData.t_requisition_details || detailedRowData.t_requisition_details.length === 0 ? (
+                           <p className="text-sm text-slate-500 italic p-6 bg-slate-50 rounded-xl text-center">Tidak ada daftar kebutuhan material tersedia</p>
+                        ) : (
+                          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                            {detailedRowData.t_requisition_details.map((req: any) => {
+                              const compFromReq = req.m_component || req.t_delivery_details?.[0]?.m_component;
+                              const localComp = masterComponentsMap[req.m_component_id?.toString()];
+                              
+                              const materialName = 
+                                localComp?.description_code || localComp?.description || 
+                                compFromReq?.description_code || compFromReq?.description || 
+                                `Barang/Material (ID: ${req.m_component_id})`;
+                              
+                              return (
+                                <div key={req.id} className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex flex-col justify-between gap-3 hover:border-emerald-500/30 transition-colors">
+                                  <div className="min-w-0">
+                                    <p className="text-sm font-bold text-slate-800 leading-snug" title={materialName}>
+                                      {materialName}
+                                    </p>
+                                    <div className="flex flex-wrap gap-x-3 gap-y-2 mt-3 text-xs text-slate-600">
+                                    <span className="font-bold text-[#FDB913] bg-[#FDB913]/10 px-2 py-1 rounded-md border border-[#FDB913]/20">Req: {req.quantity} {localComp?.unit || req.unit}</span>
+                                    <span className="font-bold text-emerald-700 bg-emerald-50 px-2 py-1 rounded-md border border-emerald-100">Terkirim: {req.quantity_delivered}</span>
+                                    {req.quantity_undelivered > 0 && <span className="font-bold text-rose-600 bg-rose-50 px-2 py-1 rounded-md border border-rose-100">Sisa: {req.quantity_undelivered}</span>}
+                                  </div>
+                                </div>
+                                  {req.t_delivery_details?.length > 0 && (
+                                     <div className="mt-2 pt-3 border-t border-slate-100 flex items-center justify-between gap-2 text-xs">
+                                        <div className="flex items-center gap-2">
+                                          <span className="bg-emerald-500 text-white px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider">Terkirim pada</span>
+                                          <span className="font-mono text-slate-500 font-bold">
+                                            {req.t_delivery_details[0].t_delivery?.date ? new Date(req.t_delivery_details[0].t_delivery.date).toLocaleDateString('id-ID', {day:'numeric', month:'long', year:'numeric'}) : ''}
+                                          </span>
+                                        </div>
+                                        {(() => {
+                                          const subTotal = req.t_delivery_details.reduce((sum: number, del: any) => {
+                                            const qty = parseFloat(del.quantity || '0');
+                                            const price = parseFloat(del.t_receiving_detail?.unit_price || '0');
+                                            return sum + (qty * price);
+                                          }, 0);
+                                          return subTotal > 0 ? (
+                                            <div className="font-mono font-bold text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded border border-indigo-100" title="Harga Total Material">
+                                              {formatIDR(subTotal)}
+                                            </div>
+                                          ) : null;
+                                        })()}
+                                     </div>
+                                  )}
+                              </div>
+                            )})}
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <div className="py-16 flex flex-col items-center justify-center gap-5 bg-slate-50 rounded-2xl border-2 border-dashed border-slate-200">
+                    <div className="text-center max-w-md">
+                      <div className="w-16 h-16 bg-[#FDB913]/20 rounded-full flex items-center justify-center mx-auto mb-4 text-[#FDB913]">
+                        <DownloadCloud size={32} />
+                      </div>
+                      <p className="text-lg font-bold text-slate-800">Data Rincian Belum Tersedia di Lokal</p>
+                      <p className="text-sm text-slate-500 mt-2 leading-relaxed">
+                        Detail item pekerjaan dan material untuk Work Order ini belum tersimpan di database lokal sistem Anda.
+                      </p>
+                    </div>
+                    {detailFetchError && (
+                      <div className="bg-red-50 text-red-600 px-4 py-2 rounded-lg text-sm font-bold border border-red-200 shadow-sm">
+                        Error: {detailFetchError}
+                      </div>
+                    )}
+                    <button 
+                      onClick={triggerSyncDetail}
+                      disabled={isSyncingDetail}
+                      className="mt-2 flex items-center gap-2 px-6 py-3 bg-[#FDB913] hover:bg-[#e5a611] text-slate-900 text-sm font-bold rounded-xl transition-all shadow-lg shadow-[#FDB913]/30 hover:shadow-[#FDB913]/50 hover:-translate-y-0.5 disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none"
+                    >
+                      {isSyncingDetail ? (
+                        <>
+                          <RefreshCw size={18} className="animate-spin" />
+                          Menarik Data dari API Samudera...
+                        </>
+                      ) : (
+                        <>
+                          <DownloadCloud size={18} />
+                          Tarik Data Rincian Sekarang
+                        </>
+                      )}
+                    </button>
+                  </div>
+                )}
+
+                <div className="space-y-2 mt-8 pt-6 border-t border-slate-200">
+                  <span className="text-xs font-bold uppercase text-slate-500 tracking-wider flex items-center justify-between cursor-pointer hover:text-slate-800 transition-colors" onClick={(e) => {
+                    const pre = e.currentTarget.nextElementSibling;
+                    if (pre) pre.classList.toggle('hidden');
+                  }}>
+                    <span>Lihat Raw JSON Response (Mode Debug)</span>
+                    <span className="text-[10px] bg-slate-200 px-2 py-0.5 rounded-md text-slate-600 shadow-inner">KLIK UNTUK TOGGLE</span>
+                  </span>
+                  <pre className="hidden text-xs p-5 rounded-xl overflow-x-auto font-mono bg-slate-950 text-emerald-400 max-h-96 border border-slate-800 custom-scrollbar shadow-inner mt-2">
+                    {JSON.stringify(detailedRowData || selectedRow, null, 2)}
+                  </pre>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
