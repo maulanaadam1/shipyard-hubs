@@ -13,7 +13,7 @@ RUN npm run build
 # ============================================================
 # Stage 2: Build Go backend binary
 # ============================================================
-FROM golang:1.23-alpine AS go-builder
+FROM golang:1.24-alpine AS go-builder
 WORKDIR /go-server
 
 # Install git (needed by some Go modules)
