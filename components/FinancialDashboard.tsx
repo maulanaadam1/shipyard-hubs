@@ -301,11 +301,13 @@ export default function FinancialDashboard() {
       const headers = await getHeaders();
       let res = await fetch('/api/cache/WorkOrders', { headers });
       
-      let parsed = null;
+      let rawParsed = null;
       let lastSync = '';
       
       if (res.ok) {
-        parsed = await res.json();
+        const responseJson = await res.json();
+        rawParsed = responseJson.data;
+        lastSync = responseJson.last_sync || '';
       } else {
         // 2. Fallback: ambil dari SQLite/Supabase jika API gagal (misal server belum direstart)
         const { data } = await api.from('sync_configs').select('*').eq('id', 'WorkOrders');
@@ -313,15 +315,15 @@ export default function FinancialDashboard() {
           const syncConfig = data[0];
           lastSync = syncConfig.last_sync || '';
           if (syncConfig.last_response) {
-            parsed = JSON.parse(syncConfig.last_response);
+            rawParsed = JSON.parse(syncConfig.last_response);
           }
         }
       }
 
-      if (parsed) {
+      if (rawParsed) {
         let list = [];
-        if (Array.isArray(parsed)) list = parsed;
-        else if (parsed.data && Array.isArray(parsed.data)) list = parsed.data;
+        if (Array.isArray(rawParsed)) list = rawParsed;
+        else if (rawParsed.data && Array.isArray(rawParsed.data)) list = rawParsed.data;
         
         if (list.length > 0) {
           setRawData(list);

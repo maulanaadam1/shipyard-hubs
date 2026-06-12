@@ -23,14 +23,22 @@ func GetCacheData(w http.ResponseWriter, r *http.Request) {
 		cacheKey := "cache:" + id
 		val, err := db.RDB.Get(db.Ctx, cacheKey).Result()
 		if err == nil && val != "" {
-			w.Write([]byte(val))
+			var lastSync sql.NullString
+			db.DB.QueryRow("SELECT last_sync FROM sync_configs WHERE id = ?", id).Scan(&lastSync)
+			syncTime := ""
+			if lastSync.Valid {
+				syncTime = lastSync.String
+			}
+			responseJson := `{"last_sync": "` + syncTime + `", "data": ` + val + `}`
+			w.Write([]byte(responseJson))
 			return
 		}
 	}
 
 	// Fallback to SQLite/PostgreSQL
 	var lastResponse string
-	err := db.DB.QueryRow("SELECT IFNULL(last_response, '') FROM sync_configs WHERE id = ?", id).Scan(&lastResponse)
+	var lastSync sql.NullString
+	err := db.DB.QueryRow("SELECT IFNULL(last_response, ''), last_sync FROM sync_configs WHERE id = ?", id).Scan(&lastResponse, &lastSync)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			http.Error(w, "Not found", http.StatusNotFound)
@@ -43,5 +51,13 @@ func GetCacheData(w http.ResponseWriter, r *http.Request) {
 	if lastResponse == "" {
 		lastResponse = "[]"
 	}
-	w.Write([]byte(lastResponse))
+	
+	syncTime := ""
+	if lastSync.Valid {
+		syncTime = lastSync.String
+	}
+
+	// Buat struktur JSON manual agar sangat cepat (tanpa marshal ulang data raksasa)
+	responseJson := `{"last_sync": "` + syncTime + `", "data": ` + lastResponse + `}`
+	w.Write([]byte(responseJson))
 }
