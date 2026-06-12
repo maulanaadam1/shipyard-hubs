@@ -512,19 +512,52 @@ function VesselComponent({ vessel, getSVGCoordinates, handleUpdatePosition, hand
   currentLayout: VesselLayoutData | null,
   canEdit: boolean
 }) {
-  const { ships, dockStatuses } = useData();
+  const { ships, dockStatuses, dropdownConfigs } = useData();
   
-  // Try to find ship dimensions from Master Ship first
-  const shipMaster = (ships || []).find(s => s.shipname === vessel.shipname);
+  // Try to find ship dimensions from Master Ship first (mencocokkan nama kapal)
+  const searchName = (vessel.shipname || '').trim().toUpperCase();
+  const shipMaster = (ships || []).find((s: any) => {
+    const sName = (s.shipname || '').trim().toUpperCase();
+    const sName2 = (s.name || '').trim().toUpperCase();
+    const sCode = (s.code || '').trim().toUpperCase();
+    return sName === searchName || sName2 === searchName || sCode === searchName;
+  });
   
+  // Baca tipe kapal dari data nested jika ada, atau fallback ke type biasa
+  const masterType = shipMaster?.m_ship_type?.code || shipMaster?.type || '';
+  const projectType = vessel.type || '';
+  
+  // Parse nilai loa & breadth (karena raw datanya berupa string)
+  const parsedBreadth = shipMaster?.breadth ? parseFloat(shipMaster.breadth as any) : undefined;
+  const parsedLOA = shipMaster?.loa ? parseFloat(shipMaster.loa as any) : undefined;
+
   // Priority: 
   // 1. LOA/Breadth from Master Ship (if shipmaster exists)
   // 2. width/length from Project (if explicitly set)
   // 3. default (10 / 30)
-  const actualBreadth = shipMaster?.breadth || vessel.width || 10;
-  const actualLOA = shipMaster?.loa || vessel.length || 30;
+  const actualBreadth = parsedBreadth || vessel.width || 10;
+  const actualLOA = parsedLOA || vessel.length || 30;
 
-  const isRect = ['BG', 'TK', 'LCT'].includes(vessel.type || shipMaster?.type || '');
+  // Resolusi ID tipe (seperti "st_1") ke Label/Value aslinya lewat dropdown_configs
+  const resolveTypeName = (typeVal: string) => {
+    if (!typeVal) return '';
+    const config = (dropdownConfigs || []).find(d => d.id === typeVal || d.value === typeVal);
+    if (config) {
+      return (config.value + ' ' + config.label).toUpperCase();
+    }
+    return typeVal.toUpperCase();
+  };
+
+  // Cek fallback khusus via ID jika ada
+  const isRectById = shipMaster?.m_ship_type_id === 1;
+
+  // Jadikan uppercase & resolve ID (contoh: "st_1" menjadi "BG BARGE / TONGKANG")
+  const mType = resolveTypeName(masterType);
+  const pType = resolveTypeName(projectType);
+
+  // Cek apakah tipe kapal termasuk kapal berbentuk kotak (Barge, TK, LCT)
+  const rectTypes = ['BG', 'TK', 'LCT', 'BARGE', 'TONGKANG', 'ST_1'];
+  const isRect = isRectById || rectTypes.some(t => mType.includes(t) || pType.includes(t));
   
   // Use scale from layout or default
   const scaleX = currentLayout?.scale_x || 3.6;

@@ -223,17 +223,44 @@ export interface DropdownConfig {
   is_active: boolean;
 }
 
+export interface MShipType {
+  id: number;
+  code: string;
+  name: string;
+  code_type: string;
+  created_at?: string;
+  updated_at?: string;
+  created_by?: string | null;
+  modified_by?: string | null;
+}
+
 export interface Ship {
-  id: string;
-  type: string;
-  shipname: string;
-  company: string;
-  loa: number;
-  breadth: number;
-  depth: number;
-  draft: number;
-  gt: number;
-  buid: string;
+  id: number | string;
+  code?: string;
+  name?: string;
+  loa?: string | number;
+  deadweight?: string | number;
+  m_ship_type_id?: number;
+  created_by?: string | null;
+  modified_by?: string | null;
+  created_at?: string;
+  updated_at?: string;
+  breadth?: string | number;
+  depth?: string | number;
+  draft?: string | number;
+  ship_flag?: string;
+  register_port?: string;
+  created_year?: string;
+  IMO?: string | null;
+  coefficient_block?: string | number;
+  m_ship_type?: MShipType;
+  
+  // Legacy / Fallback fields
+  type?: string;
+  shipname?: string;
+  company?: string;
+  gt?: number;
+  buid?: string;
 }
 
 export interface Project {
