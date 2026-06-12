@@ -32,12 +32,14 @@ import {
 } from 'lucide-react';
 import { api, getHeaders } from '@/lib/api-client';
 import { useData } from '@/context/DataContext';
+import { SearchableSelect } from './SearchableSelect';
 
 const MOCK_DATA: any[] = [];
 
 export default function WorkOrderDashboard() {
   const { syncCache, setSyncCache, syncDates, setSyncDates } = useData();
   const [rawData, setRawData] = useState<any[]>(syncCache['WorkOrders'] || MOCK_DATA);
+  const [financialData, setFinancialData] = useState<Record<string, any>>({});
   const [isUsingMock, setIsUsingMock] = useState(!syncCache['WorkOrders']);
   const [fileName, setFileName] = useState(syncDates['WorkOrders'] ? `Auto-Synced (${syncDates['WorkOrders']})` : "Data Contoh (Demo)");
   const [lastSyncDate, setLastSyncDate] = useState<string>(syncDates['WorkOrders'] || '');
@@ -80,6 +82,7 @@ export default function WorkOrderDashboard() {
   const [isSyncing, setIsSyncing] = useState(false);
   const [pendingApprovals, setPendingApprovals] = useState<Record<string, number>>({});
   const [finalCosts, setFinalCosts] = useState<Record<string, number>>({});
+  const [previousCosts, setPreviousCosts] = useState<Record<string, number>>({});
   const [finalDates, setFinalDates] = useState<Record<string, string>>({});
   const [sortColumn, setSortColumn] = useState('created_at');
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc');
@@ -133,6 +136,29 @@ export default function WorkOrderDashboard() {
     }
   };
 
+  useEffect(() => {
+    if (rawData.length === 0) return;
+    const fetchFinances = async () => {
+      const ids = rawData.map(d => d.id);
+      for (let i = 0; i < ids.length; i += 50) {
+        const chunk = ids.slice(i, i + 50);
+        try {
+          const headers = await getHeaders();
+          const res = await fetch('/api/work-orders/bulk-pending-approvals', {
+            method: 'POST',
+            headers,
+            body: JSON.stringify({ ids: chunk.map(String) })
+          });
+          if (res.ok) {
+            const map = await res.json();
+            setFinancialData(prev => ({...prev, ...map}));
+          }
+        } catch (e) {}
+      }
+    };
+    fetchFinances();
+  }, [rawData]);
+
   const fetchPendingApprovals = async (ids: string[]) => {
     if (!ids || ids.length === 0) return;
     try {
@@ -147,21 +173,26 @@ export default function WorkOrderDashboard() {
         const newPending: Record<string, number> = {};
         const newFinal: Record<string, number> = {};
         const newFinalDates: Record<string, string> = {};
+        const newPrev: Record<string, number> = {};
         
         Object.keys(map).forEach(id => {
           if (map[id] && typeof map[id] === 'object') {
             newPending[id] = map[id].pending || 0;
-            newFinal[id] = map[id].final_cost || 0;
+            // "Nilai Saat Ini" menggunakan latest_cost (delta di tanggal terakhir)
+            newFinal[id] = map[id].latest_cost !== undefined ? map[id].latest_cost : (map[id].final_cost || 0);
+            newPrev[id] = map[id].previous_cost !== undefined ? map[id].previous_cost : (map[id].final_cost || 0);
             newFinalDates[id] = map[id].latest_date || '';
           } else {
             // Backward compatibility
             newPending[id] = map[id] || 0;
+            newPrev[id] = map[id] || 0;
             newFinalDates[id] = '';
           }
         });
 
         setPendingApprovals(prev => ({ ...prev, ...newPending }));
         setFinalCosts(prev => ({ ...prev, ...newFinal }));
+        setPreviousCosts(prev => ({ ...prev, ...newPrev }));
         setFinalDates(prev => ({ ...prev, ...newFinalDates }));
       }
     } catch (e) {}
@@ -341,19 +372,6 @@ export default function WorkOrderDashboard() {
     setCurrentPage(1);
   }, [rawData, datePreset, customStartDate, customEndDate]);
 
-  // Tentukan Tanggal Jangkar Terbaru dalam Dataset secara Dinamis
-  const latestDatasetDate = useMemo(() => {
-    if (rawData.length === 0) return new Date("2026-06-02");
-    let maxTime = 0;
-    rawData.forEach(item => {
-      if (item.created_at) {
-        const t = new Date(item.created_at.replace(' ', 'T')).getTime();
-        if (t > maxTime) maxTime = t;
-      }
-    });
-    return maxTime > 0 ? new Date(maxTime) : new Date("2026-06-02");
-  }, [rawData]);
-
   // Kalkulasi Chart Modal Header
   const detailChartConfig = useMemo(() => {
     if (!detailedRowData || !detailedRowData.repair_list) return null;
@@ -493,37 +511,7 @@ export default function WorkOrderDashboard() {
     return { cumPoints, dailyPoints, cumPathD, cumAreaD, dailyPathD, width, height, maxCost, unapprovedCost };
   }, [detailedRowData]);
 
-  // Kalkulasi Rentang Tanggal Efektif berdasarkan Preset
-  const effectiveDateRange = useMemo(() => {
-    const end = new Date(latestDatasetDate);
-    const start = new Date(latestDatasetDate);
 
-    if (datePreset === "week") {
-      start.setDate(end.getDate() - 7);
-    } else if (datePreset === "2weeks") {
-      start.setDate(end.getDate() - 14);
-    } else if (datePreset === "month") {
-      start.setDate(end.getDate() - 30);
-    } else if (datePreset === "3months") {
-      start.setDate(end.getDate() - 90);
-    } else if (datePreset === "6months") {
-      start.setDate(end.getDate() - 180);
-    } else if (datePreset === "year") {
-      start.setDate(end.getDate() - 365);
-    } else if (datePreset === "custom") {
-      const s = customStartDate ? new Date(customStartDate) : null;
-      const e = customEndDate ? new Date(customEndDate) : null;
-      return { 
-        start: s && !isNaN(s.getTime()) ? s : null, 
-        end: e && !isNaN(e.getTime()) ? e : null 
-      };
-    } else {
-      // "all"
-      return { start: null, end: null };
-    }
-
-    return { start, end };
-  }, [latestDatasetDate, datePreset, customStartDate, customEndDate]);
 
   const getApprovalStatusText = (level: any) => {
     const lvl = Number(level);
@@ -570,6 +558,7 @@ export default function WorkOrderDashboard() {
   // 1. Ekstraksi Data Dasar & Struktur Proyek
   const processedData = useMemo(() => {
     return rawData.map(item => {
+      const fin = financialData[item.id];
       const levelStatus = getApprovalStatusText(item.min_approval_level);
       const jo = item.jo_code || "N/A";
       const ship = item.m_ship_name || "N/A";
@@ -578,7 +567,8 @@ export default function WorkOrderDashboard() {
       return {
         ...item,
         derivedStatus: levelStatus,
-        totalCostNum: Number(item.total_cost || 0),
+        totalCostNum: fin ? fin.final_cost : Number(item.total_cost || 0),
+        latest_date: fin ? fin.latest_date : null,
         projectName: combProjectName, 
         shipName: ship.toUpperCase(),
         vendorName: item.m_vendor_name || "Tanpa Vendor",
@@ -587,7 +577,49 @@ export default function WorkOrderDashboard() {
         createdAtStr: item.created_at ? item.created_at.split(' ')[0] : 'N/A'
       };
     });
-  }, [rawData]);
+  }, [rawData, financialData]);
+
+  const latestDatasetDate = useMemo(() => {
+    if (processedData.length === 0) return new Date();
+    
+    return processedData.reduce((latest, current) => {
+      const currentDate = current.latest_date ? new Date(current.latest_date) : null;
+      if (!currentDate || isNaN(currentDate.getTime())) return latest;
+      return currentDate > latest ? currentDate : latest;
+    }, new Date('2000-01-01'));
+  }, [processedData]);
+
+  // Kalkulasi Rentang Tanggal Efektif berdasarkan Preset
+  const effectiveDateRange = useMemo(() => {
+    const end = new Date(latestDatasetDate);
+    const start = new Date(latestDatasetDate);
+
+    if (datePreset === "week") {
+      start.setDate(end.getDate() - 7);
+    } else if (datePreset === "2weeks") {
+      start.setDate(end.getDate() - 14);
+    } else if (datePreset === "month") {
+      start.setDate(end.getDate() - 30);
+    } else if (datePreset === "3months") {
+      start.setDate(end.getDate() - 90);
+    } else if (datePreset === "6months") {
+      start.setDate(end.getDate() - 180);
+    } else if (datePreset === "year") {
+      start.setDate(end.getDate() - 365);
+    } else if (datePreset === "custom") {
+      const s = customStartDate ? new Date(customStartDate) : null;
+      const e = customEndDate ? new Date(customEndDate) : null;
+      return { 
+        start: s && !isNaN(s.getTime()) ? s : null, 
+        end: e && !isNaN(e.getTime()) ? e : null 
+      };
+    } else {
+      // "all"
+      return { start: null, end: null };
+    }
+
+    return { start, end };
+  }, [latestDatasetDate, datePreset, customStartDate, customEndDate]);
 
   // 1.1. Unsur filter list yang unik (filterOptions) - DIURUTKAN SECARA KRONOLOGIS (TERBARU DI ATAS)
   const filterOptions = useMemo(() => {
@@ -619,8 +651,9 @@ export default function WorkOrderDashboard() {
   const dateFilteredData = useMemo(() => {
     const { start, end } = effectiveDateRange;
     return processedData.filter(item => {
-      if (!item.created_at) return false;
-      const cleanStr = item.created_at.replace(' ', 'T');
+      // Gunakan latest_date agar sinkron dengan Financial Dashboard
+      if (!item.latest_date) return false;
+      const cleanStr = item.latest_date.replace(' ', 'T');
       const itemTime = new Date(cleanStr).getTime();
       if (isNaN(itemTime)) return false;
 
@@ -818,7 +851,9 @@ export default function WorkOrderDashboard() {
   const weeklyCostTrend = useMemo(() => {
     const groups: Record<string, { cost: number; count: number }> = {};
     filteredData.forEach(item => {
-      const targetDate = item.updated_at || item.created_at;
+      // Hanya plot dokumen yang sudah memiliki latest_date (approval finansial)
+      // untuk menyamakan bentuk grafik dengan Financial Dashboard
+      const targetDate = item.latest_date;
       if (!targetDate) return;
       
       let groupKey: string | null = "";
@@ -834,7 +869,12 @@ export default function WorkOrderDashboard() {
       if (!groups[groupKey]) {
         groups[groupKey] = { cost: 0, count: 0 };
       }
-      groups[groupKey].cost += item.totalCostNum;
+      
+      // Ambil nilai yang memang diproses pada hari/minggu/bulan tersebut
+      // Karena kita asumsikan targetDate = latest_date, maka biaya pada targetDate = latest_cost
+      const costToAdd = financialData[item.id] && financialData[item.id].latest_cost !== undefined ? financialData[item.id].latest_cost : item.totalCostNum;
+      
+      groups[groupKey].cost += costToAdd;
       groups[groupKey].count += 1;
     });
 
@@ -1394,7 +1434,7 @@ export default function WorkOrderDashboard() {
             </div>
             
             <div className="flex flex-wrap justify-between items-center text-[10px] text-slate-500 dark:text-slate-400 mt-2">
-              <span>* Data dihimpun berdasarkan tanggal logistik dibuat dalam database.</span>
+              <span>* Data dihimpun berdasarkan tanggal approval finansial.</span>
               <span className="font-mono text-indigo-500">
                 Penyaringan: {new Date(effectiveDateRange.start || latestDatasetDate).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' })} s.d {new Date(effectiveDateRange.end || latestDatasetDate).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' })}
               </span>
@@ -1676,48 +1716,40 @@ export default function WorkOrderDashboard() {
             </div>
 
             {/* Project Filter - SEKARANG DIURUTKAN SECARA KRONOLOGIS TERBARU DI ATAS */}
-            <div>
-              <select
+            <div className="flex-1 min-w-[200px] z-30">
+              <SearchableSelect 
                 value={selectedProject}
-                onChange={(e) => { setSelectedProject(e.target.value); setCurrentPage(1); }}
-                className={`w-full px-3 py-2 text-sm rounded-xl border focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-all ${isDarkMode ? 'bg-slate-800 border-slate-700 text-slate-100' : 'bg-slate-50 border-slate-200 text-slate-800'}`}
-              >
-                <option value="All">Proyek / JO - Kapal (Semua - Terbaru Teratas)</option>
-                {filterOptions.projects.filter(p => p !== "All").map(proj => (
-                  <option key={proj} value={proj}>{proj}</option>
-                ))}
-              </select>
+                onChange={(val) => { setSelectedProject(val); setCurrentPage(1); }}
+                options={filterOptions.projects.filter(p => p !== "All")}
+                allLabel="Proyek Kapal (Semua - Terbaru)"
+              />
             </div>
 
             {/* Status Filter */}
-            <div>
-              <select
+            <div className="flex-1 min-w-[200px] z-20">
+              <SearchableSelect 
                 value={selectedStatus}
-                onChange={(e) => { setSelectedStatus(e.target.value); setCurrentPage(1); }}
-                className={`w-full px-3 py-2 text-sm rounded-xl border focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-all ${isDarkMode ? 'bg-slate-800 border-slate-700 text-slate-100' : 'bg-slate-50 border-slate-200 text-slate-800'}`}
-              >
-                <option value="All">Status Approval (Semua)</option>
-                <option value="Waiting">Waiting (Level 0)</option>
-                <option value="Approval Level 1">Approval Level 1</option>
-                <option value="Approval Level 2">Approval Level 2</option>
-                <option value="Approval Level 3">Approval Level 3</option>
-                <option value="Approval Level 4">Approval Level 4</option>
-                <option value="Approval Level 5">Approval Level 5</option>
-              </select>
+                onChange={(val) => { setSelectedStatus(val); setCurrentPage(1); }}
+                options={[
+                  "Waiting",
+                  "Approval Level 1",
+                  "Approval Level 2",
+                  "Approval Level 3",
+                  "Approval Level 4",
+                  "Approval Level 5"
+                ]}
+                allLabel="Status Approval (Semua)"
+              />
             </div>
 
             {/* Vendor Filter */}
-            <div>
-              <select
+            <div className="flex-1 min-w-[200px] z-10">
+              <SearchableSelect 
                 value={selectedVendor}
-                onChange={(e) => { setSelectedVendor(e.target.value); setCurrentPage(1); }}
-                className={`w-full px-3 py-2 text-sm rounded-xl border focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-all ${isDarkMode ? 'bg-slate-800 border-slate-700 text-slate-100' : 'bg-slate-50 border-slate-200 text-slate-800'}`}
-              >
-                <option value="All">Vendor Rekanan (Semua)</option>
-                {filterOptions.vendors.filter(v => v !== "All").map(vend => (
-                  <option key={vend} value={vend}>{vend}</option>
-                ))}
-              </select>
+                onChange={(val) => { setSelectedVendor(val); setCurrentPage(1); }}
+                options={filterOptions.vendors.filter(v => v !== "All")}
+                allLabel="Vendor Rekanan (Semua)"
+              />
             </div>
 
           </div>
@@ -1754,11 +1786,11 @@ export default function WorkOrderDashboard() {
                   <th className="py-3.5 px-6 cursor-pointer group hover:bg-slate-100 transition select-none" onClick={() => handleSort('vendorName')}>
                     <div className="flex items-center">Vendor Rekanan {renderSortIcon('vendorName')}</div>
                   </th>
-                  <th className="py-3.5 px-6 text-right cursor-pointer group hover:bg-slate-100 transition select-none" onClick={() => handleSort('totalCostNum')}>
-                    <div className="flex items-center justify-end">Nilai WO {renderSortIcon('totalCostNum')}</div>
+                  <th className="px-6 py-4 font-bold uppercase tracking-wider text-right cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors" onClick={() => handleSort('totalCostNum')}>
+                    <div className="flex items-center justify-end">Nilai Sebelumnya {renderSortIcon('totalCostNum')}</div>
                   </th>
-                  <th className="py-3.5 px-6 text-right cursor-pointer group hover:bg-slate-100 transition select-none" onClick={() => handleSort('final_costs')}>
-                    <div className="flex items-center justify-end">Biaya Minggu Ini {renderSortIcon('final_costs')}</div>
+                  <th className="px-6 py-4 font-bold uppercase tracking-wider text-right cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors" onClick={() => handleSort('final_costs')}>
+                    <div className="flex items-center justify-end">Nilai Saat Ini {renderSortIcon('final_costs')}</div>
                   </th>
                   <th className="py-3.5 px-6 text-right cursor-pointer group hover:bg-slate-100 transition select-none" onClick={() => handleSort('pending_approvals')}>
                     <div className="flex items-center justify-end">Pending Approval {renderSortIcon('pending_approvals')}</div>
@@ -1820,7 +1852,7 @@ export default function WorkOrderDashboard() {
                       </td>
 
                       <td className="py-3.5 px-6 text-right font-semibold font-mono text-xs">
-                        {formatIDR(item.totalCostNum)}
+                        {previousCosts[item.id] !== undefined ? formatIDR(previousCosts[item.id]) : formatIDR(item.totalCostNum)}
                       </td>
 
                       {/* Kolom Biaya Harian Terakhir */}

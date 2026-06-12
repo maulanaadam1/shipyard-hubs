@@ -18,10 +18,14 @@ import {
   UserCheck,
   Copy,
   Eye,
-  EyeOff
+  EyeOff,
+  ArrowUp,
+  ArrowDown,
+  ArrowUpDown
 } from 'lucide-react';
 import { api, getHeaders } from '@/lib/api-client';
 import { useData } from '@/context/DataContext';
+import { SearchableSelect } from './SearchableSelect';
 
 const MOCK_DATA: any[] = [];
 
@@ -59,18 +63,23 @@ export default function FinancialDashboard() {
     localStorage.setItem('hideNominal_WO', newVal.toString());
   };
 
-  // Cross-filtering states
-  const [selectedWeekFilter, setSelectedWeekFilter] = useState<string | null>(null);
+  const [selectedTimeFilter, setSelectedTimeFilter] = useState<string | null>(null);
   const [selectedVendorFilter, setSelectedVendorFilter] = useState<string | null>(null);
   const [selectedShipFilter, setSelectedShipFilter] = useState<string | null>(null);
+  const [selectedApprovalFilter, setSelectedApprovalFilter] = useState<string>("all");
+  const [timeGroupBy, setTimeGroupBy] = useState<'day' | 'week' | 'month'>('week');
+  
+  // Table sorting states
+  const [sortColumn, setSortColumn] = useState<string>('latest_date');
+  const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc');
 
   // Clear cross-filters when date range changes
   useEffect(() => {
-    setSelectedWeekFilter(null);
+    setSelectedTimeFilter(null);
     setSelectedVendorFilter(null);
     setSelectedShipFilter(null);
     setCurrentPage(1);
-  }, [datePreset, customStartDate, customEndDate]);
+  }, [datePreset, customStartDate, customEndDate, timeGroupBy]);
 
   // --- Modal States ---
   const [selectedRow, setSelectedRow] = useState<any>(null);
@@ -428,11 +437,12 @@ export default function FinancialDashboard() {
         joCode: jo.toUpperCase(),
         woCode: item.code || "N/A",
         vendorName: item.m_vendor_name || "Tanpa Vendor",
-        final_cost: fin.final_cost,
+        final_cost: fin.latest_cost !== undefined ? fin.latest_cost : fin.final_cost, // Menggunakan latest_cost agar grafik murni delta
+        previous_cost: fin.previous_cost !== undefined ? fin.previous_cost : 0,
         latest_date: fin.latest_date,
         pending: fin.pending,
         derivedStatus: levelStatus,
-        totalCostNum: Number(item.total_cost || 0),
+        totalCostNum: fin.final_cost, // totalCostNum bisa mempertahankan nilai full WO jika dibutuhkan, atau pakai item.total_cost
         projectName: combProjectName,
         createdAtStr: item.created_at ? item.created_at.split(' ')[0] : 'N/A'
       };
@@ -448,17 +458,20 @@ export default function FinancialDashboard() {
     const years = new Set<string>();
     const projects = new Set<string>();
     const vendors = new Set<string>();
+    const approvals = new Set<string>();
 
     validData.forEach(item => {
       if (item.latest_date) years.add(item.latest_date.substring(0, 4));
       if (item.shipName) projects.add(item.shipName);
       if (item.vendorName) vendors.add(item.vendorName);
+      if (item.derivedStatus) approvals.add(item.derivedStatus);
     });
 
     return {
       years: Array.from(years).sort().reverse(),
       projects: Array.from(projects).sort(),
-      vendors: Array.from(vendors).sort()
+      vendors: Array.from(vendors).sort(),
+      approvals: Array.from(approvals).sort()
     };
   }, [validData]);
 
@@ -485,6 +498,9 @@ export default function FinancialDashboard() {
       if (globalYear !== "all" && !item.latest_date.startsWith(globalYear)) return false;
       if (globalProject !== "all" && item.shipName !== globalProject) return false;
       if (globalVendor !== "all" && item.vendorName !== globalVendor) return false;
+      if (selectedApprovalFilter !== "all") {
+        if (item.derivedStatus !== selectedApprovalFilter) return false;
+      }
 
       if (datePreset === "all") return true;
       const d = new Date(item.latest_date.replace(' ', 'T')).getTime();
@@ -497,55 +513,71 @@ export default function FinancialDashboard() {
       
       return d >= start.getTime() && d <= end.getTime();
     });
-  }, [validData, datePreset, customStartDate, customEndDate, latestDatasetDate, globalYear, globalProject, globalVendor]);
+  }, [validData, datePreset, customStartDate, customEndDate, latestDatasetDate, globalYear, globalProject, globalVendor, selectedApprovalFilter]);
 
-  const getStartOfWeek = (dateStr: string) => {
+  const getStartOfPeriod = (dateStr: string, period: 'day' | 'week' | 'month') => {
     if (!dateStr) return null;
     const cleanStr = dateStr.replace(' ', 'T');
     const d = new Date(cleanStr);
     if (isNaN(d.getTime())) return null;
     
-    const day = d.getDay();
-    // Week starts on Saturday (6)
-    const daysToSubtract = (day + 1) % 7;
-    const startOfWeek = new Date(d.setDate(d.getDate() - daysToSubtract));
-    return startOfWeek.toISOString().split('T')[0];
+    if (period === 'day') {
+      return d.toISOString().split('T')[0];
+    } else if (period === 'month') {
+      const year = d.getFullYear();
+      const month = String(d.getMonth() + 1).padStart(2, '0');
+      return `${year}-${month}-01`;
+    } else {
+      const day = d.getDay();
+      // Week starts on Saturday (6)
+      const daysToSubtract = (day + 1) % 7;
+      const startOfWeek = new Date(d.setDate(d.getDate() - daysToSubtract));
+      return startOfWeek.toISOString().split('T')[0];
+    }
   };
 
   const crossFilteredData = useMemo(() => {
     return dateFilteredData.filter(item => {
       let pass = true;
-      if (selectedWeekFilter && getStartOfWeek(item.latest_date) !== selectedWeekFilter) pass = false;
+      if (selectedTimeFilter && getStartOfPeriod(item.latest_date, timeGroupBy) !== selectedTimeFilter) pass = false;
       if (selectedVendorFilter && (item.vendorName || "Tanpa Vendor") !== selectedVendorFilter) pass = false;
       if (selectedShipFilter && (item.shipName || "Tanpa Proyek") !== selectedShipFilter) pass = false;
       return pass;
     });
-  }, [dateFilteredData, selectedWeekFilter, selectedVendorFilter, selectedShipFilter]);
+  }, [dateFilteredData, selectedTimeFilter, selectedVendorFilter, selectedShipFilter, timeGroupBy]);
 
-  const weeklyTrend = useMemo(() => {
+  const timeTrend = useMemo(() => {
     const groups: Record<string, number> = {};
     crossFilteredData.forEach(item => {
-      const week = getStartOfWeek(item.latest_date);
-      if (week) {
-        groups[week] = (groups[week] || 0) + item.final_cost;
+      const p = getStartOfPeriod(item.latest_date, timeGroupBy);
+      if (p) {
+        groups[p] = (groups[p] || 0) + item.final_cost;
       }
     });
 
-    return Object.keys(groups).sort().map(weekStr => {
-      const startD = new Date(weekStr);
-      const endD = new Date(startD);
-      endD.setDate(startD.getDate() + 6);
+    return Object.keys(groups).sort().map(pStr => {
+      const startD = new Date(pStr);
+      let label = "";
       
       const formatShort = (d: Date) => d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
-      const label = `${formatShort(startD)} - ${formatShort(endD)}`;
+      
+      if (timeGroupBy === 'day') {
+        label = formatShort(startD);
+      } else if (timeGroupBy === 'month') {
+        label = startD.toLocaleDateString('en-GB', { month: 'long', year: 'numeric' });
+      } else {
+        const endD = new Date(startD);
+        endD.setDate(startD.getDate() + 6);
+        label = `${formatShort(startD)} - ${formatShort(endD)}`;
+      }
 
       return {
-        week: weekStr,
+        period: pStr,
         label: label,
-        cost: groups[weekStr]
+        cost: groups[pStr]
       };
     });
-  }, [crossFilteredData]);
+  }, [crossFilteredData, timeGroupBy]);
 
   const vendorTrend = useMemo(() => {
     const groups: Record<string, number> = {};
@@ -580,12 +612,58 @@ export default function FinancialDashboard() {
       .sort((a, b) => b.cost - a.cost);
   }, [crossFilteredData]);
 
+  const sortedData = useMemo(() => {
+    return [...crossFilteredData].sort((a, b) => {
+      let aVal: any = '';
+      let bVal: any = '';
+      
+      switch (sortColumn) {
+        case 'latest_date':
+          aVal = new Date(a.latest_date).getTime();
+          bVal = new Date(b.latest_date).getTime();
+          break;
+        case 'woCode':
+          aVal = a.woCode || a.code || '';
+          bVal = b.woCode || b.code || '';
+          break;
+        case 'joCode':
+          aVal = a.joCode || '';
+          bVal = b.joCode || '';
+          break;
+        case 'shipName':
+          aVal = a.shipName || '';
+          bVal = b.shipName || '';
+          break;
+        case 'vendorName':
+          aVal = a.vendorName || '';
+          bVal = b.vendorName || '';
+          break;
+        case 'statusApproval':
+          aVal = a.derivedStatus || '';
+          bVal = b.derivedStatus || '';
+          break;
+        case 'prevCost':
+          aVal = Number(a.total_cost || 0);
+          bVal = Number(b.total_cost || 0);
+          break;
+        case 'finalCost':
+          aVal = Number(a.final_cost || 0);
+          bVal = Number(b.final_cost || 0);
+          break;
+      }
+
+      if (aVal < bVal) return sortDirection === 'asc' ? -1 : 1;
+      if (aVal > bVal) return sortDirection === 'asc' ? 1 : -1;
+      return 0;
+    });
+  }, [crossFilteredData, sortColumn, sortDirection]);
+
   const paginatedData = useMemo(() => {
     const startIndex = (currentPage - 1) * itemsPerPage;
-    return crossFilteredData.slice(startIndex, startIndex + itemsPerPage);
-  }, [crossFilteredData, currentPage]);
+    return sortedData.slice(startIndex, startIndex + itemsPerPage);
+  }, [sortedData, currentPage]);
 
-  const totalPages = Math.ceil(crossFilteredData.length / itemsPerPage) || 1;
+  const totalPages = Math.ceil(sortedData.length / itemsPerPage) || 1;
 
   const formatIDR = (value: number) => {
     if (isNominalHidden) return 'Rp ****';
@@ -596,25 +674,25 @@ export default function FinancialDashboard() {
     }).format(value);
   };
 
-  const totalPaymentValue = dateFilteredData.reduce((acc, curr) => acc + curr.final_cost, 0);
+  const totalPaymentValue = crossFilteredData.reduce((acc, curr) => acc + curr.final_cost, 0);
 
   const totalJO = useMemo(() => {
     const joSet = new Set<string>();
-    dateFilteredData.forEach(item => {
+    crossFilteredData.forEach(item => {
       if (item.joCode) joSet.add(item.joCode);
     });
     return joSet.size;
-  }, [dateFilteredData]);
+  }, [crossFilteredData]);
 
   // Chart Rendering (SVG)
   const renderChart = () => {
-    if (weeklyTrend.length === 0) return <div className="h-64 flex items-center justify-center text-slate-400">Belum ada data pembayaran</div>;
+    if (timeTrend.length === 0) return <div className="h-64 flex items-center justify-center text-slate-400">Belum ada data tagihan</div>;
     
-    const maxCost = Math.max(...weeklyTrend.map(t => t.cost), 1);
+    const maxCost = Math.max(...timeTrend.map(t => t.cost), 1);
     const width = 1000;
     const height = 240;
     const padding = 40;
-    const barWidth = Math.min(40, (width - 2 * padding) / weeklyTrend.length - 10);
+    const barWidth = Math.min(40, (width - 2 * padding) / timeTrend.length - 10);
 
     return (
       <svg viewBox={`0 0 ${width} ${height}`} className="w-full h-64 overflow-visible">
@@ -632,8 +710,8 @@ export default function FinancialDashboard() {
         })}
         
         {/* Bars */}
-        {weeklyTrend.map((item, idx) => {
-          const x = padding + (idx * (width - 2 * padding)) / (weeklyTrend.length || 1) + ((width - 2 * padding) / (weeklyTrend.length || 1)) / 2;
+        {timeTrend.map((item, idx) => {
+          const x = padding + (idx * (width - 2 * padding)) / (timeTrend.length || 1) + ((width - 2 * padding) / (timeTrend.length || 1)) / 2;
           const barH = (item.cost / maxCost) * (height - 2 * padding);
           const y = height - padding - barH;
           
@@ -641,18 +719,27 @@ export default function FinancialDashboard() {
             <g 
               key={idx} 
               className="cursor-pointer transition-opacity hover:opacity-80 group"
-              onClick={() => setSelectedWeekFilter(prev => prev === item.week ? null : item.week)}
+              onClick={() => setSelectedTimeFilter(prev => prev === item.period ? null : item.period)}
             >
               <rect 
                 x={x - barWidth / 2} 
                 y={y} 
                 width={barWidth} 
                 height={barH} 
-                fill={selectedWeekFilter && selectedWeekFilter !== item.week ? '#cbd5e1' : '#6366f1'} 
+                fill={selectedTimeFilter && selectedTimeFilter !== item.period ? '#cbd5e1' : '#6366f1'} 
                 rx="4" 
               />
               <text x={x} y={height - padding + 15} textAnchor="middle" className="text-[10px] fill-slate-500 font-medium">
-                {item.label.split(' - ')[0]}
+                {timeGroupBy === 'week' ? (
+                  <>
+                    <tspan x={x} dy="0">{item.label.split(' - ')[0]}</tspan>
+                    <tspan x={x} dy="12">- {item.label.split(' - ')[1]}</tspan>
+                  </>
+                ) : timeGroupBy === 'month' ? (
+                  item.label.split(' ')[0]
+                ) : (
+                  item.label
+                )}
               </text>
               
               {/* Tooltip on hover */}
@@ -753,7 +840,7 @@ export default function FinancialDashboard() {
       <header className="sticky top-0 z-30 border-b backdrop-blur-md px-6 py-4 flex flex-wrap justify-between items-center gap-4 bg-white/80 border-slate-200">
         <div>
           <h2 className="font-display font-bold text-xl md:text-2xl tracking-tight text-slate-800">Financial Dashboard</h2>
-          <p className="text-xs md:text-sm text-slate-500 mt-1">Monitoring Arus Kas & Pembayaran Mingguan (Berdasarkan Approval Date)</p>
+          <p className="text-xs md:text-sm text-slate-500 mt-1">Monitoring Arus Kas & Tagihan Mingguan (Berdasarkan Approval Date)</p>
         </div>
         <div className="flex items-center gap-3">
           {lastSyncDate && (
@@ -794,7 +881,7 @@ export default function FinancialDashboard() {
             <DollarSign className="w-6 h-6 md:w-7 md:h-7" />
           </div>
           <div className="min-w-0 flex-1">
-            <p className="text-[10px] md:text-xs font-semibold text-slate-400 uppercase tracking-wider leading-tight">Total Pembayaran Valid</p>
+            <p className="text-[10px] md:text-xs font-semibold text-slate-400 uppercase tracking-wider leading-tight">Total Tagihan Valid</p>
             <h3 className="text-lg md:text-xl lg:text-2xl font-bold mt-1 font-mono text-slate-800 leading-none break-all">{formatIDR(totalPaymentValue)}</h3>
           </div>
         </div>
@@ -805,7 +892,7 @@ export default function FinancialDashboard() {
           </div>
           <div className="min-w-0 flex-1">
             <p className="text-[10px] md:text-xs font-semibold text-slate-400 uppercase tracking-wider leading-tight">Jumlah Transaksi (WO)</p>
-            <h3 className="text-lg md:text-xl lg:text-2xl font-bold mt-1 text-slate-800 leading-none break-words">{dateFilteredData.length} Dokumen</h3>
+            <h3 className="text-lg md:text-xl lg:text-2xl font-bold mt-1 text-slate-800 leading-none break-words">{crossFilteredData.length} Dokumen</h3>
           </div>
         </div>
 
@@ -826,33 +913,43 @@ export default function FinancialDashboard() {
           <Filter size={16} />
           <span className="text-sm font-semibold">Filter Utama:</span>
         </div>
-        <div className={`grid grid-cols-1 md:grid-cols-2 gap-4 ${datePreset === "custom" ? "lg:grid-cols-6" : "lg:grid-cols-4"}`}>
-          <select 
-            className="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20"
-            value={globalYear}
-            onChange={e => setGlobalYear(e.target.value)}
-          >
-            <option value="all">Tahun (Semua)</option>
-            {filterOptions.years.map(y => <option key={y} value={y}>{y}</option>)}
-          </select>
+        <div className={`grid grid-cols-1 md:grid-cols-2 gap-4 ${datePreset === "custom" ? "lg:grid-cols-6" : "lg:grid-cols-5"}`}>
+          <div className="z-40">
+            <SearchableSelect 
+              value={globalYear}
+              onChange={setGlobalYear}
+              options={filterOptions.years}
+              allLabel="Tahun (Semua)"
+            />
+          </div>
 
-          <select 
-            className="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 truncate"
-            value={globalProject}
-            onChange={e => setGlobalProject(e.target.value)}
-          >
-            <option value="all">Proyek Kapal (Semua)</option>
-            {filterOptions.projects.map(p => <option key={p} value={p}>{p}</option>)}
-          </select>
+          <div className="z-30">
+            <SearchableSelect 
+              value={globalProject}
+              onChange={setGlobalProject}
+              options={filterOptions.projects}
+              allLabel="Proyek Kapal (Semua)"
+            />
+          </div>
 
-          <select 
-            className="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 truncate"
-            value={globalVendor}
-            onChange={e => setGlobalVendor(e.target.value)}
-          >
-            <option value="all">Vendor (Semua)</option>
-            {filterOptions.vendors.map(v => <option key={v} value={v}>{v}</option>)}
-          </select>
+          <div className="z-20">
+            <SearchableSelect 
+              value={globalVendor}
+              onChange={setGlobalVendor}
+              options={filterOptions.vendors}
+              allLabel="Vendor (Semua)"
+            />
+          </div>
+          
+          <div className="z-10">
+            <SearchableSelect 
+              value={selectedApprovalFilter}
+              onChange={setSelectedApprovalFilter}
+              options={filterOptions.approvals}
+              allLabel="Status Approval (Semua)"
+              uppercaseText={true}
+            />
+          </div>
 
           <select 
             className="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20"
@@ -892,12 +989,12 @@ export default function FinancialDashboard() {
 
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
         {/* Active Filters Indicators */}
-        {(selectedWeekFilter || selectedVendorFilter || selectedShipFilter) && (
+        {(selectedTimeFilter || selectedVendorFilter || selectedShipFilter) && (
           <div className="xl:col-span-3 flex items-center gap-3 mb-[-1rem]">
             <span className="text-xs font-bold text-slate-500">Filter Aktif:</span>
-            {selectedWeekFilter && (
-              <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-bold bg-indigo-100 text-indigo-700 cursor-pointer hover:bg-indigo-200 transition" onClick={() => setSelectedWeekFilter(null)}>
-                Minggu: {selectedWeekFilter} &times;
+            {selectedTimeFilter && (
+              <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-bold bg-indigo-100 text-indigo-700 cursor-pointer hover:bg-indigo-200 transition" onClick={() => setSelectedTimeFilter(null)}>
+                Waktu: {selectedTimeFilter} &times;
               </span>
             )}
             {selectedVendorFilter && (
@@ -911,7 +1008,7 @@ export default function FinancialDashboard() {
               </span>
             )}
             <button 
-              onClick={() => { setSelectedWeekFilter(null); setSelectedVendorFilter(null); setSelectedShipFilter(null); }}
+              onClick={() => { setSelectedTimeFilter(null); setSelectedVendorFilter(null); setSelectedShipFilter(null); }}
               className="text-[10px] font-bold text-slate-400 hover:text-red-500 transition underline ml-2"
             >
               Hapus Semua Filter
@@ -920,10 +1017,27 @@ export default function FinancialDashboard() {
         )}
 
         <section className="p-6 rounded-2xl border border-slate-200 bg-white shadow-sm transition-all xl:col-span-2">
-          <h3 className="text-lg font-bold text-slate-800 mb-6 flex items-center gap-2">
-            <BarChart3 size={20} className="text-indigo-500" />
-            Grafik Pembayaran Mingguan
-          </h3>
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-6 gap-4">
+            <h3 className="text-lg font-bold text-slate-800 flex items-center gap-2 shrink-0">
+              <BarChart3 size={20} className="text-indigo-500" />
+              Grafik Tagihan
+            </h3>
+            
+            <div className="flex bg-slate-100 p-1 rounded-lg w-fit">
+              <button 
+                onClick={() => setTimeGroupBy('day')} 
+                className={`px-3 py-1.5 text-xs font-bold rounded-md transition-all ${timeGroupBy === 'day' ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+              >Harian</button>
+              <button 
+                onClick={() => setTimeGroupBy('week')} 
+                className={`px-3 py-1.5 text-xs font-bold rounded-md transition-all ${timeGroupBy === 'week' ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+              >Mingguan</button>
+              <button 
+                onClick={() => setTimeGroupBy('month')} 
+                className={`px-3 py-1.5 text-xs font-bold rounded-md transition-all ${timeGroupBy === 'month' ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+              >Bulanan</button>
+            </div>
+          </div>
           <div className="w-full overflow-x-auto pb-4">
             <div className="min-w-[700px]">
               {renderChart()}
@@ -952,7 +1066,7 @@ export default function FinancialDashboard() {
         <div className="px-6 py-4 border-b border-slate-100 flex justify-between items-center">
           <h3 className="text-base font-bold text-slate-800 flex items-center gap-2">
             <CalendarIcon size={18} className="text-indigo-500" />
-            Daftar Transaksi Pembayaran
+            Daftar Transaksi Tagihan
           </h3>
           <span className="text-xs font-semibold text-slate-400">Halaman {currentPage} dari {totalPages}</span>
         </div>
@@ -961,20 +1075,44 @@ export default function FinancialDashboard() {
           <table className="w-full text-left">
             <thead>
               <tr className="bg-slate-50 border-b border-slate-100 text-xs font-bold uppercase tracking-wider text-slate-400">
-                <th className="py-3 px-6">Tanggal Approval</th>
-                <th className="py-3 px-6">Kode WO</th>
-                <th className="py-3 px-6">Kode JO</th>
-                <th className="py-3 px-6">Proyek (Kapal)</th>
-                <th className="py-3 px-6">Vendor</th>
-                <th className="py-3 px-6">Status Approval</th>
-                <th className="py-3 px-6 text-right">Nilai Sebelumnya</th>
-                <th className="py-3 px-6 text-right text-blue-500">Nilai Saat Ini</th>
+                {[
+                  { key: 'latest_date', label: 'Tanggal Approval' },
+                  { key: 'woCode', label: 'Kode WO' },
+                  { key: 'joCode', label: 'Kode JO' },
+                  { key: 'shipName', label: 'Proyek (Kapal)' },
+                  { key: 'vendorName', label: 'Vendor' },
+                  { key: 'statusApproval', label: 'Status Approval' },
+                  { key: 'prevCost', label: 'Nilai Sebelumnya', align: 'right' },
+                  { key: 'finalCost', label: 'Nilai Saat Ini', align: 'right', extraClass: 'text-blue-500' }
+                ].map(col => (
+                  <th 
+                    key={col.key} 
+                    className={`py-3 px-6 cursor-pointer hover:bg-slate-100 transition-colors ${col.align === 'right' ? 'text-right' : 'text-left'} ${col.extraClass || ''}`}
+                    onClick={() => {
+                      if (sortColumn === col.key) {
+                        setSortDirection(prev => prev === 'asc' ? 'desc' : 'asc');
+                      } else {
+                        setSortColumn(col.key);
+                        setSortDirection('asc');
+                      }
+                    }}
+                  >
+                    <div className={`flex items-center gap-1 ${col.align === 'right' ? 'justify-end' : ''}`}>
+                      {col.label}
+                      {sortColumn === col.key ? (
+                        sortDirection === 'asc' ? <ArrowUp size={12} className="text-indigo-500" /> : <ArrowDown size={12} className="text-indigo-500" />
+                      ) : (
+                        <ArrowUpDown size={12} className="text-slate-300 opacity-0 group-hover:opacity-100 transition-opacity" />
+                      )}
+                    </div>
+                  </th>
+                ))}
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-50 text-sm">
               {paginatedData.length === 0 ? (
                 <tr>
-                  <td colSpan={8} className="py-12 text-center text-slate-400 text-xs">Belum ada data pembayaran riil yang ditarik.</td>
+                  <td colSpan={8} className="py-12 text-center text-slate-400 text-xs">Belum ada data tagihan riil yang ditarik.</td>
                 </tr>
               ) : (
                 paginatedData.map(item => (
@@ -1001,7 +1139,7 @@ export default function FinancialDashboard() {
                         {item.derivedStatus}
                       </span>
                     </td>
-                    <td className="py-3 px-6 text-right font-mono text-slate-400 text-xs">{formatIDR(item.total_cost || 0)}</td>
+                    <td className="py-3 px-6 text-right font-mono text-slate-400 text-xs">{formatIDR(item.previous_cost !== undefined ? item.previous_cost : (item.total_cost || 0))}</td>
                     <td className="py-3 px-6 text-right font-mono font-bold text-blue-600 text-sm">{formatIDR(item.final_cost)}</td>
                   </tr>
                 ))

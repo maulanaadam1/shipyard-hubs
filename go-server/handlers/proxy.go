@@ -265,9 +265,11 @@ func PostBulkPendingApprovals(w http.ResponseWriter, r *http.Request) {
 	}
 
 	type BulkResult struct {
-		Pending    float64 `json:"pending"`
-		FinalCost  float64 `json:"final_cost"`
-		LatestDate string  `json:"latest_date"`
+		Pending      float64 `json:"pending"`
+		FinalCost    float64 `json:"final_cost"`
+		LatestDate   string  `json:"latest_date"`
+		LatestCost   float64 `json:"latest_cost"`
+		PreviousCost float64 `json:"previous_cost"`
 	}
 
 	var wg sync.WaitGroup
@@ -531,13 +533,26 @@ func PostBulkPendingApprovals(w http.ResponseWriter, r *http.Request) {
 						}
 					}
 					
+					var latestCost float64
+					var previousCost float64
+					if latestDate != "" {
+						latestCost = dailyCosts[latestDate]
+						previousCost = finalCostSum - latestCost
+					} else {
+						// Jika belum ada latestDate (belum ada yang di-approve), maka finalCost = 0
+						latestCost = 0
+						previousCost = 0
+					}
+					
 					var finalCost float64 = finalCostSum
 					
 					mu.Lock()
 					result[id] = BulkResult{
-						Pending:    pendingSum,
-						FinalCost:  finalCost,
-						LatestDate: latestDate,
+						Pending:      pendingSum,
+						FinalCost:    finalCost,
+						LatestDate:   latestDate,
+						LatestCost:   latestCost,
+						PreviousCost: previousCost,
 					}
 					mu.Unlock()
 				}
