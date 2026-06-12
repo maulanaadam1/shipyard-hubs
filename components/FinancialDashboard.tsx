@@ -297,27 +297,43 @@ export default function FinancialDashboard() {
 
   const fetchSyncData = async () => {
     try {
-      const { data } = await api.from('sync_configs').select('*').eq('id', 'WorkOrders');
-      if (data && data.length > 0) {
-        const syncConfig = data[0];
-        if (syncConfig.last_response) {
-          const parsed = JSON.parse(syncConfig.last_response);
-          let list = [];
-          if (Array.isArray(parsed)) list = parsed;
-          else if (parsed.data && Array.isArray(parsed.data)) list = parsed.data;
-          
-          if (list.length > 0) {
-            setRawData(list);
-            setLastSyncDate(syncConfig.last_sync || '');
-
-            // Update global cache
-            setSyncCache(prev => ({ ...prev, WorkOrders: list }));
-            setSyncDates(prev => ({ ...prev, WorkOrders: syncConfig.last_sync || '' }));
+      // 1. Coba ambil dari Redis via API Go Server (Lebih cepat)
+      const headers = await getHeaders();
+      let res = await fetch('/api/cache/WorkOrders', { headers });
+      
+      let parsed = null;
+      let lastSync = '';
+      
+      if (res.ok) {
+        parsed = await res.json();
+      } else {
+        // 2. Fallback: ambil dari SQLite/Supabase jika API gagal (misal server belum direstart)
+        const { data } = await api.from('sync_configs').select('*').eq('id', 'WorkOrders');
+        if (data && data.length > 0) {
+          const syncConfig = data[0];
+          lastSync = syncConfig.last_sync || '';
+          if (syncConfig.last_response) {
+            parsed = JSON.parse(syncConfig.last_response);
           }
         }
       }
+
+      if (parsed) {
+        let list = [];
+        if (Array.isArray(parsed)) list = parsed;
+        else if (parsed.data && Array.isArray(parsed.data)) list = parsed.data;
+        
+        if (list.length > 0) {
+          setRawData(list);
+          setLastSyncDate(lastSync || '');
+
+          // Update global cache
+          setSyncCache(prev => ({ ...prev, WorkOrders: list }));
+          setSyncDates(prev => ({ ...prev, WorkOrders: lastSync || '' }));
+        }
+      }
     } catch(e) {
-      console.error(e);
+      console.error("Gagal narik data dari cache/db:", e);
     }
   };
 

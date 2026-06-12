@@ -137,7 +137,19 @@ func RunSyncJob(force bool, targetId string) {
 		resp.Body.Close()
 		if err == nil {
 			now := time.Now().Format("2006-01-02 15:04:05")
-			_, err = db.DB.Exec("UPDATE sync_configs SET last_sync = ?, last_response = ? WHERE id = ?", now, string(bodyBytes), id)
+			
+			if db.RDB != nil {
+				// Store massive JSON in Redis
+				cacheKey := "cache:" + id
+				db.RDB.Set(db.Ctx, cacheKey, string(bodyBytes), 0)
+				
+				// Update ONLY last_sync in SQL to prevent bloat
+				_, err = db.DB.Exec("UPDATE sync_configs SET last_sync = ? WHERE id = ?", now, id)
+			} else {
+				// Fallback: save to SQL directly
+				_, err = db.DB.Exec("UPDATE sync_configs SET last_sync = ?, last_response = ? WHERE id = ?", now, string(bodyBytes), id)
+			}
+			
 			if err != nil {
 				log.Printf("SyncWorker DB error updating %s: %v", id, err)
 			} else {

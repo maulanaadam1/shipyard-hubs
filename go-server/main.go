@@ -19,6 +19,7 @@ import (
 
 func main() {
 	db.Init()
+	db.InitRedis()
 	workers.StartSyncWorker()
 
 	r := chi.NewRouter()
@@ -60,6 +61,9 @@ func main() {
 		// Generic CRUD — Staff: read only, Admin/Manager: write
 		r.Get("/api/data/{table}", handlers.GetData)
 		r.Get("/api/stats", handlers.GetStats)
+
+		// Cache Read (Redis/Fallback)
+		r.Get("/api/cache/{id}", handlers.GetCacheData)
 
 		// Proxy for single Work Order Detail
 		r.Get("/api/work-orders/{id}/detail", handlers.GetWorkOrderDetail)
