@@ -457,12 +457,12 @@ func PostBulkPendingApprovals(w http.ResponseWriter, r *http.Request) {
 								costToAdd := float64(0)
 								baseCost := parseFloatAny(item["volume_cost_final"])
 								if baseCost > 0 {
-									vol := parseFloatAny(item["volume"])
+									// volume_cost_final is already multiplied by volume! Do not multiply it again.
 									prog := float64(100)
 									if _, hasProg := item["progress"]; hasProg {
 										prog = parseFloatAny(item["progress"])
 									}
-									costToAdd = baseCost * vol * (prog / 100)
+									costToAdd = baseCost * (prog / 100)
 								} else {
 									tPrice := parseFloatAny(item["total_price"])
 									if tPrice > 0 {
@@ -539,9 +539,9 @@ func PostBulkPendingApprovals(w http.ResponseWriter, r *http.Request) {
 						latestCost = dailyCosts[latestDate]
 						previousCost = finalCostSum - latestCost
 					} else {
-						// Jika belum ada latestDate (belum ada yang di-approve), maka finalCost = 0
+						// Jika tanggal kosong tapi ada finalCostSum (misal dari Global Approved)
 						latestCost = 0
-						previousCost = 0
+						previousCost = finalCostSum
 					}
 					
 					var finalCost float64 = finalCostSum

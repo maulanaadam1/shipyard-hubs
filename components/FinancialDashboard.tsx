@@ -38,7 +38,7 @@ export default function FinancialDashboard() {
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 10;
   
-  const [datePreset, setDatePreset] = useState("1month");
+  const [datePreset, setDatePreset] = useState("1week");
   const [customStartDate, setCustomStartDate] = useState("");
   const [customEndDate, setCustomEndDate] = useState("");
 
@@ -67,7 +67,7 @@ export default function FinancialDashboard() {
   const [selectedVendorFilter, setSelectedVendorFilter] = useState<string | null>(null);
   const [selectedShipFilter, setSelectedShipFilter] = useState<string | null>(null);
   const [selectedApprovalFilter, setSelectedApprovalFilter] = useState<string>("all");
-  const [timeGroupBy, setTimeGroupBy] = useState<'day' | 'week' | 'month'>('week');
+  const [timeGroupBy, setTimeGroupBy] = useState<'day' | 'week' | 'month'>('day');
   
   // Table sorting states
   const [sortColumn, setSortColumn] = useState<string>('latest_date');
@@ -421,7 +421,8 @@ export default function FinancialDashboard() {
   const validData = useMemo(() => {
     return rawData.filter(item => {
       const fin = financialData[item.id];
-      return fin && fin.final_cost > 0 && fin.latest_date;
+      // Hapus syarat fin.latest_date agar nominal tetap muncul meski tanggal kosong
+      return fin && fin.final_cost > 0;
     }).map(item => {
       const fin = financialData[item.id];
       const jo = item.jo_code || "N/A";
@@ -479,9 +480,9 @@ export default function FinancialDashboard() {
     const end = new Date(latestDatasetDate);
     const start = new Date(latestDatasetDate);
 
-    if (datePreset === "1week") start.setDate(end.getDate() - 7);
-    else if (datePreset === "2weeks") start.setDate(end.getDate() - 14);
-    else if (datePreset === "3weeks") start.setDate(end.getDate() - 21);
+    if (datePreset === "1week") start.setDate(end.getDate() - 6);
+    else if (datePreset === "2weeks") start.setDate(end.getDate() - 13);
+    else if (datePreset === "3weeks") start.setDate(end.getDate() - 20);
     else if (datePreset === "1month") start.setMonth(end.getMonth() - 1);
     else if (datePreset === "2months") start.setMonth(end.getMonth() - 2);
     else if (datePreset === "3months") start.setMonth(end.getMonth() - 3);
@@ -503,6 +504,10 @@ export default function FinancialDashboard() {
       }
 
       if (datePreset === "all") return true;
+      // Jika tanggal kosong, berikan opsi untuk tetap menampilkannya jika filter adalah 'all'
+      // Untuk filter spesifik, jika tidak punya tanggal, kita skip (atau sesuai preferensi, tapi masuk akal diskip)
+      if (!item.latest_date) return false;
+
       const d = new Date(item.latest_date.replace(' ', 'T')).getTime();
       
       if (datePreset === "custom") {
@@ -1139,7 +1144,7 @@ export default function FinancialDashboard() {
                         {item.derivedStatus}
                       </span>
                     </td>
-                    <td className="py-3 px-6 text-right font-mono text-slate-400 text-xs">{formatIDR(item.previous_cost !== undefined ? item.previous_cost : (item.total_cost || 0))}</td>
+                    <td className="py-3 px-6 text-right font-mono text-slate-400 text-xs">{formatIDR(item.previous_cost !== undefined ? item.previous_cost : 0)}</td>
                     <td className="py-3 px-6 text-right font-mono font-bold text-blue-600 text-sm">{formatIDR(item.final_cost)}</td>
                   </tr>
                 ))

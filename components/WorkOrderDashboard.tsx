@@ -54,7 +54,7 @@ export default function WorkOrderDashboard() {
   const [selectedVendor, setSelectedVendor] = useState("All");
   
   // Date Filtering States
-  const [datePreset, setDatePreset] = useState("3months"); // Options: "week", "month", "3months", "6months", "year", "all", "custom"
+  const [datePreset, setDatePreset] = useState("week"); // Options: "week", "month", "3months", "6months", "year", "all", "custom"
   const [customStartDate, setCustomStartDate] = useState("");
   const [customEndDate, setCustomEndDate] = useState("");
 
@@ -84,6 +84,7 @@ export default function WorkOrderDashboard() {
   const [finalCosts, setFinalCosts] = useState<Record<string, number>>({});
   const [previousCosts, setPreviousCosts] = useState<Record<string, number>>({});
   const [finalDates, setFinalDates] = useState<Record<string, string>>({});
+  const [trendGroupingMode, setTrendGroupingMode] = useState<'daily' | 'weekly' | 'monthly'>('weekly');
   const [sortColumn, setSortColumn] = useState('created_at');
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc');
 
@@ -567,7 +568,9 @@ export default function WorkOrderDashboard() {
       return {
         ...item,
         derivedStatus: levelStatus,
-        totalCostNum: fin ? fin.final_cost : Number(item.total_cost || 0),
+        fullWoCost: Number(item.total_cost || 0),
+        fullApprovedCost: fin ? fin.final_cost : 0,
+        totalCostNum: fin && fin.latest_cost !== undefined ? fin.latest_cost : (fin ? fin.final_cost : Number(item.total_cost || 0)), // Delta for compatibility
         latest_date: fin ? fin.latest_date : null,
         projectName: combProjectName, 
         shipName: ship.toUpperCase(),
@@ -595,17 +598,17 @@ export default function WorkOrderDashboard() {
     const start = new Date(latestDatasetDate);
 
     if (datePreset === "week") {
-      start.setDate(end.getDate() - 7);
+      start.setDate(end.getDate() - 6);
     } else if (datePreset === "2weeks") {
-      start.setDate(end.getDate() - 14);
+      start.setDate(end.getDate() - 13);
     } else if (datePreset === "month") {
-      start.setDate(end.getDate() - 30);
+      start.setMonth(end.getMonth() - 1);
     } else if (datePreset === "3months") {
-      start.setDate(end.getDate() - 90);
+      start.setMonth(end.getMonth() - 3);
     } else if (datePreset === "6months") {
-      start.setDate(end.getDate() - 180);
+      start.setMonth(end.getMonth() - 6);
     } else if (datePreset === "year") {
-      start.setDate(end.getDate() - 365);
+      start.setFullYear(end.getFullYear() - 1);
     } else if (datePreset === "custom") {
       const s = customStartDate ? new Date(customStartDate) : null;
       const e = customEndDate ? new Date(customEndDate) : null;
@@ -650,8 +653,13 @@ export default function WorkOrderDashboard() {
   // 2. Terapkan Filter Tanggal Terlebih Dahulu (Dasar dari Seluruh Komponen Dashboard)
   const dateFilteredData = useMemo(() => {
     const { start, end } = effectiveDateRange;
+    
+    // Jika tidak ada filter tanggal aktif (Semua / All), return semua data
+    if (!start && !end) return processedData;
+
     return processedData.filter(item => {
-      // Gunakan latest_date agar sinkron dengan Financial Dashboard
+      // Untuk filter spesifik, jika tanggal kosong, maka skip. 
+      // Jika filter adalah "Semua", sudah tertangkap oleh return processedData di atas.
       if (!item.latest_date) return false;
       const cleanStr = item.latest_date.replace(' ', 'T');
       const itemTime = new Date(cleanStr).getTime();
@@ -786,7 +794,9 @@ export default function WorkOrderDashboard() {
     const projectSet = new Set(filteredData.map(d => d.projectName));
     const totalProjects = projectSet.size;
 
-    const totalCostValue = filteredData.reduce((acc, curr) => acc + curr.totalCostNum, 0);
+    // Kalkulasi Total Estimasi Biaya (berdasarkan nilai approve penuh, bukan delta, atau gunakan fullWoCost jika dinginkan)
+    // Sebaiknya ini menggunakan fullApprovedCost agar yang dijumlahkan adalah nominal yang fix.
+    const totalCostValue = filteredData.reduce((acc, curr) => acc + curr.fullApprovedCost, 0);
 
     const approvalCounts: Record<string, number> = {
       "Waiting": 0,
@@ -829,23 +839,22 @@ export default function WorkOrderDashboard() {
     return startOfWeek.toISOString().split('T')[0];
   };
 
-  // Pengelompokan dinamis (Daily / Weekly / Monthly) agar grafik terlihat seimbang
-  const trendGroupingMode = useMemo(() => {
-    if (datePreset === "week") return "daily";
-    if (datePreset === "2weeks") return "daily";
-    if (datePreset === "month") return "weekly";
-    if (datePreset === "3months") return "monthly"; // 3 bulan dikelompokkan bulanan
-    if (datePreset === "6months") return "monthly"; // 6 bulan dikelompokkan bulanan (Sintaks telah diperbaiki dari kesalahan return=)
-    if (datePreset === "year") return "monthly";
-    
-    const { start, end } = effectiveDateRange;
-    if (!start || !end) return "monthly"; 
-    
-    const diffDays = Math.ceil(Math.abs(end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24));
-    if (diffDays <= 10) return "daily";
-    if (diffDays <= 100) return "weekly";
-    return "monthly";
-  }, [datePreset, effectiveDateRange]);
+  // Update otomatis trendGroupingMode ketika preset tanggal berubah (dengan fallback ke manual override jika user klik toggle)
+  useEffect(() => {
+    if (datePreset === "week") setTrendGroupingMode("daily");
+    else if (datePreset === "2weeks") setTrendGroupingMode("daily");
+    else if (datePreset === "month") setTrendGroupingMode("weekly");
+    else if (datePreset === "3months") setTrendGroupingMode("monthly");
+    else if (datePreset === "6months") setTrendGroupingMode("monthly");
+    else if (datePreset === "year") setTrendGroupingMode("monthly");
+    else if (datePreset === "all") setTrendGroupingMode("monthly");
+    else if (datePreset === "custom" && effectiveDateRange.start && effectiveDateRange.end) {
+      const diffDays = Math.ceil(Math.abs(effectiveDateRange.end.getTime() - effectiveDateRange.start.getTime()) / (1000 * 60 * 60 * 24));
+      if (diffDays <= 14) setTrendGroupingMode("daily");
+      else if (diffDays <= 90) setTrendGroupingMode("weekly");
+      else setTrendGroupingMode("monthly");
+    }
+  }, [datePreset, effectiveDateRange.start, effectiveDateRange.end]);
 
   // Kalkulasi Tren Finansial Mingguan / Harian / Bulanan secara Kronologis
   const weeklyCostTrend = useMemo(() => {
@@ -1258,9 +1267,22 @@ export default function WorkOrderDashboard() {
                 <div>
                   <h3 className="text-sm font-bold uppercase tracking-wide text-slate-400 flex items-center gap-1.5">
                     <Calendar size={16} className="text-indigo-500" />
-                    Tren Biaya Operasional ({trendGroupingMode === "daily" ? "Harian" : trendGroupingMode === "weekly" ? "Mingguan" : "Bulanan"})
+                    Tren Biaya Operasional
                   </h3>
-                  <p className="text-[10px] text-slate-400 font-medium">Pengelompokan otomatis menyesuaikan jangka waktu</p>
+                  <div className="flex flex-wrap items-center gap-1.5 mt-2">
+                    <button 
+                      onClick={() => setTrendGroupingMode('daily')} 
+                      className={`px-2.5 py-1 rounded-lg text-[11px] font-bold transition-all ${trendGroupingMode === 'daily' ? 'bg-indigo-600 text-white shadow-sm' : 'bg-slate-500/5 hover:bg-slate-500/10 text-slate-500 dark:text-slate-400'}`}
+                    >Harian</button>
+                    <button 
+                      onClick={() => setTrendGroupingMode('weekly')} 
+                      className={`px-2.5 py-1 rounded-lg text-[11px] font-bold transition-all ${trendGroupingMode === 'weekly' ? 'bg-indigo-600 text-white shadow-sm' : 'bg-slate-500/5 hover:bg-slate-500/10 text-slate-500 dark:text-slate-400'}`}
+                    >Mingguan</button>
+                    <button 
+                      onClick={() => setTrendGroupingMode('monthly')} 
+                      className={`px-2.5 py-1 rounded-lg text-[11px] font-bold transition-all ${trendGroupingMode === 'monthly' ? 'bg-indigo-600 text-white shadow-sm' : 'bg-slate-500/5 hover:bg-slate-500/10 text-slate-500 dark:text-slate-400'}`}
+                    >Bulanan</button>
+                  </div>
                 </div>
 
                 {/* Preset Buttons */}
@@ -1852,7 +1874,7 @@ export default function WorkOrderDashboard() {
                       </td>
 
                       <td className="py-3.5 px-6 text-right font-semibold font-mono text-xs">
-                        {previousCosts[item.id] !== undefined ? formatIDR(previousCosts[item.id]) : formatIDR(item.totalCostNum)}
+                        {previousCosts[item.id] !== undefined ? formatIDR(previousCosts[item.id]) : formatIDR(0)}
                       </td>
 
                       {/* Kolom Biaya Harian Terakhir */}
