@@ -152,23 +152,10 @@ func GetPendingApprovals(w http.ResponseWriter, r *http.Request) {
 			continue
 		}
 
-		var isGlobalApproved bool
-		var dataObj map[string]interface{}
-		if d, ok := dynamic["data"].(map[string]interface{}); ok {
-			dataObj = d
-		} else {
-			dataObj = dynamic
-		}
-		if tJobOrder, ok := dataObj["t_job_order"].(map[string]interface{}); ok {
-			if appStatus, ok := tJobOrder["approval_status"].(string); ok {
-				if strings.ToLower(strings.TrimSpace(appStatus)) == "approved" {
-					isGlobalApproved = true
-				}
-			}
-		}
+
 
 		var sum float64
-		if !isGlobalApproved {
+		if true { // Ensure items are always processed regardless of global approval
 			var sumPending func(items []interface{})
 			sumPending = func(items []interface{}) {
 				for _, itemRaw := range items {
@@ -409,7 +396,7 @@ func PostBulkPendingApprovals(w http.ResponseWriter, r *http.Request) {
 									dateToUse = rootCreatedAt
 								}
 
-								isAppr5 := approvedLevel >= 5 || isGlobalApproved || statusAppr == "approved" || statusAppr == "approved level 5"
+								isAppr5 := approvedLevel >= 5 || statusAppr == "approved" || statusAppr == "approved level 5"
 								isWaiting := approvedLevel == 0 || statusAppr == "waiting"
 
 								if isAppr5 && dateToUse > latestApprove5Date {
@@ -471,7 +458,7 @@ func PostBulkPendingApprovals(w http.ResponseWriter, r *http.Request) {
 								}
 
 								isRejected := statusAppr == "rejected"
-								isAppr5 := !isRejected && (approvedLevel >= 5 || isGlobalApproved || statusAppr == "approved" || statusAppr == "approved level 5")
+								isAppr5 := !isRejected && (approvedLevel >= 5 || statusAppr == "approved" || statusAppr == "approved level 5")
 								isLevel1To4 := !isRejected && (approvedLevel >= 1 && approvedLevel <= 4 || strings.HasPrefix(statusAppr, "level") || strings.HasPrefix(statusAppr, "approved level"))
 								isAppr := isAppr5 || (allowLevel1To4 && isLevel1To4)
 

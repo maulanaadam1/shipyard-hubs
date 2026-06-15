@@ -1874,7 +1874,11 @@ export default function WorkOrderDashboard() {
                       </td>
 
                       <td className="py-3.5 px-6 text-right font-semibold font-mono text-xs">
-                        {previousCosts[item.id] !== undefined ? formatIDR(previousCosts[item.id]) : formatIDR(0)}
+                        {(previousCosts[item.id] !== undefined && previousCosts[item.id] > 0) ? (
+                          formatIDR(previousCosts[item.id])
+                        ) : (
+                          <span className="text-slate-400">-</span>
+                        )}
                       </td>
 
                       {/* Kolom Biaya Harian Terakhir */}
@@ -1987,7 +1991,7 @@ export default function WorkOrderDashboard() {
                   <p className="text-xs text-slate-400 font-bold uppercase tracking-wider mb-2">Total Biaya Jasa</p>
                   <div className="flex flex-col">
                     <p className="text-2xl font-black font-mono text-emerald-600 tracking-tighter">
-                      {formatIDR(selectedRow.totalCostNum)}
+                      {formatIDR(financialData[selectedRow.id] ? financialData[selectedRow.id].final_cost : selectedRow.totalCostNum)}
                     </p>
                     {detailChartConfig && detailChartConfig.unapprovedCost > 0 && (
                       <p className="text-xs font-mono font-medium text-amber-500 mt-1 bg-amber-50 px-2 py-0.5 rounded w-fit border border-amber-100" title="Estimasi biaya yang belum mencapai Approval Level 5">
