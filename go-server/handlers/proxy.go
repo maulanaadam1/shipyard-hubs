@@ -182,10 +182,22 @@ func GetPendingApprovals(w http.ResponseWriter, r *http.Request) {
 		
 						// Only sum if NOT fully approved (level 5 or status 'approved')
 						if approvedLevel < 5 && statusAppr != "approved" {
-							if cost, ok := item["volume_cost_final"].(float64); ok {
-								sum += cost
-							} else if cost, ok := item["total_price"].(float64); ok {
-								sum += cost
+							baseCost := parseFloatAny(item["volume_cost_final"])
+							if baseCost > 0 {
+								prog := float64(100)
+								if _, hasProg := item["progress"]; hasProg {
+									prog = parseFloatAny(item["progress"])
+								}
+								vol := float64(1)
+								if v, hasVol := item["volume"]; hasVol {
+									vol = parseFloatAny(v)
+								}
+								sum += baseCost * vol * (prog / 100)
+							} else {
+								tPrice := parseFloatAny(item["total_price"])
+								if tPrice > 0 {
+									sum += tPrice
+								}
 							}
 						}
 					}
@@ -444,12 +456,15 @@ func PostBulkPendingApprovals(w http.ResponseWriter, r *http.Request) {
 								costToAdd := float64(0)
 								baseCost := parseFloatAny(item["volume_cost_final"])
 								if baseCost > 0 {
-									// volume_cost_final is already multiplied by volume! Do not multiply it again.
 									prog := float64(100)
 									if _, hasProg := item["progress"]; hasProg {
 										prog = parseFloatAny(item["progress"])
 									}
-									costToAdd = baseCost * (prog / 100)
+									vol := float64(1)
+									if v, hasVol := item["volume"]; hasVol {
+										vol = parseFloatAny(v)
+									}
+									costToAdd = baseCost * vol * (prog / 100)
 								} else {
 									tPrice := parseFloatAny(item["total_price"])
 									if tPrice > 0 {
