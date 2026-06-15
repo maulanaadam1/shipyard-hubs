@@ -153,9 +153,26 @@ func GetPendingApprovals(w http.ResponseWriter, r *http.Request) {
 		}
 
 
+		var dataObj map[string]interface{}
+		if d, ok := dynamic["data"].(map[string]interface{}); ok {
+			dataObj = d
+		} else {
+			dataObj = dynamic
+		}
+
+		isGlobalApproved := false
+		if tJobOrder, ok := dataObj["t_job_order"].(map[string]interface{}); ok {
+			if appStatus, ok := tJobOrder["approval_status"].(string); ok {
+				if strings.ToLower(strings.TrimSpace(appStatus)) == "approved" {
+					isGlobalApproved = true
+				}
+			}
+		}
 
 		var sum float64
-		if true { // Ensure items are always processed regardless of global approval
+		if isGlobalApproved {
+			sum = 0
+		} else {
 			var sumPending func(items []interface{})
 			sumPending = func(items []interface{}) {
 				for _, itemRaw := range items {
@@ -180,8 +197,8 @@ func GetPendingApprovals(w http.ResponseWriter, r *http.Request) {
 							statusAppr = strings.ToLower(strings.TrimSpace(val))
 						}
 		
-						// Only sum if NOT fully approved (level 5 or status 'approved')
-						if approvedLevel < 5 && statusAppr != "approved" {
+						// Only sum if NOT fully approved (level 5 or any 'approved' status)
+						if approvedLevel < 5 && !strings.Contains(statusAppr, "approved") {
 							baseCost := parseFloatAny(item["volume_cost_final"])
 							if baseCost > 0 {
 								prog := float64(100)
@@ -473,8 +490,8 @@ func PostBulkPendingApprovals(w http.ResponseWriter, r *http.Request) {
 								}
 
 								isRejected := statusAppr == "rejected"
-								isAppr5 := !isRejected && (approvedLevel >= 5 || statusAppr == "approved" || statusAppr == "approved level 5")
-								isLevel1To4 := !isRejected && (approvedLevel >= 1 && approvedLevel <= 4 || strings.HasPrefix(statusAppr, "level") || strings.HasPrefix(statusAppr, "approved level"))
+								isAppr5 := !isRejected && (approvedLevel >= 5 || strings.Contains(statusAppr, "approved"))
+								isLevel1To4 := !isRejected && (approvedLevel >= 1 && approvedLevel <= 4 || strings.HasPrefix(statusAppr, "level"))
 								isAppr := isAppr5 || (allowLevel1To4 && isLevel1To4)
 
 								if !isAppr && !isRejected {
@@ -518,12 +535,11 @@ func PostBulkPendingApprovals(w http.ResponseWriter, r *http.Request) {
 						rootTotalCost, _ = strconv.ParseFloat(valStr, 64)
 					}
 					
-					if pendingSum == 0 && rootTotalCost > 0 && len(dailyCosts) == 0 {
-						if isGlobalApproved {
-							finalCostSum = rootTotalCost
-						} else {
-							pendingSum = rootTotalCost
-						}
+					if isGlobalApproved && rootTotalCost > 0 {
+						finalCostSum = rootTotalCost
+						pendingSum = 0
+					} else if pendingSum == 0 && rootTotalCost > 0 && len(dailyCosts) == 0 {
+						pendingSum = rootTotalCost
 					}
 					
 					var latestDate string
