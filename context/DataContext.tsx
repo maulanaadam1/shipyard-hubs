@@ -679,7 +679,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
         if (resource === 'Dashboard') return true;
 
         // Admin always has access
-        if (currentUser.role === 'Admin') {
+        if (currentUser.role === 'Admin' || currentUser.role?.toLowerCase() === 'admin') {
           // console.log(`RBAC [${resource}:${action}]: Allowed (Admin)`);
           return true;
         }
