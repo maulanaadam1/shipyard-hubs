@@ -85,6 +85,7 @@ export default function WorkOrderDashboard() {
   const [previousCosts, setPreviousCosts] = useState<Record<string, number>>({});
   const [finalDates, setFinalDates] = useState<Record<string, string>>({});
   const [trendGroupingMode, setTrendGroupingMode] = useState<'daily' | 'weekly' | 'monthly'>('weekly');
+  const [costDisplayMode, setCostDisplayMode] = useState<'saat_ini' | 'sebelumnya' | 'total' | 'pending'>('saat_ini');
   const [sortColumn, setSortColumn] = useState('created_at');
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc');
 
@@ -392,7 +393,7 @@ export default function WorkOrderDashboard() {
         }
         let isWaiting = !isRejected && (item.approved_level === 0 || statusAppr === 'waiting');
 
-        let dateToUse = item.date_approval || item.updated_at || item.created_at || detailedRowData?.created_at || selectedRow?.created_at || new Date().toISOString();
+        let dateToUse = item.date_approval || item.updated_at || item.created_at || detailedRowData?.updated_at || detailedRowData?.created_at || selectedRow?.created_at || new Date().toISOString();
 
         if (isAppr5 && dateToUse > latestApprove5Date) latestApprove5Date = dateToUse;
         if (isWaiting && dateToUse > latestWaitingDate) latestWaitingDate = dateToUse;
@@ -416,7 +417,11 @@ export default function WorkOrderDashboard() {
         
         // Logika Fallback Approval (sama seperti UI)
         let isAppr5 = !isRejected && (item.approved_level >= 5 || statusAppr === 'approved' || statusAppr === 'approved level 5');
-        if (!isRejected && !isAppr5 && selectedRow?.min_approval_level >= 5) {
+        
+        let rootApprStatus = (detailedRowData?.status_approval || selectedRow?.status_approval || "").toLowerCase();
+        let isRootApproved = rootApprStatus === "approved" || rootApprStatus === "approved level 5";
+        
+        if (!isRejected && !isAppr5 && ((selectedRow?.min_approval_level >= 5) || isRootApproved)) {
           isAppr5 = true; // Paksa anggap approved jika headernya approved
         }
         
@@ -424,10 +429,10 @@ export default function WorkOrderDashboard() {
         
         let isAppr = isAppr5 || (allowLevel1To4 && isLevel1To4);
 
-        let dateToUse = item.date_approval;
+        let dateToUse = item.date_approval || item.updated_at || item.created_at;
         if (isAppr && !dateToUse) {
           // Jika tidak ada date_approval tapi statusnya dipaksa approved, pakai fallback tanggal
-          dateToUse = item.created_at || item.updated_at || detailedRowData?.created_at || selectedRow?.created_at || new Date().toISOString();
+          dateToUse = detailedRowData?.updated_at || detailedRowData?.created_at || selectedRow?.created_at || new Date().toISOString();
         }
 
         let finalCost = 0;
@@ -794,9 +799,19 @@ export default function WorkOrderDashboard() {
     const projectSet = new Set(filteredData.map(d => d.projectName));
     const totalProjects = projectSet.size;
 
-    // Kalkulasi Total Estimasi Biaya (berdasarkan nilai approve penuh, bukan delta, atau gunakan fullWoCost jika dinginkan)
-    // Sebaiknya ini menggunakan fullApprovedCost agar yang dijumlahkan adalah nominal yang fix.
-    const totalCostValue = filteredData.reduce((acc, curr) => acc + curr.fullApprovedCost, 0);
+    let sumTotal = 0;
+    let sumSebelumnya = 0;
+    let sumSaatIni = 0;
+    let sumPending = 0;
+
+    filteredData.forEach(item => {
+      sumTotal += item.fullWoCost || 0;
+      sumSebelumnya += previousCosts[item.id] !== undefined ? previousCosts[item.id] : 0;
+      sumSaatIni += item.fullApprovedCost || 0;
+      sumPending += pendingApprovals[item.id] !== undefined ? pendingApprovals[item.id] : 0;
+    });
+
+    const totalCostValue = sumSaatIni;
 
     const approvalCounts: Record<string, number> = {
       "Waiting": 0,
@@ -822,9 +837,13 @@ export default function WorkOrderDashboard() {
       totalVendors,
       totalProjects,
       totalCostValue,
+      sumTotal,
+      sumSebelumnya,
+      sumSaatIni,
+      sumPending,
       approvalCounts
     };
-  }, [filteredData]);
+  }, [filteredData, previousCosts, pendingApprovals]);
 
   // Helper: Pengelompokan Tanggal ke Hari / Senin Mingguan / Bulan
   const getStartOfWeek = (dateStr: string) => {
@@ -1234,14 +1253,34 @@ export default function WorkOrderDashboard() {
                 <div className="p-3 rounded-xl bg-emerald-500/10 text-emerald-500">
                   <DollarSign size={24} />
                 </div>
-                <span className="text-[10px] font-bold text-emerald-500 uppercase tracking-widest bg-emerald-500/10 px-2.5 py-1 rounded-lg">Aktual Cost</span>
+                <div className="flex flex-wrap items-center gap-1.5">
+                  <button 
+                    onClick={() => setCostDisplayMode('total')} 
+                    className={`px-2.5 py-1 rounded-lg text-[10px] font-bold transition-all ${costDisplayMode === 'total' ? 'bg-emerald-600 text-white shadow-sm' : 'bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-600'}`}
+                  >Total</button>
+                  <button 
+                    onClick={() => setCostDisplayMode('sebelumnya')} 
+                    className={`px-2.5 py-1 rounded-lg text-[10px] font-bold transition-all ${costDisplayMode === 'sebelumnya' ? 'bg-emerald-600 text-white shadow-sm' : 'bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-600'}`}
+                  >Last</button>
+                  <button 
+                    onClick={() => setCostDisplayMode('saat_ini')} 
+                    className={`px-2.5 py-1 rounded-lg text-[10px] font-bold transition-all ${costDisplayMode === 'saat_ini' ? 'bg-emerald-600 text-white shadow-sm' : 'bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-600'}`}
+                  >This Moment</button>
+                  <button 
+                    onClick={() => setCostDisplayMode('pending')} 
+                    className={`px-2.5 py-1 rounded-lg text-[10px] font-bold transition-all ${costDisplayMode === 'pending' ? 'bg-emerald-600 text-white shadow-sm' : 'bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-600'}`}
+                  >Pending</button>
+                </div>
               </div>
-              <p className="text-xs font-bold text-slate-600 uppercase tracking-wider">Estimasi & Aktual Pengeluaran</p>
-              <h2 className="text-2xl md:text-3xl font-extrabold tracking-tight mt-1 md:mt-2 text-slate-900 break-all truncate" title={formatIDR(stats.totalCostValue)}>
-                {formatIDR(stats.totalCostValue)}
+              <p className="text-xs font-bold text-slate-600 uppercase tracking-wider">Akumulasi Finansial</p>
+              <h2 className="text-2xl md:text-3xl font-extrabold tracking-tight mt-1 md:mt-2 text-slate-900 break-all truncate" title={formatIDR(costDisplayMode === 'total' ? stats.sumTotal : costDisplayMode === 'sebelumnya' ? stats.sumSebelumnya : costDisplayMode === 'saat_ini' ? stats.sumSaatIni : stats.sumPending)}>
+                {formatIDR(costDisplayMode === 'total' ? stats.sumTotal : costDisplayMode === 'sebelumnya' ? stats.sumSebelumnya : costDisplayMode === 'saat_ini' ? stats.sumSaatIni : stats.sumPending)}
               </h2>
               <p className="text-xs text-slate-500 dark:text-slate-400 mt-2.5 leading-relaxed">
-                Akumulasi seluruh nilai finansial dari Work Order logistik perkapalan yang terdaftar pada filter aktif saat ini.
+                {costDisplayMode === 'total' && "Total biaya awal seluruh Work Order (sebelum ada pemotongan/penyesuaian progress)."}
+                {costDisplayMode === 'sebelumnya' && "Total nilai aktual periode sebelumnya (sebelum pembaruan terakhir)."}
+                {costDisplayMode === 'saat_ini' && "Total nilai aktual biaya akhir yang sudah di-approve (Level 5 / Approved)."}
+                {costDisplayMode === 'pending' && "Total nilai yang masih menunggu persetujuan (Pending Approval)."}
               </p>
             </div>
 
@@ -1249,7 +1288,7 @@ export default function WorkOrderDashboard() {
               <div className="border-r border-slate-100">
                 <p className="text-[10px] font-bold text-slate-600 uppercase">Rata-Rata WO</p>
                 <p className="text-sm font-bold text-slate-800 mt-1">
-                  {stats.totalWOs > 0 ? formatIDR(Math.round(stats.totalCostValue / stats.totalWOs)) : formatIDR(0)}
+                  {stats.totalWOs > 0 ? formatIDR(Math.round((costDisplayMode === 'total' ? stats.sumTotal : costDisplayMode === 'sebelumnya' ? stats.sumSebelumnya : costDisplayMode === 'saat_ini' ? stats.sumSaatIni : stats.sumPending) / stats.totalWOs)) : formatIDR(0)}
                 </p>
               </div>
               <div>
@@ -1808,6 +1847,9 @@ export default function WorkOrderDashboard() {
                   <th className="py-3.5 px-6 cursor-pointer group hover:bg-slate-100 transition select-none" onClick={() => handleSort('vendorName')}>
                     <div className="flex items-center">Vendor Rekanan {renderSortIcon('vendorName')}</div>
                   </th>
+                  <th className="px-6 py-4 font-bold uppercase tracking-wider text-right cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors" onClick={() => handleSort('fullWoCost')}>
+                    <div className="flex items-center justify-end">Nilai Total {renderSortIcon('fullWoCost')}</div>
+                  </th>
                   <th className="px-6 py-4 font-bold uppercase tracking-wider text-right cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors" onClick={() => handleSort('totalCostNum')}>
                     <div className="flex items-center justify-end">Nilai Sebelumnya {renderSortIcon('totalCostNum')}</div>
                   </th>
@@ -1828,7 +1870,7 @@ export default function WorkOrderDashboard() {
               <tbody className="divide-y divide-slate-50 text-sm">
                 {paginatedData.length === 0 ? (
                   <tr>
-                    <td colSpan={9} className="py-12 text-center text-slate-400 text-xs">
+                    <td colSpan={10} className="py-12 text-center text-slate-400 text-xs">
                       Tidak ada data Work Order yang cocok dengan penyaringan Anda pada rentang waktu ini.
                     </td>
                   </tr>
@@ -1862,8 +1904,8 @@ export default function WorkOrderDashboard() {
                       </td>
 
                       <td className="py-3.5 px-6">
-                        <div className="font-semibold text-xs text-slate-900 max-w-[280px] truncate" title={item.projectName}>
-                          {item.projectName}
+                        <div className="font-semibold text-xs text-slate-900 max-w-[280px] truncate" title={item.shipName}>
+                          {item.shipName}
                         </div>
                       </td>
 
@@ -1871,6 +1913,10 @@ export default function WorkOrderDashboard() {
                         <div className="max-w-[200px] truncate font-medium text-xs" title={item.vendorName}>
                           {item.vendorName}
                         </div>
+                      </td>
+
+                      <td className="py-3.5 px-6 text-right font-bold font-mono text-xs text-slate-800">
+                        {formatIDR(item.fullWoCost)}
                       </td>
 
                       <td className="py-3.5 px-6 text-right font-semibold font-mono text-xs">
@@ -2518,9 +2564,16 @@ export default function WorkOrderDashboard() {
                               return (
                                 <div key={req.id} className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex flex-col justify-between gap-3 hover:border-emerald-500/30 transition-colors">
                                   <div className="min-w-0">
-                                    <p className="text-sm font-bold text-slate-800 leading-snug" title={materialName}>
-                                      {materialName}
-                                    </p>
+                                    <div className="flex items-start justify-between gap-2">
+                                      <p className="text-sm font-bold text-slate-800 leading-snug" title={materialName}>
+                                        {materialName}
+                                      </p>
+                                      {req.t_requisition_id && (
+                                        <span className="shrink-0 bg-slate-100 text-slate-500 text-[10px] font-bold px-2 py-0.5 rounded-md border border-slate-200">
+                                          Req ID: {req.t_requisition_id}
+                                        </span>
+                                      )}
+                                    </div>
                                     <div className="flex flex-wrap gap-x-3 gap-y-2 mt-3 text-xs text-slate-600">
                                     <span className="font-bold text-[#FDB913] bg-[#FDB913]/10 px-2 py-1 rounded-md border border-[#FDB913]/20">Req: {req.quantity} {localComp?.unit || req.unit}</span>
                                     <span className="font-bold text-emerald-700 bg-emerald-50 px-2 py-1 rounded-md border border-emerald-100">Terkirim: {req.quantity_delivered}</span>

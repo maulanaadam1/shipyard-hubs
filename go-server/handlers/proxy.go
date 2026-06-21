@@ -161,12 +161,18 @@ func GetPendingApprovals(w http.ResponseWriter, r *http.Request) {
 		}
 
 		isGlobalApproved := false
-		if tJobOrder, ok := dataObj["t_job_order"].(map[string]interface{}); ok {
-			if appStatus, ok := tJobOrder["approval_status"].(string); ok {
-				if strings.ToLower(strings.TrimSpace(appStatus)) == "approved" {
-					isGlobalApproved = true
-				}
-			}
+		var rootMinApprovalLevel float64
+		if val, ok := dataObj["min_approval_level"].(float64); ok {
+			rootMinApprovalLevel = val
+		}
+		var rootStatusAppr string
+		if val, ok := dataObj["status_approval"].(string); ok {
+			rootStatusAppr = strings.ToLower(strings.TrimSpace(val))
+		}
+
+		// Also check root's approval level
+		if rootMinApprovalLevel >= 5 || strings.Contains(rootStatusAppr, "approved") {
+			isGlobalApproved = true
 		}
 
 		var sum float64
@@ -379,12 +385,13 @@ func PostBulkPendingApprovals(w http.ResponseWriter, r *http.Request) {
 						rootUpdatedAt = val
 					}
 
-					if tJobOrder, ok := dataObj["t_job_order"].(map[string]interface{}); ok {
-						if appStatus, ok := tJobOrder["approval_status"].(string); ok {
-							if strings.ToLower(strings.TrimSpace(appStatus)) == "approved" {
-								isGlobalApproved = true
-							}
-						}
+					var rootMinApprovalLevel float64
+					if val, ok := dataObj["min_approval_level"].(float64); ok {
+						rootMinApprovalLevel = val
+					}
+					var rootStatusAppr string
+					if val, ok := dataObj["status_approval"].(string); ok {
+						rootStatusAppr = strings.ToLower(strings.TrimSpace(val))
 					}
 
 					var latestApprove5Date string
@@ -490,8 +497,8 @@ func PostBulkPendingApprovals(w http.ResponseWriter, r *http.Request) {
 								}
 
 								isRejected := statusAppr == "rejected"
-								isAppr5 := !isRejected && (approvedLevel >= 5 || strings.Contains(statusAppr, "approved"))
-								isLevel1To4 := !isRejected && (approvedLevel >= 1 && approvedLevel <= 4 || strings.HasPrefix(statusAppr, "level"))
+								isAppr5 := !isRejected && (approvedLevel >= 5 || statusAppr == "approved" || statusAppr == "approved level 5" || rootMinApprovalLevel >= 5 || rootStatusAppr == "approved" || isGlobalApproved)
+								isLevel1To4 := !isRejected && (approvedLevel >= 1 && approvedLevel <= 4 || strings.HasPrefix(statusAppr, "level") || strings.HasPrefix(statusAppr, "approved level"))
 								isAppr := isAppr5 || (allowLevel1To4 && isLevel1To4)
 
 								if !isAppr && !isRejected {
