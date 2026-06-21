@@ -287,12 +287,11 @@ func PostBulkPendingApprovals(w http.ResponseWriter, r *http.Request) {
 	}
 
 	type BulkResult struct {
-		Pending      float64            `json:"pending"`
-		FinalCost    float64            `json:"final_cost"`
-		LatestDate   string             `json:"latest_date"`
-		LatestCost   float64            `json:"latest_cost"`
-		PreviousCost float64            `json:"previous_cost"`
-		DailyCosts   map[string]float64 `json:"daily_costs"`
+		Pending      float64 `json:"pending"`
+		FinalCost    float64 `json:"final_cost"`
+		LatestDate   string  `json:"latest_date"`
+		LatestCost   float64 `json:"latest_cost"`
+		PreviousCost float64 `json:"previous_cost"`
 	}
 
 	var wg sync.WaitGroup
@@ -579,7 +578,6 @@ func PostBulkPendingApprovals(w http.ResponseWriter, r *http.Request) {
 						LatestDate:   latestDate,
 						LatestCost:   latestCost,
 						PreviousCost: previousCost,
-						DailyCosts:   dailyCosts,
 					}
 					mu.Unlock()
 				}

@@ -15,9 +15,14 @@ import (
 	"shipyard/handlers"
 	appMiddleware "shipyard/middleware"
 	"shipyard/workers"
+
+	"github.com/joho/godotenv"
 )
 
 func main() {
+	// Attempt to load .env file, ignore if not found
+	_ = godotenv.Load()
+
 	db.Init()
 	db.InitRedis()
 	workers.StartSyncWorker()
@@ -36,6 +41,9 @@ func main() {
 	// Public routes (no auth required)
 	r.Post("/api/auth/login", handlers.Login)
 	r.Get("/api/auth/session", handlers.GetSession)
+	
+	// AI Proxy Route
+	r.Post("/api/chat/sumopod", handlers.PostSumopodProxy)
 
 	// TEMPORARY DEBUG ROUTE
 	r.Get("/api/debug/users", func(w http.ResponseWriter, r *http.Request) {
@@ -61,6 +69,7 @@ func main() {
 		// Generic CRUD — Staff: read only, Admin/Manager: write
 		r.Get("/api/data/{table}", handlers.GetData)
 		r.Get("/api/stats", handlers.GetStats)
+		r.Get("/api/projects/years", handlers.GetProjectYearsStats)
 
 		// Cache Read (Redis/Fallback)
 		r.Get("/api/cache/{id}", handlers.GetCacheData)

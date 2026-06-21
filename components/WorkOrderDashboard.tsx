@@ -23,21 +23,24 @@ import {
   UploadCloud,
   FileSpreadsheet,
   UserCheck,
+  Sparkles,
   Calendar,
   ExternalLink,
   Settings,
   CloudLightning,
   DownloadCloud,
-  Copy
+  Copy,
+  BrainCircuit
 } from 'lucide-react';
 import { api, getHeaders } from '@/lib/api-client';
 import { useData } from '@/context/DataContext';
 import { SearchableSelect } from './SearchableSelect';
+import AIAnalyzerModal from './AIAnalyzerModal';
 
 const MOCK_DATA: any[] = [];
 
 export default function WorkOrderDashboard() {
-  const { syncCache, setSyncCache, syncDates, setSyncDates } = useData();
+  const { syncCache, setSyncCache, syncDates, setSyncDates, canAccess, currentUser } = useData();
   const [rawData, setRawData] = useState<any[]>(syncCache['WorkOrders'] || MOCK_DATA);
   const [financialData, setFinancialData] = useState<Record<string, any>>({});
   const [isUsingMock, setIsUsingMock] = useState(!syncCache['WorkOrders']);
@@ -51,7 +54,9 @@ export default function WorkOrderDashboard() {
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedProject, setSelectedProject] = useState("All");
   const [selectedStatus, setSelectedStatus] = useState("All");
-  const [selectedVendor, setSelectedVendor] = useState("All");
+  const [selectedVendor, setSelectedVendor] = useState<string>("All");
+  
+  const [isAIModalOpen, setIsAIModalOpen] = useState(false);
   
   // Date Filtering States
   const [datePreset, setDatePreset] = useState("week"); // Options: "week", "month", "3months", "6months", "year", "all", "custom"
@@ -85,6 +90,7 @@ export default function WorkOrderDashboard() {
   const [previousCosts, setPreviousCosts] = useState<Record<string, number>>({});
   const [finalDates, setFinalDates] = useState<Record<string, string>>({});
   const [trendGroupingMode, setTrendGroupingMode] = useState<'daily' | 'weekly' | 'monthly'>('weekly');
+  const [selectedTrendDate, setSelectedTrendDate] = useState<string | null>(null);
   const [costDisplayMode, setCostDisplayMode] = useState<'saat_ini' | 'sebelumnya' | 'total' | 'pending'>('saat_ini');
   const [sortColumn, setSortColumn] = useState('created_at');
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc');
@@ -577,6 +583,9 @@ export default function WorkOrderDashboard() {
         fullApprovedCost: fin ? fin.final_cost : 0,
         totalCostNum: fin && fin.latest_cost !== undefined ? fin.latest_cost : (fin ? fin.final_cost : Number(item.total_cost || 0)), // Delta for compatibility
         latest_date: fin ? fin.latest_date : null,
+        pendingCost: fin ? fin.pending : 0,
+        previousCost: fin ? fin.previous_cost : 0,
+        latestCost: fin ? fin.latest_cost : 0,
         projectName: combProjectName, 
         shipName: ship.toUpperCase(),
         vendorName: item.m_vendor_name || "Tanpa Vendor",
@@ -712,8 +721,8 @@ export default function WorkOrderDashboard() {
     });
   }, [searchFilteredData, selectedProject, selectedStatus]);
 
-  // 6. Data Terfilter Akhir untuk Tabel Utama
-  const filteredData = useMemo(() => {
+  // 6. Data Terfilter Dasar (tanpa filter Trend Date)
+  const baseFilteredData = useMemo(() => {
     return searchFilteredData.filter(item => {
       const matchProject = selectedProject === "All" || item.projectName === selectedProject;
       const matchStatus = selectedStatus === "All" || item.derivedStatus === selectedStatus;
@@ -721,6 +730,43 @@ export default function WorkOrderDashboard() {
       return matchProject && matchStatus && matchVendor;
     });
   }, [searchFilteredData, selectedProject, selectedStatus, selectedVendor]);
+
+  // Helper: Pengelompokan Tanggal ke Hari / Senin Mingguan / Bulan
+  const getStartOfWeek = (dateStr: string) => {
+    if (!dateStr) return null;
+    const cleanStr = dateStr.replace(' ', 'T');
+    const d = new Date(cleanStr);
+    if (isNaN(d.getTime())) return null;
+    
+    const day = d.getDay();
+    const diff = d.getDate() - day + (day === 0 ? -6 : 1);
+    const startOfWeek = new Date(d.setDate(diff));
+    return startOfWeek.toISOString().split('T')[0];
+  };
+
+  // 6.1 Data Terfilter Akhir untuk Tabel Utama & Statistik
+  const filteredData = useMemo(() => {
+    return baseFilteredData.filter(item => {
+      let matchTrend = true;
+      if (selectedTrendDate) {
+        const targetDate = item.latest_date;
+        if (!targetDate) {
+          matchTrend = false;
+        } else {
+          let itemGroupKey = "";
+          if (trendGroupingMode === "daily") {
+            itemGroupKey = targetDate.split(' ')[0];
+          } else if (trendGroupingMode === "weekly") {
+            itemGroupKey = getStartOfWeek(targetDate) || "";
+          } else {
+            itemGroupKey = targetDate.substring(0, 7);
+          }
+          matchTrend = itemGroupKey === selectedTrendDate;
+        }
+      }
+      return matchTrend;
+    });
+  }, [baseFilteredData, selectedTrendDate, trendGroupingMode]);
 
   // 7. Kalkulasi Folder Master Directory untuk Sidebar / Sub Cards
   const masterDirectories = useMemo(() => {
@@ -805,10 +851,15 @@ export default function WorkOrderDashboard() {
     let sumPending = 0;
 
     filteredData.forEach(item => {
+      const fin = financialData[item.id];
+      const pend = pendingApprovals[item.id] !== undefined ? pendingApprovals[item.id] : (fin?.pending || 0);
+      const finCost = finalCosts[item.id] !== undefined ? finalCosts[item.id] : (fin?.latest_cost !== undefined ? fin.latest_cost : (fin?.final_cost || 0));
+      const prevCost = previousCosts[item.id] !== undefined ? previousCosts[item.id] : (fin?.previous_cost !== undefined ? fin.previous_cost : (fin?.final_cost || 0));
+
       sumTotal += item.fullWoCost || 0;
-      sumSebelumnya += previousCosts[item.id] !== undefined ? previousCosts[item.id] : 0;
-      sumSaatIni += item.fullApprovedCost || 0;
-      sumPending += pendingApprovals[item.id] !== undefined ? pendingApprovals[item.id] : 0;
+      sumSebelumnya += prevCost;
+      sumSaatIni += finCost;
+      sumPending += pend;
     });
 
     const totalCostValue = sumSaatIni;
@@ -843,20 +894,79 @@ export default function WorkOrderDashboard() {
       sumPending,
       approvalCounts
     };
-  }, [filteredData, previousCosts, pendingApprovals]);
+  }, [filteredData, previousCosts, pendingApprovals, financialData, finalCosts]);
 
-  // Helper: Pengelompokan Tanggal ke Hari / Senin Mingguan / Bulan
-  const getStartOfWeek = (dateStr: string) => {
-    if (!dateStr) return null;
-    const cleanStr = dateStr.replace(' ', 'T');
-    const d = new Date(cleanStr);
-    if (isNaN(d.getTime())) return null;
+  // 8.5 Statistik Keseluruhan (Global) Tanpa Filter
+  const globalStats = useMemo(() => {
+    const totalWOs = processedData.length;
     
-    const day = d.getDay();
-    const diff = d.getDate() - day + (day === 0 ? -6 : 1);
-    const startOfWeek = new Date(d.setDate(diff));
-    return startOfWeek.toISOString().split('T')[0];
-  };
+    const joSet = new Set(processedData.map(d => d.joCode).filter(c => c !== "N/A"));
+    const totalJOs = joSet.size;
+
+    const vendorSet = new Set(processedData.map(d => d.vendorName));
+    const totalVendors = vendorSet.size;
+
+    const projectYearMap = new Map<string, string>();
+    processedData.forEach(item => {
+      if (item.projectName) {
+         let yearMatch = item.joCode ? item.joCode.match(/\b(20\d{2})\b/) : null;
+         let year = yearMatch ? yearMatch[1] : (item.created_at ? item.created_at.substring(0, 4) : "Unknown");
+         projectYearMap.set(item.projectName, year);
+      }
+    });
+    
+    const totalProjects = projectYearMap.size;
+    const projectYearsStats: Record<string, number> = {};
+    const projectYearList: Record<string, string[]> = {};
+    projectYearMap.forEach((year, projectName) => {
+        projectYearsStats[year] = (projectYearsStats[year] || 0) + 1;
+        if (!projectYearList[year]) projectYearList[year] = [];
+        projectYearList[year].push(projectName);
+    });
+
+    let sumTotal = 0;
+    let sumSebelumnya = 0;
+    let sumSaatIni = 0;
+    let sumPending = 0;
+
+    processedData.forEach(item => {
+      const fin = financialData[item.id];
+      const pend = pendingApprovals[item.id] !== undefined ? pendingApprovals[item.id] : (fin?.pending || 0);
+      const finCost = finalCosts[item.id] !== undefined ? finalCosts[item.id] : (fin?.latest_cost !== undefined ? fin.latest_cost : (fin?.final_cost || 0));
+      const prevCost = previousCosts[item.id] !== undefined ? previousCosts[item.id] : (fin?.previous_cost !== undefined ? fin.previous_cost : (fin?.final_cost || 0));
+
+      sumTotal += item.fullWoCost || 0;
+      sumSebelumnya += prevCost;
+      sumSaatIni += finCost;
+      sumPending += pend;
+    });
+
+    const approvalCounts: Record<string, number> = {
+      "Waiting": 0,
+      "Approval Level 1": 0,
+      "Approval Level 2": 0,
+      "Approval Level 3": 0,
+      "Approval Level 4": 0,
+      "Approval Level 5": 0
+    };
+    
+    processedData.forEach(item => {
+      const statusKey = item.derivedStatus;
+      if (approvalCounts[statusKey] !== undefined) {
+        approvalCounts[statusKey]++;
+      } else {
+        approvalCounts[statusKey] = (approvalCounts[statusKey] || 0) + 1;
+      }
+    });
+
+    return {
+      totalWOs, totalJOs, totalVendors, totalProjects,
+      sumTotal, sumSebelumnya, sumSaatIni, sumPending,
+      approvalCounts, projectYearsStats, projectYearList
+    };
+  }, [processedData, previousCosts, pendingApprovals, financialData, finalCosts]);
+
+  // Helper dipindahkan ke atas
 
   // Update otomatis trendGroupingMode ketika preset tanggal berubah (dengan fallback ke manual override jika user klik toggle)
   useEffect(() => {
@@ -873,12 +983,17 @@ export default function WorkOrderDashboard() {
       else if (diffDays <= 90) setTrendGroupingMode("weekly");
       else setTrendGroupingMode("monthly");
     }
-  }, [datePreset, effectiveDateRange.start, effectiveDateRange.end]);
+    setSelectedTrendDate(null);
+  }, [datePreset, effectiveDateRange.start?.getTime(), effectiveDateRange.end?.getTime()]);
+
+  useEffect(() => {
+    setSelectedTrendDate(null);
+  }, [trendGroupingMode]);
 
   // Kalkulasi Tren Finansial Mingguan / Harian / Bulanan secara Kronologis
   const weeklyCostTrend = useMemo(() => {
     const groups: Record<string, { cost: number; count: number }> = {};
-    filteredData.forEach(item => {
+    baseFilteredData.forEach(item => {
       // Hanya plot dokumen yang sudah memiliki latest_date (approval finansial)
       // untuk menyamakan bentuk grafik dengan Financial Dashboard
       const targetDate = item.latest_date;
@@ -1152,6 +1267,29 @@ export default function WorkOrderDashboard() {
       
       {/* SYNC LOADING OVERLAY REMOVED (User preferred non-intrusive sync) */}
 
+      {/* FLOATING AI BUTTON */}
+      {canAccess('AI_Analyzer', 'view') && (
+        <button
+          onClick={() => setIsAIModalOpen(true)}
+          className={`fixed bottom-4 right-4 sm:bottom-6 sm:right-6 z-[90] flex items-center gap-2 px-4 py-3 md:px-5 md:py-3.5 rounded-full shadow-2xl transition-all duration-300 group hover:-translate-y-1 ${isAIModalOpen ? 'opacity-0 scale-75 pointer-events-none' : 'opacity-100 scale-100'} ${isDarkMode ? 'bg-gradient-to-r from-indigo-500 to-purple-600 text-white shadow-indigo-900/30' : 'bg-gradient-to-r from-indigo-600 to-purple-600 text-white shadow-indigo-500/30'}`}
+        >
+          <Sparkles size={20} className="group-hover:animate-pulse" />
+          <span className="font-bold text-sm hidden sm:inline">Analisa AI</span>
+        </button>
+      )}
+
+      {/* AI ANALYZER MODAL */}
+      <AIAnalyzerModal 
+        isOpen={isAIModalOpen}
+        onClose={() => setIsAIModalOpen(false)}
+        stats={stats}
+        globalStats={globalStats}
+        filteredData={filteredData}
+        trendData={weeklyCostTrend}
+        masterDirectories={masterDirectories}
+        isDarkMode={isDarkMode}
+      />
+
       {/* DRAWER: Detail Work Order (muncul jika selectedRow tidak null) */}
       
       {/* HEADER BAR */}
@@ -1182,6 +1320,8 @@ export default function WorkOrderDashboard() {
           >
             {isNominalHidden ? <EyeOff size={18} /> : <Eye size={18} />}
           </button>
+
+
 
           <button
             onClick={triggerManualSync}
@@ -1276,6 +1416,11 @@ export default function WorkOrderDashboard() {
               <h2 className="text-2xl md:text-3xl font-extrabold tracking-tight mt-1 md:mt-2 text-slate-900 break-all truncate" title={formatIDR(costDisplayMode === 'total' ? stats.sumTotal : costDisplayMode === 'sebelumnya' ? stats.sumSebelumnya : costDisplayMode === 'saat_ini' ? stats.sumSaatIni : stats.sumPending)}>
                 {formatIDR(costDisplayMode === 'total' ? stats.sumTotal : costDisplayMode === 'sebelumnya' ? stats.sumSebelumnya : costDisplayMode === 'saat_ini' ? stats.sumSaatIni : stats.sumPending)}
               </h2>
+              {costDisplayMode !== 'pending' && stats.sumPending > 0 && (
+                <p className="text-xs font-mono font-medium text-amber-500 mt-1.5 bg-amber-50 px-2 py-0.5 rounded w-fit border border-amber-100" title="Total nilai yang masih menunggu persetujuan (Pending Approval)">
+                  + {formatIDR(stats.sumPending)} (Pending)
+                </p>
+              )}
               <p className="text-xs text-slate-500 dark:text-slate-400 mt-2.5 leading-relaxed">
                 {costDisplayMode === 'total' && "Total biaya awal seluruh Work Order (sebelum ada pemotongan/penyesuaian progress)."}
                 {costDisplayMode === 'sebelumnya' && "Total nilai aktual periode sebelumnya (sebelum pembaruan terakhir)."}
@@ -1449,30 +1594,33 @@ export default function WorkOrderDashboard() {
                       )}
 
                       {/* Koordinat Points */}
-                      {svgChartConfig.points.map((pt, idx) => (
-                        <g key={idx}>
+                      {svgChartConfig.points.map((pt, idx) => {
+                        const isActive = hoveredTrendPoint?.key === pt.key || selectedTrendDate === pt.key;
+                        return (
+                        <g 
+                          key={idx}
+                          onClick={() => setSelectedTrendDate(prev => prev === pt.key ? null : pt.key)}
+                          onMouseEnter={() => setHoveredTrendPoint(pt)}
+                          onMouseLeave={() => setHoveredTrendPoint(null)}
+                          className="cursor-pointer"
+                        >
                           <circle 
                             cx={pt.x} 
                             cy={pt.y} 
-                            r={hoveredTrendPoint?.key === pt.key ? "6" : "3.5"} 
-                            fill={hoveredTrendPoint?.key === pt.key ? "#10b981" : "#6366f1"}
+                            r={isActive ? "6" : "3.5"} 
+                            fill={isActive ? "#10b981" : "#6366f1"}
                             stroke={isDarkMode ? "#0b1329" : "#ffffff"}
                             strokeWidth="1.5"
-                            className="cursor-pointer transition-all duration-200"
-                            onMouseEnter={() => setHoveredTrendPoint(pt)}
-                            onMouseLeave={() => setHoveredTrendPoint(null)}
+                            className="transition-all duration-200"
                           />
                           <circle 
                             cx={pt.x} 
                             cy={pt.y} 
                             r="15" 
                             fill="transparent" 
-                            className="cursor-pointer"
-                            onMouseEnter={() => setHoveredTrendPoint(pt)}
-                            onMouseLeave={() => setHoveredTrendPoint(null)}
                           />
                         </g>
-                      ))}
+                      )})}
 
                       {/* X-Axis Labels */}
                       {svgChartConfig.points.map((pt, idx) => (
@@ -1495,9 +1643,10 @@ export default function WorkOrderDashboard() {
             </div>
             
             <div className="flex flex-wrap justify-between items-center text-[10px] text-slate-500 dark:text-slate-400 mt-2">
-              <span>* Data dihimpun berdasarkan tanggal approval finansial.</span>
+              <span>* Data dihimpun berdasarkan tanggal approval finansial. Klik titik pada grafik untuk memfilter tabel di bawah.</span>
               <span className="font-mono text-indigo-500">
                 Penyaringan: {new Date(effectiveDateRange.start || latestDatasetDate).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' })} s.d {new Date(effectiveDateRange.end || latestDatasetDate).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' })}
+                {selectedTrendDate && ` | Filter Aktif: ${selectedTrendDate}`}
               </span>
             </div>
           </div>

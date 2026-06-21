@@ -1,6 +1,6 @@
 module shipyard
 
-go 1.24
+go 1.24.0
 
 require (
 	github.com/go-chi/chi/v5 v5.2.1
@@ -13,8 +13,11 @@ require (
 )
 
 require (
+	filippo.io/edwards25519 v1.2.0 // indirect
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
 	github.com/dustin/go-humanize v1.0.1 // indirect
+	github.com/go-sql-driver/mysql v1.10.0 // indirect
+	github.com/joho/godotenv v1.5.1 // indirect
 	github.com/mattn/go-isatty v0.0.20 // indirect
 	github.com/ncruces/go-strftime v0.1.9 // indirect
 	github.com/remyoudompheng/bigfft v0.0.0-20230129092748-24d4a6f8daec // indirect

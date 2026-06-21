@@ -5,9 +5,11 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/google/uuid"
 	"golang.org/x/crypto/bcrypt"
+	_ "github.com/go-sql-driver/mysql"
 	_ "modernc.org/sqlite"
 )
 
@@ -37,14 +39,31 @@ func Init() {
 		}
 	}
 
+	driver := os.Getenv("DB_DRIVER")
+	if driver == "" {
+		driver = "sqlite" // Fallback default
+	}
+
 	var err error
-	DB, err = sql.Open("sqlite", dbPath+"?_pragma=journal_mode(WAL)&_pragma=foreign_keys(on)")
-	if err != nil {
-		log.Fatalf("Failed to open database: %v", err)
+	if driver == "mysql" {
+		dsn := os.Getenv("DB_DSN")
+		if dsn == "" {
+			dsn = "root:password@tcp(localhost:3306)/shipyard_db?parseTime=true"
+		}
+		DB, err = sql.Open("mysql", dsn)
+		if err != nil {
+			log.Fatalf("Failed to open MariaDB: %v", err)
+		}
+	} else {
+		// Default SQLite
+		DB, err = sql.Open("sqlite", dbPath+"?_pragma=journal_mode(WAL)&_pragma=foreign_keys(on)")
+		if err != nil {
+			log.Fatalf("Failed to open SQLite database: %v", err)
+		}
 	}
 
 	if err = DB.Ping(); err != nil {
-		log.Fatalf("Failed to connect to database: %v", err)
+		log.Fatalf("Failed to connect to database (%s): %v", driver, err)
 	}
 
 	createTables()
@@ -270,9 +289,14 @@ func createTables() {
 		modified_by TEXT
 	);
 	`
+	
+	if os.Getenv("DB_DRIVER") == "mysql" {
+		schema = strings.ReplaceAll(schema, "TEXT PRIMARY KEY", "VARCHAR(255) PRIMARY KEY")
+		schema = strings.ReplaceAll(schema, "TEXT UNIQUE", "VARCHAR(255) UNIQUE")
+	}
 
 	if _, err := DB.Exec(schema); err != nil {
-		log.Fatalf("Failed to create tables: %v", err)
+		log.Printf("Warning during create tables: %v", err)
 	}
 
 	// Simple migrations for existing tables
