@@ -588,6 +588,7 @@ export default function ApiSyncManagement() {
                       <option value="Employees">Employees (Master Data Karyawan)</option>
                       <option value="Materials">Materials (Master Data Material)</option>
                       <option value="Invoices">Invoices (Data Tagihan)</option>
+                      <option value="MaterialRequisitions">MaterialRequisitions (Data Permintaan Material)</option>
                     </select>
                   </div>
                   <div className="space-y-1.5">

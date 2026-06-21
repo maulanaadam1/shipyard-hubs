@@ -67,7 +67,7 @@ import ApiSyncManagement from '../components/ApiSyncManagement';
 import MasterService from '../components/MasterService';
 import MasterEmployee from '../components/MasterEmployee';
 import MasterComponent from '../components/MasterComponent';
-
+import MaterialRequisition from '../components/MaterialRequisition';
 
 function PlaceholderPage({ title }: { title: string }) {
   return (
@@ -222,6 +222,11 @@ createRoot(document.getElementById('root')!).render(
             <Route path="release" element={
               <ProtectedRoute resource="Release">
                 <EquipmentRelease />
+              </ProtectedRoute>
+            } />
+            <Route path="request-material" element={
+              <ProtectedRoute resource="Request">
+                <MaterialRequisition />
               </ProtectedRoute>
             } />
             <Route path="return" element={

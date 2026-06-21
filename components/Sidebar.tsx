@@ -58,6 +58,7 @@ export default function Sidebar({ onTabChange }: { onTabChange: () => void }) {
     {
       title: 'Operations',
       items: [
+        { icon: ClipboardList, label: 'Request Material', path: '/request-material', resource: 'Request' },
         { icon: Wrench, label: 'Maintenance', path: '/maintenance', resource: 'Maintenance' },
         { icon: Package, label: 'Inventory', path: '/inventory', resource: 'Inventory' },
         { icon: BarChart3, label: 'Reports', path: '/reports', resource: 'Reports' },
