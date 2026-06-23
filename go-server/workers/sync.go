@@ -36,15 +36,15 @@ func StartSyncWorker() {
 }
 
 func RunSyncJob(force bool, targetId string) {
-	query := "SELECT id, url, headers, IFNULL(last_sync, ''), IFNULL(interval_type, 'minutes'), IFNULL(interval_value, 5) FROM sync_configs WHERE is_active = 1"
+	query := "SELECT id, url, headers, COALESCE(last_sync, ''), COALESCE(interval_type, 'minutes'), COALESCE(interval_value, 5) FROM sync_configs WHERE is_active = true"
 	var rows *sql.Rows
 	var err error
 
 	if targetId != "" {
 		query += " AND id = ?"
-		rows, err = db.DB.Query(query, targetId)
+		rows, err = db.DB.Query(db.FormatQuery(query), targetId)
 	} else {
-		rows, err = db.DB.Query(query)
+		rows, err = db.DB.Query(db.FormatQuery(query))
 	}
 
 	if err != nil {

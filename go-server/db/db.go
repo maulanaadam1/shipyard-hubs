@@ -2,9 +2,11 @@ package db
 
 import (
 	"database/sql"
+	"fmt"
 	"log"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/google/uuid"
 	"golang.org/x/crypto/bcrypt"
@@ -60,6 +62,33 @@ func Init() {
 
 	createTables()
 	seedAdmin()
+}
+
+// FormatQuery dynamically replaces ? with $1, $2 for PostgreSQL compatibility
+func FormatQuery(query string) string {
+	if os.Getenv("DB_CONNECTION") == "postgres" {
+		count := 1
+		for strings.Contains(query, "?") {
+			query = strings.Replace(query, "?", fmt.Sprintf("$%d", count), 1)
+			count++
+		}
+	}
+	return query
+}
+
+// Exec is a wrapper around DB.Exec that automatically formats the query for Postgres
+func Exec(query string, args ...any) (sql.Result, error) {
+	return DB.Exec(FormatQuery(query), args...)
+}
+
+// Query is a wrapper around DB.Query that automatically formats the query for Postgres
+func Query(query string, args ...any) (*sql.Rows, error) {
+	return DB.Query(FormatQuery(query), args...)
+}
+
+// QueryRow is a wrapper around DB.QueryRow that automatically formats the query for Postgres
+func QueryRow(query string, args ...any) *sql.Row {
+	return DB.QueryRow(FormatQuery(query), args...)
 }
 
 func createTables() {
@@ -409,11 +438,10 @@ func seedMasterStatusDock() {
 
 	for _, s := range statuses {
 		var count int
-		DB.QueryRow("SELECT COUNT(*) FROM master_status_dock WHERE name = ?", s.Name).Scan(&count)
+		DB.QueryRow(FormatQuery("SELECT COUNT(*) FROM master_status_dock WHERE name = ?"), s.Name).Scan(&count)
 		if count == 0 {
 			id := uuid.New().String()
-			_, _ = DB.Exec(
-				"INSERT INTO master_status_dock (id, name, color, is_active) VALUES (?, ?, ?, 1)",
+			_, _ = DB.Exec(FormatQuery("INSERT INTO master_status_dock (id, name, color, is_active) VALUES (?, ?, ?, true)"),
 				id, s.Name, s.Color,
 			)
 			log.Printf("Seeded master status dock: %s", s.Name)
@@ -439,15 +467,13 @@ func seedMissingDropdownItems() {
 
 	for _, item := range items {
 		var count int
-		DB.QueryRow(
-			"SELECT COUNT(*) FROM dropdown_configs WHERE category = ? AND value = ?",
+		DB.QueryRow(FormatQuery("SELECT COUNT(*) FROM dropdown_configs WHERE category = ? AND value = ?"),
 			item.Category, item.Value,
 		).Scan(&count)
 
 		if count == 0 {
 			id := uuid.New().String()
-			_, _ = DB.Exec(
-				"INSERT INTO dropdown_configs (id, category, label, value, is_active) VALUES (?, ?, ?, ?, 1)",
+			_, _ = DB.Exec(FormatQuery("INSERT INTO dropdown_configs (id, category, label, value, is_active) VALUES (?, ?, ?, ?, true)"),
 				id, item.Category, item.Label, item.Value,
 			)
 			log.Printf("Seeded missing dropdown: [%s] %s", item.Category, item.Label)
@@ -483,11 +509,10 @@ func seedMissingLocations() {
 
 	for _, loc := range locations {
 		var count int
-		DB.QueryRow("SELECT COUNT(*) FROM master_locations WHERE name = ?", loc.Name).Scan(&count)
+		DB.QueryRow(FormatQuery("SELECT COUNT(*) FROM master_locations WHERE name = ?"), loc.Name).Scan(&count)
 		if count == 0 {
 			id := uuid.New().String()
-			_, _ = DB.Exec(
-				"INSERT INTO master_locations (id, name, size, description, status) VALUES (?, ?, ?, '', 'Active')",
+			_, _ = DB.Exec(FormatQuery("INSERT INTO master_locations (id, name, size, description, status) VALUES (?, ?, ?, '', 'Active')"),
 				id, loc.Name, loc.Size,
 			)
 			log.Printf("Seeded missing location: %s", loc.Name)
@@ -514,8 +539,7 @@ func seedApprovalWorkflows() {
 
 	for _, w := range workflows {
 		id := uuid.New().String()
-		_, _ = DB.Exec(
-			"INSERT INTO approval_workflow (id, module, step_order, label, jabatan) VALUES (?, ?, ?, ?, ?)",
+		_, _ = DB.Exec(FormatQuery("INSERT INTO approval_workflow (id, module, step_order, label, jabatan) VALUES (?, ?, ?, ?, ?)"),
 			id, w.Module, w.StepOrder, w.Label, w.Jabatan,
 		)
 	}
@@ -533,12 +557,11 @@ func seedAdmin() {
 	}
 
 	var existingID string
-	err = DB.QueryRow("SELECT id FROM profiles WHERE email = ?", defaultEmail).Scan(&existingID)
+	err = DB.QueryRow(FormatQuery("SELECT id FROM profiles WHERE email = ?"), defaultEmail).Scan(&existingID)
 	
 	if err == nil {
 		// Admin exists, FORCE RESET the password and role to ensure it works
-		_, _ = DB.Exec(
-			"UPDATE profiles SET password = ?, role = 'Admin', jabatan = 'System Administrator' WHERE id = ?",
+		_, _ = DB.Exec(FormatQuery("UPDATE profiles SET password = ?, role = 'Admin', jabatan = 'System Administrator' WHERE id = ?"),
 			string(hashed), existingID,
 		)
 		log.Printf("Admin account reset guaranteed: %s", defaultEmail)
@@ -547,8 +570,7 @@ func seedAdmin() {
 
 	// Admin does not exist, create it
 	id := uuid.New().String()
-	_, err = DB.Exec(
-		"INSERT INTO profiles (id, email, password, name, role, jabatan) VALUES (?, ?, ?, ?, ?, ?)",
+	_, err = DB.Exec(FormatQuery("INSERT INTO profiles (id, email, password, name, role, jabatan) VALUES (?, ?, ?, ?, ?, ?)"),
 		id, defaultEmail, string(hashed), "Super Admin", "Admin", "System Administrator",
 	)
 	if err != nil {
@@ -564,8 +586,7 @@ func GetUserByIdentifier(identifier string) map[string]any {
 	var username, jabatan, city, branch, department, whatsapp, avatarURL, roles, extraRoles *string
 
 	log.Printf("[DEBUG] Searching for user with identifier: %s", identifier)
-	err := DB.QueryRow(
-		"SELECT id, email, username, password, name, role, jabatan, city, branch, department, whatsapp, avatar_url, roles, extra_roles FROM profiles WHERE email = ? OR username = ?",
+	err := DB.QueryRow(FormatQuery("SELECT id, email, username, password, name, role, jabatan, city, branch, department, whatsapp, avatar_url, roles, extra_roles FROM profiles WHERE email = ? OR username = ?"),
 		identifier, identifier,
 	).Scan(&id, &emailVal, &username, &password, &name, &role, &jabatan, &city, &branch, &department, &whatsapp, &avatarURL, &roles, &extraRoles)
 
@@ -617,7 +638,7 @@ func seedRolesAndPermissions() {
 
 	for _, r := range roles {
 		roleID := uuid.New().String()
-		_, _ = DB.Exec("INSERT INTO roles_master (id, name, description) VALUES (?, ?, ?)", roleID, r.Name, r.Desc)
+		_, _ = DB.Exec(FormatQuery("INSERT INTO roles_master (id, name, description) VALUES (?, ?, ?)"), roleID, r.Name, r.Desc)
 		
 		// Seed all permissions for Admin, selected for others
 		resources := []string{
@@ -630,18 +651,17 @@ func seedRolesAndPermissions() {
 		
 		for _, res := range resources {
 			for _, act := range actions {
-				isAllowed := 0
+				isAllowed := false
 				if r.Name == "Admin" {
-					isAllowed = 1
+					isAllowed = true
 				} else if r.Name == "Manager" && (act == "view" || act == "add" || act == "edit" || act == "approve") {
-					isAllowed = 1
+					isAllowed = true
 				} else if r.Name == "Staff" && act == "view" {
-					isAllowed = 1
+					isAllowed = true
 				}
 				
 				permID := uuid.New().String()
-				_, _ = DB.Exec(
-					"INSERT INTO role_permissions (id, role_id, resource, action, is_allowed) VALUES (?, ?, ?, ?, ?)",
+				_, _ = DB.Exec(FormatQuery("INSERT INTO role_permissions (id, role_id, resource, action, is_allowed) VALUES (?, ?, ?, ?, ?)"),
 					permID, roleID, res, act, isAllowed,
 				)
 			}
@@ -708,8 +728,7 @@ func seedDropdownConfigs() {
 
 	for _, item := range initialData {
 		id := uuid.New().String()
-		_, _ = DB.Exec(
-			"INSERT INTO dropdown_configs (id, category, label, value) VALUES (?, ?, ?, ?)",
+		_, _ = DB.Exec(FormatQuery("INSERT INTO dropdown_configs (id, category, label, value) VALUES (?, ?, ?, ?)"),
 			id, item.Category, item.Label, item.Value,
 		)
 	}
@@ -721,8 +740,7 @@ func GetUserPublicByEmail(email string) map[string]any {
 	var id, emailVal, name, role string
 	var username, jabatan, city, branch, department, whatsapp, avatarURL, roles, extraRoles *string
 
-	err := DB.QueryRow(
-		"SELECT id, email, username, name, role, jabatan, city, branch, department, whatsapp, avatar_url, roles, extra_roles FROM profiles WHERE email = ? OR username = ?",
+	err := DB.QueryRow(FormatQuery("SELECT id, email, username, name, role, jabatan, city, branch, department, whatsapp, avatar_url, roles, extra_roles FROM profiles WHERE email = ? OR username = ?"),
 		email, email,
 	).Scan(&id, &emailVal, &username, &name, &role, &jabatan, &city, &branch, &department, &whatsapp, &avatarURL, &roles, &extraRoles)
 
