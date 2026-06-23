@@ -289,12 +289,12 @@ func PostBulkPendingApprovals(w http.ResponseWriter, r *http.Request) {
 	}
 
 	type BulkResult struct {
-		Pending      float64 `json:"pending"`
-		FinalCost    float64 `json:"final_cost"`
-		LatestDate   string  `json:"latest_date"`
-		LatestCost   float64 `json:"latest_cost"`
-		PreviousCost float64 `json:"previous_cost"`
-		RejectedCost float64 `json:"rejected_cost"`
+		Pending      float64  `json:"pending"`
+		FinalCost    float64  `json:"final_cost"`
+		LatestDate   *string  `json:"latest_date,omitempty"`
+		LatestCost   *float64 `json:"latest_cost,omitempty"`
+		PreviousCost *float64 `json:"previous_cost,omitempty"`
+		RejectedCost float64  `json:"rejected_cost"`
 	}
 
 	var wg sync.WaitGroup
@@ -311,7 +311,7 @@ func PostBulkPendingApprovals(w http.ResponseWriter, r *http.Request) {
 
 			// Inisialisasi default agar selalu ada balikan
 			mu.Lock()
-			result[id] = BulkResult{Pending: 0, FinalCost: 0, LatestDate: ""}
+			result[id] = BulkResult{Pending: 0, FinalCost: 0}
 			mu.Unlock()
 
 			var rawJson []byte
