@@ -62,30 +62,6 @@ func Init() {
 
 	createTables()
 	seedAdmin()
-
-	// Async Migration: Normalize existing Work Orders that haven't been calculated
-	go func() {
-		log.Println("Starting background normalization of existing work orders...")
-		rows, err := DB.Query("SELECT wo_id, raw_json FROM work_order_details WHERE (approved_cost = 0 AND pending_cost = 0 AND rejected_cost = 0) OR latest_date IS NULL")
-		if err == nil {
-			count := 0
-			for rows.Next() {
-				var woID, rawJson string
-				if err := rows.Scan(&woID, &rawJson); err == nil {
-					NormalizeWorkOrder(woID, []byte(rawJson))
-					count++
-				}
-			}
-			rows.Close()
-			if count > 0 {
-				log.Printf("Successfully normalized %d existing work orders.", count)
-			} else {
-				log.Println("All work orders are already normalized.")
-			}
-		} else {
-			log.Printf("Error querying work orders for normalization: %v", err)
-		}
-	}()
 }
 
 // FormatQuery dynamically replaces ? with $1, $2 for PostgreSQL compatibility
@@ -445,44 +421,13 @@ func createTables() {
 	DB.Exec(`CREATE TABLE IF NOT EXISTS work_order_details (
 		wo_id TEXT PRIMARY KEY,
 		raw_json TEXT,
-		last_sync TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-		approved_cost REAL DEFAULT 0,
-		pending_cost REAL DEFAULT 0,
-		rejected_cost REAL DEFAULT 0,
-		latest_date TEXT
+		last_sync TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 	);`)
-
-	// Force ADD columns in case table already existed before this update
-	DB.Exec("ALTER TABLE work_order_details ADD COLUMN approved_cost REAL DEFAULT 0")
-	DB.Exec("ALTER TABLE work_order_details ADD COLUMN pending_cost REAL DEFAULT 0")
-	DB.Exec("ALTER TABLE work_order_details ADD COLUMN rejected_cost REAL DEFAULT 0")
-	DB.Exec("ALTER TABLE work_order_details ADD COLUMN latest_date TEXT")
-
-	// Migration: Add work_order_items for LLM and Global Search compatibility
-	_, err := DB.Exec(`CREATE TABLE IF NOT EXISTS work_order_items (
-		id TEXT PRIMARY KEY,
-		wo_id TEXT,
-		jo_id TEXT,
-		parent_id TEXT,
-		path TEXT,
-		label TEXT,
-		remark TEXT,
-		volume REAL,
-		unit TEXT,
-		price REAL,
-		total_price REAL,
-		approved_level INTEGER,
-		status_approval TEXT,
-		created_at TIMESTAMP
-	);`)
-	if err != nil {
-		log.Printf("ERROR creating work_order_items table: %v", err)
-	}
 
 	// Upgrade raw_json to JSONB if using PostgreSQL
 	if os.Getenv("DB_CONNECTION") == "postgres" {
 		log.Println("PostgreSQL detected: Upgrading raw_json to JSONB for high-performance querying...")
-		_, err = DB.Exec(`ALTER TABLE work_order_details ALTER COLUMN raw_json TYPE JSONB USING raw_json::jsonb`)
+		_, err := DB.Exec(`ALTER TABLE work_order_details ALTER COLUMN raw_json TYPE JSONB USING raw_json::jsonb`)
 		if err != nil {
 			log.Printf("Notice: JSONB upgrade skipped or already applied (%v)", err)
 		}
