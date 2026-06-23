@@ -442,13 +442,14 @@ export default function WorkOrderDashboard() {
         }
 
         let finalCost = 0;
-        if (item.volume_cost_final > 0) {
-          const baseCost = Number(item.volume_cost_final) || 0;
-          const volume = Number(item.volume) || 0;
-          const progress = item.progress !== undefined ? Number(item.progress) : 100;
-          finalCost = baseCost * volume * (progress / 100);
-        } else if (item.total_price > 0) {
-          finalCost = Number(item.total_price);
+        if (!item.material || item.material.length === 0) {
+          const uPrice = Number(item.volume_cost_final) || Number(item.price) || 0;
+          if (uPrice > 0) {
+            const vol = Number(item.volume) || 1;
+            finalCost = uPrice * vol;
+          } else {
+            finalCost = Number(item.total_price) || 0;
+          }
         }
 
         if (finalCost > 0) {
@@ -1271,10 +1272,10 @@ export default function WorkOrderDashboard() {
       {canAccess('AI_Analyzer', 'view') && (
         <button
           onClick={() => setIsAIModalOpen(true)}
-          className={`fixed bottom-4 right-4 sm:bottom-6 sm:right-6 z-[90] flex items-center gap-2 px-4 py-3 md:px-5 md:py-3.5 rounded-full shadow-2xl transition-all duration-300 group hover:-translate-y-1 ${isAIModalOpen ? 'opacity-0 scale-75 pointer-events-none' : 'opacity-100 scale-100'} ${isDarkMode ? 'bg-gradient-to-r from-indigo-500 to-purple-600 text-white shadow-indigo-900/30' : 'bg-gradient-to-r from-indigo-600 to-purple-600 text-white shadow-indigo-500/30'}`}
+          title="Analisa AI"
+          className={`fixed bottom-4 right-4 sm:bottom-6 sm:right-6 z-[90] flex items-center justify-center p-3.5 md:p-4 rounded-full shadow-2xl transition-all duration-300 group hover:-translate-y-1 ${isAIModalOpen ? 'opacity-0 scale-75 pointer-events-none' : 'opacity-100 scale-100'} ${isDarkMode ? 'bg-gradient-to-r from-indigo-500 to-purple-600 text-white shadow-indigo-900/30' : 'bg-gradient-to-r from-indigo-600 to-purple-600 text-white shadow-indigo-500/30'}`}
         >
-          <Sparkles size={20} className="group-hover:animate-pulse" />
-          <span className="font-bold text-sm hidden sm:inline">Analisa AI</span>
+          <Sparkles size={24} className="group-hover:animate-pulse" />
         </button>
       )}
 
@@ -2479,20 +2480,20 @@ export default function WorkOrderDashboard() {
 
                                   const nodeMatches = dateMatch && statusMatch;
 
-                                  if (nodeMatches) {
-                                    let costToAdd = 0;
-                                    if (node.volume_cost_final > 0) {
-                                      const vol = Number(node.volume) || 0;
-                                      const prog = node.progress !== undefined ? Number(node.progress) : 100;
-                                      costToAdd = Number(node.volume_cost_final) * vol * (prog / 100);
-                                    } else {
-                                      costToAdd = node.total_price || 0;
-                                    }
-                                    totalFilteredCost += costToAdd;
-                                  }
-
                                   if (node.material && node.material.length > 0) {
                                     calculateFilteredCost(node.material);
+                                  } else {
+                                    if (nodeMatches) {
+                                      let costToAdd = 0;
+                                      const uPrice = Number(node.volume_cost_final) || Number(node.price) || 0;
+                                      if (uPrice > 0) {
+                                        const vol = Number(node.volume) || 1;
+                                        costToAdd = uPrice * vol;
+                                      } else {
+                                        costToAdd = Number(node.total_price) || 0;
+                                      }
+                                      totalFilteredCost += costToAdd;
+                                    }
                                   }
                                 });
                               };
@@ -2621,23 +2622,23 @@ export default function WorkOrderDashboard() {
                                         )}
                                       </div>
                                       
-                                      {(item.volume_cost_final > 0 || item.total_price > 0) && (
+                                      {(!item.material || item.material.length === 0) && (Number(item.volume_cost_final) > 0 || Number(item.price) > 0 || Number(item.total_price) > 0) && (
                                         <div className="text-left md:text-right shrink-0 mt-2 md:mt-0 bg-white px-3 py-2 rounded-lg border border-slate-100 flex flex-col md:items-end justify-center">
-                                          {item.volume_cost_final > 0 && (
+                                          {(Number(item.volume_cost_final) > 0 || Number(item.price) > 0) && (
                                             <span className="text-[9px] text-slate-400 font-mono mb-1 bg-slate-50 px-1.5 py-0.5 rounded border border-slate-100">
-                                              Satuan: {formatIDR(item.volume_cost_final)}
+                                              Satuan: {formatIDR(Number(item.volume_cost_final) || Number(item.price))}
                                             </span>
                                           )}
                                           <span className="text-[10px] text-slate-400 block mb-0.5 uppercase tracking-wider font-bold">Total Harga</span>
                                           <p className="text-base font-black text-emerald-600 font-mono tracking-tight">
                                             {(() => {
                                               let costToDisplay = 0;
-                                              if (item.volume_cost_final > 0) {
-                                                const vol = Number(item.volume) || 0;
-                                                const prog = item.progress !== undefined ? Number(item.progress) : 100;
-                                                costToDisplay = Number(item.volume_cost_final) * vol * (prog / 100);
+                                              const uPrice = Number(item.volume_cost_final) || Number(item.price) || 0;
+                                              if (uPrice > 0) {
+                                                const vol = Number(item.volume) || 1;
+                                                costToDisplay = uPrice * vol;
                                               } else {
-                                                costToDisplay = item.total_price || 0;
+                                                costToDisplay = Number(item.total_price) || 0;
                                               }
                                               return formatIDR(costToDisplay);
                                             })()}

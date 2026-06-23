@@ -171,7 +171,7 @@ func GetPendingApprovals(w http.ResponseWriter, r *http.Request) {
 		}
 
 		// Also check root's approval level
-		if rootMinApprovalLevel >= 5 || strings.Contains(rootStatusAppr, "approved") {
+		if rootMinApprovalLevel >= 5 || rootStatusAppr == "approved" || rootStatusAppr == "approved level 5" {
 			isGlobalApproved = true
 		}
 
@@ -203,19 +203,21 @@ func GetPendingApprovals(w http.ResponseWriter, r *http.Request) {
 							statusAppr = strings.ToLower(strings.TrimSpace(val))
 						}
 		
-						// Only sum if NOT fully approved (level 5 or any 'approved' status)
-						if approvedLevel < 5 && !strings.Contains(statusAppr, "approved") {
+						// Only sum if NOT fully approved (level 5 or exact 'approved')
+						isRejected := statusAppr == "rejected"
+						isAppr5 := !isRejected && (approvedLevel >= 5 || statusAppr == "approved" || statusAppr == "approved level 5")
+						
+						if !isRejected && !isAppr5 {
 							baseCost := parseFloatAny(item["volume_cost_final"])
+							if baseCost == 0 {
+								baseCost = parseFloatAny(item["price"])
+							}
 							if baseCost > 0 {
-								prog := float64(100)
-								if _, hasProg := item["progress"]; hasProg {
-									prog = parseFloatAny(item["progress"])
-								}
 								vol := float64(1)
 								if v, hasVol := item["volume"]; hasVol {
 									vol = parseFloatAny(v)
 								}
-								sum += baseCost * vol * (prog / 100)
+								sum += baseCost * vol
 							} else {
 								tPrice := parseFloatAny(item["total_price"])
 								if tPrice > 0 {
@@ -404,43 +406,43 @@ func PostBulkPendingApprovals(w http.ResponseWriter, r *http.Request) {
 							if !ok {
 								continue
 							}
+							approvedLevel := float64(0)
+							if val, ok := item["approved_level"].(float64); ok {
+								approvedLevel = val
+							}
+							statusAppr := ""
+							if val, ok := item["status_approval"].(string); ok {
+								statusAppr = strings.ToLower(strings.TrimSpace(val))
+							}
+
+							dateToUse := ""
+							if val, ok := item["date_approval"].(string); ok && val != "" {
+								dateToUse = val
+							} else if val, ok := item["updated_at"].(string); ok && val != "" {
+								dateToUse = val
+							} else if val, ok := item["created_at"].(string); ok && val != "" {
+								dateToUse = val
+							}
+							if dateToUse == "" && rootUpdatedAt != "" {
+								dateToUse = rootUpdatedAt
+							}
+							if dateToUse == "" && rootCreatedAt != "" {
+								dateToUse = rootCreatedAt
+							}
+
+							isAppr5 := approvedLevel >= 5 || statusAppr == "approved" || statusAppr == "approved level 5"
+							isWaiting := approvedLevel == 0 || statusAppr == "waiting"
+
+							if isAppr5 && dateToUse > latestApprove5Date {
+								latestApprove5Date = dateToUse
+							}
+							if isWaiting && dateToUse > latestWaitingDate {
+								latestWaitingDate = dateToUse
+							}
+
 							matRaw, hasMat := item["material"].([]interface{})
 							if hasMat && len(matRaw) > 0 {
 								scanDates(matRaw)
-							} else {
-								approvedLevel := float64(0)
-								if val, ok := item["approved_level"].(float64); ok {
-									approvedLevel = val
-								}
-								statusAppr := ""
-								if val, ok := item["status_approval"].(string); ok {
-									statusAppr = strings.ToLower(strings.TrimSpace(val))
-								}
-
-								dateToUse := ""
-								if val, ok := item["date_approval"].(string); ok && val != "" {
-									dateToUse = val
-								} else if val, ok := item["updated_at"].(string); ok && val != "" {
-									dateToUse = val
-								} else if val, ok := item["created_at"].(string); ok && val != "" {
-									dateToUse = val
-								}
-								if dateToUse == "" && rootUpdatedAt != "" {
-									dateToUse = rootUpdatedAt
-								}
-								if dateToUse == "" && rootCreatedAt != "" {
-									dateToUse = rootCreatedAt
-								}
-
-								isAppr5 := approvedLevel >= 5 || statusAppr == "approved" || statusAppr == "approved level 5"
-								isWaiting := approvedLevel == 0 || statusAppr == "waiting"
-
-								if isAppr5 && dateToUse > latestApprove5Date {
-									latestApprove5Date = dateToUse
-								}
-								if isWaiting && dateToUse > latestWaitingDate {
-									latestWaitingDate = dateToUse
-								}
 							}
 						}
 					}
@@ -479,16 +481,15 @@ func PostBulkPendingApprovals(w http.ResponseWriter, r *http.Request) {
 								// Base cost calculation
 								costToAdd := float64(0)
 								baseCost := parseFloatAny(item["volume_cost_final"])
+								if baseCost == 0 {
+									baseCost = parseFloatAny(item["price"])
+								}
 								if baseCost > 0 {
-									prog := float64(100)
-									if _, hasProg := item["progress"]; hasProg {
-										prog = parseFloatAny(item["progress"])
-									}
 									vol := float64(1)
 									if v, hasVol := item["volume"]; hasVol {
 										vol = parseFloatAny(v)
 									}
-									costToAdd = baseCost * vol * (prog / 100)
+									costToAdd = baseCost * vol
 								} else {
 									tPrice := parseFloatAny(item["total_price"])
 									if tPrice > 0 {
