@@ -423,6 +423,15 @@ func createTables() {
 		raw_json TEXT,
 		last_sync TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 	);`)
+
+	// Upgrade raw_json to JSONB if using PostgreSQL
+	if os.Getenv("DB_CONNECTION") == "postgres" {
+		log.Println("PostgreSQL detected: Upgrading raw_json to JSONB for high-performance querying...")
+		_, err := DB.Exec(`ALTER TABLE work_order_details ALTER COLUMN raw_json TYPE JSONB USING raw_json::jsonb`)
+		if err != nil {
+			log.Printf("Notice: JSONB upgrade skipped or already applied (%v)", err)
+		}
+	}
 }
 
 func seedMasterStatusDock() {
