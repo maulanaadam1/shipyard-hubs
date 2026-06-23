@@ -8,39 +8,50 @@ import (
 
 	"github.com/google/uuid"
 	"golang.org/x/crypto/bcrypt"
+	_ "github.com/lib/pq"
 	_ "modernc.org/sqlite"
 )
 
 // DB is the global database connection
 var DB *sql.DB
 
-// Init initializes the SQLite database
+// Init initializes the database (Postgres or SQLite fallback)
 func Init() {
-	dbPath := "./shipyard.sqlite"
-
-	// In production, prefer /data volume (Docker)
-	if os.Getenv("NODE_ENV") == "production" {
-		if _, err := os.Stat("/data"); err == nil {
-			dbPath = "/data/shipyard.sqlite"
-		}
-	}
-
-	// Override via env var
-	if envPath := os.Getenv("DATABASE_PATH"); envPath != "" {
-		dbPath = envPath
-	}
-
-	// Ensure directory exists
-	if dir := filepath.Dir(dbPath); dir != "." && dir != "" {
-		if err := os.MkdirAll(dir, 0755); err != nil {
-			log.Fatalf("Failed to create database directory: %v", err)
-		}
-	}
-
 	var err error
-	DB, err = sql.Open("sqlite", dbPath+"?_pragma=journal_mode(WAL)&_pragma=foreign_keys(on)")
-	if err != nil {
-		log.Fatalf("Failed to open database: %v", err)
+	dbConn := os.Getenv("DB_CONNECTION")
+
+	if dbConn == "postgres" {
+		pgUrl := os.Getenv("POSTGRES_URL")
+		if pgUrl == "" {
+			log.Fatalf("POSTGRES_URL is required when DB_CONNECTION is postgres")
+		}
+		DB, err = sql.Open("postgres", pgUrl)
+		if err != nil {
+			log.Fatalf("Failed to open postgres database: %v", err)
+		}
+		log.Printf("Database initialized: PostgreSQL")
+	} else {
+		dbPath := "./shipyard.sqlite"
+
+		if os.Getenv("NODE_ENV") == "production" {
+			if _, err := os.Stat("/data"); err == nil {
+				dbPath = "/data/shipyard.sqlite"
+			}
+		}
+		if envPath := os.Getenv("DATABASE_PATH"); envPath != "" {
+			dbPath = envPath
+		}
+		if dir := filepath.Dir(dbPath); dir != "." && dir != "" {
+			if err := os.MkdirAll(dir, 0755); err != nil {
+				log.Fatalf("Failed to create database directory: %v", err)
+			}
+		}
+
+		DB, err = sql.Open("sqlite", dbPath+"?_pragma=journal_mode(WAL)&_pragma=foreign_keys(on)")
+		if err != nil {
+			log.Fatalf("Failed to open database: %v", err)
+		}
+		log.Printf("Database initialized: SQLite (%s)", dbPath)
 	}
 
 	if err = DB.Ping(); err != nil {
@@ -49,7 +60,6 @@ func Init() {
 
 	createTables()
 	seedAdmin()
-	log.Printf("Database initialized: %s", dbPath)
 }
 
 func createTables() {
@@ -67,21 +77,21 @@ func createTables() {
 		department TEXT,
 		whatsapp TEXT,
 		avatar_url TEXT,
-		created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-		updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+		created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+		updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 	);
 
 	CREATE TABLE IF NOT EXISTS equipment (
 		id TEXT PRIMARY KEY,
-		created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-		updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+		created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+		updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
 		source TEXT, no_asset TEXT, type TEXT, brand TEXT, name TEXT,
 		capacity TEXT, year_invest TEXT, available TEXT, alias TEXT, price TEXT, pic TEXT
 	);
 
 	CREATE TABLE IF NOT EXISTS loan_requests (
 		id TEXT PRIMARY KEY,
-		date_created DATETIME DEFAULT CURRENT_TIMESTAMP,
+		date_created TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
 		request_id TEXT, project_id TEXT, shipname TEXT, vendor TEXT,
 		work_order TEXT, date_start TEXT, date_finish TEXT, duration INTEGER,
 		lampiran TEXT, change TEXT, status TEXT, items TEXT, approval_steps TEXT
@@ -91,7 +101,7 @@ func createTables() {
 		id TEXT PRIMARY KEY,
 		loan_id TEXT,
 		release_no TEXT,
-		date_released DATETIME DEFAULT CURRENT_TIMESTAMP,
+		date_released TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
 		date_finish TEXT,
 		released_by TEXT,
 		received_by TEXT,
@@ -116,8 +126,8 @@ func createTables() {
 
 	CREATE TABLE IF NOT EXISTS projects (
 		id_siaga INTEGER,
-		create_date DATETIME DEFAULT CURRENT_TIMESTAMP,
-		updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+		create_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+		updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
 		idproject TEXT,
 		shipname TEXT,
 		cust_company TEXT,
@@ -210,20 +220,20 @@ func createTables() {
 		name TEXT,
 		svg_content TEXT,
 		viewbox TEXT,
-		is_default BOOLEAN DEFAULT 0,
+		is_default BOOLEAN DEFAULT false,
 		location_id TEXT,
 		scale_x REAL DEFAULT 3.6,
 		scale_y REAL DEFAULT 3.2,
 		default_zoom REAL DEFAULT 1.0,
-		created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+		created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 	);
 
 	CREATE TABLE IF NOT EXISTS master_status_dock (
 		id TEXT PRIMARY KEY,
 		name TEXT UNIQUE,
 		color TEXT,
-		is_active BOOLEAN DEFAULT 1,
-		created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+		is_active BOOLEAN DEFAULT true,
+		created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 	);
 
 	CREATE TABLE IF NOT EXISTS master_services (
@@ -307,7 +317,7 @@ func createTables() {
 		role_id TEXT,
 		resource TEXT,
 		action TEXT,
-		is_allowed BOOLEAN DEFAULT 0
+		is_allowed BOOLEAN DEFAULT false
 	);`)
 
 	DB.Exec(`CREATE TABLE IF NOT EXISTS sync_configs (
@@ -317,7 +327,7 @@ func createTables() {
 		headers TEXT,
 		last_sync TEXT,
 		last_response TEXT,
-		is_active BOOLEAN DEFAULT 1,
+		is_active BOOLEAN DEFAULT true,
 		interval_type TEXT DEFAULT 'minutes',
 		interval_value INTEGER DEFAULT 5
 	);`)
@@ -338,7 +348,7 @@ func createTables() {
 		category TEXT,
 		label TEXT,
 		value TEXT,
-		is_active BOOLEAN DEFAULT 1
+		is_active BOOLEAN DEFAULT true
 	);`)
 
 	seedDropdownConfigs()
@@ -372,8 +382,8 @@ func createTables() {
 		id TEXT PRIMARY KEY,
 		name TEXT UNIQUE,
 		color TEXT,
-		is_active BOOLEAN DEFAULT 1,
-		created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+		is_active BOOLEAN DEFAULT true,
+		created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 	);`)
 
 	seedMasterStatusDock()
@@ -382,7 +392,7 @@ func createTables() {
 	DB.Exec(`CREATE TABLE IF NOT EXISTS work_order_details (
 		wo_id TEXT PRIMARY KEY,
 		raw_json TEXT,
-		last_sync DATETIME DEFAULT CURRENT_TIMESTAMP
+		last_sync TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 	);`)
 }
 
