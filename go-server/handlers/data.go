@@ -85,7 +85,7 @@ func CheckTablePermission(r *http.Request, table string, action string) bool {
 	
 	// Re-parse role from DB to be sure
 	var dbRole, dbRoles, dbExtraRoles string
-	err := db.DB.QueryRow(
+	err := db.QueryRow(
 		"SELECT role, roles, extra_roles FROM profiles WHERE id = ? OR email = ?",
 		claims.ID, claims.Email,
 	).Scan(&dbRole, &dbRoles, &dbExtraRoles)
@@ -127,7 +127,7 @@ func CheckTablePermission(r *http.Request, table string, action string) bool {
 		}
 
 		var allowed bool
-		err := db.DB.QueryRow(`
+		err := db.QueryRow(`
 			SELECT is_allowed FROM role_permissions p
 			JOIN roles_master r ON p.role_id = r.id
 			WHERE r.name = ? AND p.resource = ? AND (p.action = ? OR p.action = '*')
@@ -168,6 +168,10 @@ func GetData(w http.ResponseWriter, r *http.Request) {
 	}
 
 	query := "SELECT * FROM " + table
+	if table == "sync_configs" {
+		query = "SELECT id, name, url, headers, last_sync, is_active, interval_type, interval_value FROM sync_configs"
+	}
+	
 	args := []any{}
 
 	// --- Build WHERE clause from query params ---
@@ -224,7 +228,7 @@ func GetData(w http.ResponseWriter, r *http.Request) {
 		query += fmt.Sprintf(" ORDER BY %s %s", orderBy, dir)
 	}
 
-	rows, err := db.DB.Query(query, args...)
+	rows, err := db.Query(query, args...)
 	if err != nil {
 		writeJSON(w, 500, map[string]string{"error": err.Error()})
 		return
@@ -306,7 +310,7 @@ func PostData(w http.ResponseWriter, r *http.Request) {
 		existing := false
 		if isUpsert {
 			var count int
-			err := db.DB.QueryRow(
+			err := db.QueryRow(
 				fmt.Sprintf("SELECT COUNT(*) FROM %s WHERE %s = ?", table, pkCol),
 				item[pkCol],
 			).Scan(&count)
@@ -338,7 +342,7 @@ func PostData(w http.ResponseWriter, r *http.Request) {
 			}
 			vals = append(vals, item[pkCol])
 			query := fmt.Sprintf("UPDATE %s SET %s WHERE %s = ?", table, strings.Join(sets, ", "), pkCol)
-			_, execErr = db.DB.Exec(query, vals...)
+			_, execErr = db.Exec(query, vals...)
 		} else {
 			// Hash password if inserting into profiles
 			if table == "profiles" {
@@ -365,7 +369,7 @@ func PostData(w http.ResponseWriter, r *http.Request) {
 				strings.Join(keys, ", "),
 				strings.Join(placeholders, ", "),
 			)
-			_, execErr = db.DB.Exec(query, vals...)
+			_, execErr = db.Exec(query, vals...)
 		}
 
 		if execErr != nil {
@@ -505,7 +509,7 @@ func PutData(w http.ResponseWriter, r *http.Request) {
 		query := fmt.Sprintf("UPDATE %s SET %s WHERE %s", table, strings.Join(sets, ", "), whereClause)
 		finalParams := append(setVals, params...)
 		
-		if _, err := db.DB.Exec(query, finalParams...); err != nil {
+		if _, err := db.Exec(query, finalParams...); err != nil {
 			writeJSON(w, 500, map[string]string{"error": err.Error()})
 			return
 		}
@@ -584,7 +588,7 @@ func DeleteData(w http.ResponseWriter, r *http.Request) {
 	query := fmt.Sprintf("DELETE FROM %s WHERE %s", table, whereClause)
 	log.Printf("[DB] Executing: %s with params: %v", query, params)
 	
-	res, err := db.DB.Exec(query, params...)
+	res, err := db.Exec(query, params...)
 	if err != nil {
 		log.Printf("[DB] Delete error: %v", err)
 		writeJSON(w, 500, map[string]string{"error": err.Error()})

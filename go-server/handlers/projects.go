@@ -10,7 +10,7 @@ import (
 // GetProjectYearsStats returns the count of projects grouped by year
 func GetProjectYearsStats(w http.ResponseWriter, r *http.Request) {
 	query := "SELECT year, COUNT(*) FROM projects WHERE year IS NOT NULL AND year > 1900 GROUP BY year ORDER BY year ASC"
-	rows, err := db.DB.Query(query)
+	rows, err := db.Query(query)
 	if err != nil {
 		log.Printf("Error querying projects by year: %v", err)
 		http.Error(w, `{"error": "Failed to fetch project stats"}`, http.StatusInternalServerError)

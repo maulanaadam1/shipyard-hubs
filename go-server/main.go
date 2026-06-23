@@ -51,7 +51,7 @@ func main() {
 		var id, emailVal, password, name, role string
 		var username, jabatan, city, branch, department, whatsapp, avatarURL, roles, extraRoles *string
 		
-		err := db.DB.QueryRow(query).Scan(&id, &emailVal, &username, &password, &name, &role, &jabatan, &city, &branch, &department, &whatsapp, &avatarURL, &roles, &extraRoles)
+		err := db.QueryRow(query).Scan(&id, &emailVal, &username, &password, &name, &role, &jabatan, &city, &branch, &department, &whatsapp, &avatarURL, &roles, &extraRoles)
 		
 		if err != nil {
 			w.Write([]byte(`{"scan_error_full": "` + err.Error() + `"}`))

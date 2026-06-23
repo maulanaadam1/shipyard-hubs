@@ -42,9 +42,9 @@ func RunSyncJob(force bool, targetId string) {
 
 	if targetId != "" {
 		query += " AND id = ?"
-		rows, err = db.DB.Query(db.FormatQuery(query), targetId)
+		rows, err = db.Query(db.FormatQuery(query), targetId)
 	} else {
-		rows, err = db.DB.Query(db.FormatQuery(query))
+		rows, err = db.Query(db.FormatQuery(query))
 	}
 
 	if err != nil {
@@ -144,10 +144,10 @@ func RunSyncJob(force bool, targetId string) {
 				db.RDB.Set(db.Ctx, cacheKey, string(bodyBytes), 0)
 				
 				// Update ONLY last_sync in SQL to prevent bloat
-				_, err = db.DB.Exec("UPDATE sync_configs SET last_sync = ? WHERE id = ?", now, id)
+				_, err = db.Exec("UPDATE sync_configs SET last_sync = ? WHERE id = ?", now, id)
 			} else {
 				// Fallback: save to SQL directly
-				_, err = db.DB.Exec("UPDATE sync_configs SET last_sync = ?, last_response = ? WHERE id = ?", now, string(bodyBytes), id)
+				_, err = db.Exec("UPDATE sync_configs SET last_sync = ?, last_response = ? WHERE id = ?", now, string(bodyBytes), id)
 			}
 			
 			if err != nil {
@@ -160,7 +160,7 @@ func RunSyncJob(force bool, targetId string) {
 }
 
 func processJobOrdersIncremental(configId, baseUrl string, headers map[string]string, lastSyncStr string) {
-	_, err := db.DB.Exec(`CREATE TABLE IF NOT EXISTS sync_job_orders (
+	_, err := db.Exec(`CREATE TABLE IF NOT EXISTS sync_job_orders (
 		id TEXT PRIMARY KEY,
 		updated_at DATETIME,
 		raw_data TEXT
@@ -441,14 +441,14 @@ func processJobOrdersIncremental(configId, baseUrl string, headers map[string]st
 
 		if !newestUpdatedAt.IsZero() {
 			now := time.Now().Format("2006-01-02 15:04:05")
-			db.DB.Exec("UPDATE sync_configs SET last_sync = ? WHERE id = ?", now, configId)
+			db.Exec("UPDATE sync_configs SET last_sync = ? WHERE id = ?", now, configId)
 		}
 
 		page++
 	}
 
 	now := time.Now().Format("2006-01-02 15:04:05")
-	db.DB.Exec("UPDATE sync_configs SET last_sync = ?, last_response = ? WHERE id = ?", now, `{"status": "Incremental Sync Active", "tables": "sync_job_orders"}`, configId)
+	db.Exec("UPDATE sync_configs SET last_sync = ?, last_response = ? WHERE id = ?", now, `{"status": "Incremental Sync Active", "tables": "sync_job_orders"}`, configId)
 	log.Printf("IncrementalSync finished for %s. Pages processed: %d", configId, page-1)
 }
 
@@ -613,7 +613,7 @@ func processLocationsIncremental(configId, baseUrl string, headers map[string]st
 
 	if !newestUpdatedAt.IsZero() {
 		now := time.Now().Format("2006-01-02 15:04:05")
-		db.DB.Exec("UPDATE sync_configs SET last_sync = ? WHERE id = ?", now, configId)
+		db.Exec("UPDATE sync_configs SET last_sync = ? WHERE id = ?", now, configId)
 	}
 }
 
@@ -770,7 +770,7 @@ func processServicesIncremental(configId, baseUrl string, headers map[string]str
 
 	if !newestUpdatedAt.IsZero() {
 		now := time.Now().Format("2006-01-02 15:04:05")
-		db.DB.Exec("UPDATE sync_configs SET last_sync = ? WHERE id = ?", now, configId)
+		db.Exec("UPDATE sync_configs SET last_sync = ? WHERE id = ?", now, configId)
 	}
 }
 
@@ -963,7 +963,7 @@ func processEmployeesIncremental(configId, baseUrl string, headers map[string]st
 
 	if !newestUpdatedAt.IsZero() {
 		nowStr := time.Now().Format("2006-01-02 15:04:05")
-		db.DB.Exec("UPDATE sync_configs SET last_sync = ? WHERE id = ?", nowStr, configId)
+		db.Exec("UPDATE sync_configs SET last_sync = ? WHERE id = ?", nowStr, configId)
 	}
 }
 
@@ -1093,7 +1093,7 @@ func processVendorsIncremental(configId, baseUrl string, headers map[string]stri
 
 	if !newestUpdatedAt.IsZero() {
 		now := time.Now().Format("2006-01-02 15:04:05")
-		db.DB.Exec("UPDATE sync_configs SET last_sync = ? WHERE id = ?", now, configId)
+		db.Exec("UPDATE sync_configs SET last_sync = ? WHERE id = ?", now, configId)
 	}
 }
 
@@ -1205,7 +1205,7 @@ func processCompaniesIncremental(configId, baseUrl string, headers map[string]st
 
 	if !newestUpdatedAt.IsZero() {
 		now := time.Now().Format("2006-01-02 15:04:05")
-		db.DB.Exec("UPDATE sync_configs SET last_sync = ? WHERE id = ?", now, configId)
+		db.Exec("UPDATE sync_configs SET last_sync = ? WHERE id = ?", now, configId)
 	}
 }
 
@@ -1351,7 +1351,7 @@ func processShipsIncremental(configId, baseUrl string, headers map[string]string
 
 	if !newestUpdatedAt.IsZero() {
 		now := time.Now().Format("2006-01-02 15:04:05")
-		db.DB.Exec("UPDATE sync_configs SET last_sync = ? WHERE id = ?", now, configId)
+		db.Exec("UPDATE sync_configs SET last_sync = ? WHERE id = ?", now, configId)
 	}
 }
 
@@ -1467,7 +1467,7 @@ func processShipTypesIncremental(configId, baseUrl string, headers map[string]st
 
 	if !newestUpdatedAt.IsZero() {
 		now := time.Now().Format("2006-01-02 15:04:05")
-		db.DB.Exec("UPDATE sync_configs SET last_sync = ? WHERE id = ?", now, configId)
+		db.Exec("UPDATE sync_configs SET last_sync = ? WHERE id = ?", now, configId)
 	}
 }
 
@@ -1633,6 +1633,6 @@ func processComponentsIncremental(configId string, apiUrl string, headers map[st
 
 	if !newestUpdatedAt.IsZero() {
 		now := time.Now().Format("2006-01-02 15:04:05")
-		db.DB.Exec("UPDATE sync_configs SET last_sync = ? WHERE id = ?", now, configId)
+		db.Exec("UPDATE sync_configs SET last_sync = ? WHERE id = ?", now, configId)
 	}
 }

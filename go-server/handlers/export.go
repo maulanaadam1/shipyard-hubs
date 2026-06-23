@@ -28,7 +28,7 @@ func ExportCSV(w http.ResponseWriter, r *http.Request) {
 		query += " ORDER BY " + orderBy + " DESC"
 	}
 
-	rows, err := db.DB.Query(query)
+	rows, err := db.Query(query)
 	if err != nil {
 		writeJSON(w, 500, map[string]string{"error": err.Error()})
 		return
@@ -93,7 +93,7 @@ func ExportJSON(w http.ResponseWriter, r *http.Request) {
 		query += " ORDER BY " + orderBy + " DESC"
 	}
 
-	rows, err := db.DB.Query(query)
+	rows, err := db.Query(query)
 	if err != nil {
 		writeJSON(w, 500, map[string]string{"error": err.Error()})
 		return
@@ -232,7 +232,7 @@ func GetStats(w http.ResponseWriter, r *http.Request) {
 	stats := map[string]any{}
 
 	// Equipment counts by availability
-	rows, err := db.DB.Query(`
+	rows, err := db.Query(`
 		SELECT available, COUNT(*) as count 
 		FROM equipment 
 		GROUP BY available
@@ -256,7 +256,7 @@ func GetStats(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Loan requests by status
-	loanRows, err := db.DB.Query(`
+	loanRows, err := db.Query(`
 		SELECT status, COUNT(*) as count 
 		FROM loan_requests 
 		GROUP BY status
@@ -275,11 +275,11 @@ func GetStats(w http.ResponseWriter, r *http.Request) {
 
 	// Active deployments count
 	var activeDeployments int
-	db.DB.QueryRow(`SELECT COUNT(*) FROM deployment_records WHERE return_status != 'Returned' OR return_status IS NULL`).Scan(&activeDeployments)
+	db.QueryRow(`SELECT COUNT(*) FROM deployment_records WHERE return_status != 'Returned' OR return_status IS NULL`).Scan(&activeDeployments)
 	stats["active_deployments"] = activeDeployments
 
 	// Projects by status
-	projRows, err := db.DB.Query(`
+	projRows, err := db.Query(`
 		SELECT status, COUNT(*) as count 
 		FROM projects 
 		GROUP BY status
@@ -297,7 +297,7 @@ func GetStats(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Utilization by equipment type
-	typeRows, err := db.DB.Query(`
+	typeRows, err := db.Query(`
 		SELECT type, 
 			COUNT(*) as total,
 			SUM(CASE WHEN available = 'Deployed' THEN 1 ELSE 0 END) as deployed,

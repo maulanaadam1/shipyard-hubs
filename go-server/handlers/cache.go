@@ -24,7 +24,7 @@ func GetCacheData(w http.ResponseWriter, r *http.Request) {
 		val, err := db.RDB.Get(db.Ctx, cacheKey).Result()
 		if err == nil && val != "" {
 			var lastSync sql.NullString
-			db.DB.QueryRow("SELECT last_sync FROM sync_configs WHERE id = ?", id).Scan(&lastSync)
+			db.QueryRow("SELECT last_sync FROM sync_configs WHERE id = ?", id).Scan(&lastSync)
 			syncTime := ""
 			if lastSync.Valid {
 				syncTime = lastSync.String
@@ -38,7 +38,7 @@ func GetCacheData(w http.ResponseWriter, r *http.Request) {
 	// Fallback to SQLite/PostgreSQL
 	var lastResponse string
 	var lastSync sql.NullString
-	err := db.DB.QueryRow("SELECT IFNULL(last_response, ''), last_sync FROM sync_configs WHERE id = ?", id).Scan(&lastResponse, &lastSync)
+	err := db.QueryRow("SELECT COALESCE(last_response, ''), last_sync FROM sync_configs WHERE id = ?", id).Scan(&lastResponse, &lastSync)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			http.Error(w, "Not found", http.StatusNotFound)

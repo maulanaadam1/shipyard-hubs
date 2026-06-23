@@ -26,7 +26,7 @@ func GetWorkOrderDetail(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var rawJson string
-	err := db.DB.QueryRow("SELECT raw_json FROM work_order_details WHERE wo_id = ?", woID).Scan(&rawJson)
+	err := db.QueryRow("SELECT raw_json FROM work_order_details WHERE wo_id = ?", woID).Scan(&rawJson)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			http.Error(w, `{"error": "Not synced yet"}`, http.StatusNotFound)
@@ -50,10 +50,10 @@ func SyncWorkOrderDetail(w http.ResponseWriter, r *http.Request) {
 
 	// Try to get WorkOrderDetails config first, fallback to WorkOrders if not found
 	var urlStr, headersStr string
-	err := db.DB.QueryRow("SELECT url, headers FROM sync_configs WHERE id = 'WorkOrderDetails'").Scan(&urlStr, &headersStr)
+	err := db.QueryRow("SELECT url, headers FROM sync_configs WHERE id = 'WorkOrderDetails'").Scan(&urlStr, &headersStr)
 	if err != nil {
 		// Fallback
-		err = db.DB.QueryRow("SELECT url, headers FROM sync_configs WHERE id = 'WorkOrders'").Scan(&urlStr, &headersStr)
+		err = db.QueryRow("SELECT url, headers FROM sync_configs WHERE id = 'WorkOrders'").Scan(&urlStr, &headersStr)
 		if err != nil {
 			http.Error(w, `{"error": "API Config not found"}`, http.StatusInternalServerError)
 			return
@@ -101,7 +101,7 @@ func SyncWorkOrderDetail(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Save to Database
-	_, err = db.DB.Exec(
+	_, err = db.Exec(
 		"INSERT INTO work_order_details (wo_id, raw_json, last_sync) VALUES (?, ?, CURRENT_TIMESTAMP) ON CONFLICT(wo_id) DO UPDATE SET raw_json = excluded.raw_json, last_sync = CURRENT_TIMESTAMP",
 		woID, string(bodyBytes),
 	)
@@ -118,7 +118,7 @@ func SyncWorkOrderDetail(w http.ResponseWriter, r *http.Request) {
 // GetPendingApprovals iterates over all synced Work Orders locally and calculates the sum
 // of items not yet approved at level 5.
 func GetPendingApprovals(w http.ResponseWriter, r *http.Request) {
-	rows, err := db.DB.Query("SELECT wo_id, raw_json FROM work_order_details")
+	rows, err := db.Query("SELECT wo_id, raw_json FROM work_order_details")
 	if err != nil {
 		http.Error(w, `{"error": "Database error"}`, http.StatusInternalServerError)
 		return
@@ -278,9 +278,9 @@ func PostBulkPendingApprovals(w http.ResponseWriter, r *http.Request) {
 
 	// 1. Get sync config
 	var urlStr, headersStr string
-	err := db.DB.QueryRow("SELECT url, headers FROM sync_configs WHERE id = 'WorkOrderDetails'").Scan(&urlStr, &headersStr)
+	err := db.QueryRow("SELECT url, headers FROM sync_configs WHERE id = 'WorkOrderDetails'").Scan(&urlStr, &headersStr)
 	if err != nil {
-		db.DB.QueryRow("SELECT url, headers FROM sync_configs WHERE id = 'WorkOrders'").Scan(&urlStr, &headersStr)
+		db.QueryRow("SELECT url, headers FROM sync_configs WHERE id = 'WorkOrders'").Scan(&urlStr, &headersStr)
 	}
 
 	var reqHeaders map[string]string
@@ -315,7 +315,7 @@ func PostBulkPendingApprovals(w http.ResponseWriter, r *http.Request) {
 			mu.Unlock()
 
 			var rawJson []byte
-			err := db.DB.QueryRow("SELECT raw_json FROM work_order_details WHERE wo_id = ?", id).Scan(&rawJson)
+			err := db.QueryRow("SELECT raw_json FROM work_order_details WHERE wo_id = ?", id).Scan(&rawJson)
 			if err != nil {
 				if urlStr != "" {
 					fetchUrl := urlStr
@@ -351,7 +351,7 @@ func PostBulkPendingApprovals(w http.ResponseWriter, r *http.Request) {
 							bodyBytes, _ := io.ReadAll(resp.Body)
 							resp.Body.Close()
 							rawJson = bodyBytes
-							db.DB.Exec("INSERT INTO work_order_details (wo_id, raw_json, last_sync) VALUES (?, ?, CURRENT_TIMESTAMP) ON CONFLICT(wo_id) DO UPDATE SET raw_json = excluded.raw_json, last_sync = CURRENT_TIMESTAMP", id, string(bodyBytes))
+							db.Exec("INSERT INTO work_order_details (wo_id, raw_json, last_sync) VALUES (?, ?, CURRENT_TIMESTAMP) ON CONFLICT(wo_id) DO UPDATE SET raw_json = excluded.raw_json, last_sync = CURRENT_TIMESTAMP", id, string(bodyBytes))
 							break
 						}
 						resp.Body.Close()

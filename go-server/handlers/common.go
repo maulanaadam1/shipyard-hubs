@@ -80,7 +80,7 @@ func stringifyJSONFields(row map[string]any) {
 
 // fetchRow retrieves a single row from a table by its primary key
 func fetchRow(table, pkCol string, pkVal any) (map[string]any, error) {
-	rows, err := db.DB.Query(
+	rows, err := db.Query(
 		"SELECT * FROM "+table+" WHERE "+pkCol+" = ?",
 		pkVal,
 	)
