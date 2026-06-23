@@ -88,6 +88,7 @@ export default function WorkOrderDashboard() {
   const [pendingApprovals, setPendingApprovals] = useState<Record<string, number>>({});
   const [finalCosts, setFinalCosts] = useState<Record<string, number>>({});
   const [previousCosts, setPreviousCosts] = useState<Record<string, number>>({});
+  const [rejectedCosts, setRejectedCosts] = useState<Record<string, number>>({});
   const [finalDates, setFinalDates] = useState<Record<string, string>>({});
   const [trendGroupingMode, setTrendGroupingMode] = useState<'daily' | 'weekly' | 'monthly'>('weekly');
   const [selectedTrendDate, setSelectedTrendDate] = useState<string | null>(null);
@@ -182,6 +183,7 @@ export default function WorkOrderDashboard() {
         const newFinal: Record<string, number> = {};
         const newFinalDates: Record<string, string> = {};
         const newPrev: Record<string, number> = {};
+        const newRejected: Record<string, number> = {};
         
         Object.keys(map).forEach(id => {
           if (map[id] && typeof map[id] === 'object') {
@@ -190,11 +192,13 @@ export default function WorkOrderDashboard() {
             newFinal[id] = map[id].latest_cost !== undefined ? map[id].latest_cost : (map[id].final_cost || 0);
             newPrev[id] = map[id].previous_cost !== undefined ? map[id].previous_cost : (map[id].final_cost || 0);
             newFinalDates[id] = map[id].latest_date || '';
+            newRejected[id] = map[id].rejected_cost || 0;
           } else {
             // Backward compatibility
             newPending[id] = map[id] || 0;
             newPrev[id] = map[id] || 0;
             newFinalDates[id] = '';
+            newRejected[id] = 0;
           }
         });
 
@@ -202,6 +206,7 @@ export default function WorkOrderDashboard() {
         setFinalCosts(prev => ({ ...prev, ...newFinal }));
         setPreviousCosts(prev => ({ ...prev, ...newPrev }));
         setFinalDates(prev => ({ ...prev, ...newFinalDates }));
+        setRejectedCosts(prev => ({ ...prev, ...newRejected }));
       }
     } catch (e) {}
   };
@@ -1223,6 +1228,58 @@ export default function WorkOrderDashboard() {
     }).format(value);
   };
 
+  const handleExportCSV = () => {
+    const headers = [
+      "No",
+      "Kode WO",
+      "Kode JO",
+      "Proyek (Kapal)",
+      "Vendor Rekanan",
+      "Nilai Total",
+      "Nilai Sebelumnya",
+      "Nilai Saat Ini",
+      "Pending Approval",
+      "Terakhir Diperbarui",
+      "Status Approval"
+    ];
+
+    const rows = sortedData.map((item, idx) => {
+      const pendingVal = pendingApprovals[item.id] || 0;
+      const finalCostVal = finalCosts[item.id] || 0;
+      const prevCostVal = previousCosts[item.id] || 0;
+      
+      const safePrevCost = prevCostVal > 0 ? Math.round(prevCostVal) : 0;
+      
+      return [
+        idx + 1,
+        `"${item.woCode || ''}"`,
+        `"${item.joCode || ''}"`,
+        `"${item.shipName || ''}"`,
+        `"${item.vendorName || ''}"`,
+        Math.round(item.fullWoCost || 0),
+        safePrevCost,
+        Math.round(finalCostVal),
+        Math.round(pendingVal),
+        `"${item.updated_at || ''}"`,
+        `"${item.derivedStatus || ''}"`
+      ];
+    });
+
+    const csvContent = [
+      headers.join(";"),
+      ...rows.map(row => row.join(";"))
+    ].join("\n");
+
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.setAttribute("href", url);
+    link.setAttribute("download", `Export_WorkOrder_${new Date().toISOString().split('T')[0]}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
   const handleSort = (column: string) => {
     if (sortColumn === column) {
       setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
@@ -1230,6 +1287,7 @@ export default function WorkOrderDashboard() {
       setSortColumn(column);
       setSortDirection('desc'); // Default ke desc kalau kolom baru
     }
+    setCurrentPage(1);
   };
 
   const renderSortIcon = (column: string) => {
@@ -1975,8 +2033,14 @@ export default function WorkOrderDashboard() {
               <p className="text-xs text-slate-400 mt-0.5">Menampilkan {filteredData.length} data Work Order sesuai filter</p>
             </div>
             
-            <div className="flex items-center gap-2">
-              <span className="text-xs font-semibold text-slate-400">Halaman: {currentPage} dari {totalPages}</span>
+            <div className="flex items-center gap-3">
+              <button 
+                onClick={handleExportCSV}
+                className="flex items-center justify-center p-2 rounded-lg bg-emerald-50 text-emerald-600 hover:bg-emerald-100 hover:text-emerald-700 transition border border-emerald-200 shadow-sm"
+                title="Unduh tabel ini sebagai CSV/Excel"
+              >
+                <FileSpreadsheet size={16} />
+              </button>
             </div>
           </div>
 
@@ -2192,6 +2256,11 @@ export default function WorkOrderDashboard() {
                     {detailChartConfig && detailChartConfig.unapprovedCost > 0 && (
                       <p className="text-xs font-mono font-medium text-amber-500 mt-1 bg-amber-50 px-2 py-0.5 rounded w-fit border border-amber-100" title="Estimasi biaya yang belum mencapai Approval Level 5">
                         + {formatIDR(detailChartConfig.unapprovedCost)} (Pending)
+                      </p>
+                    )}
+                    {rejectedCosts[selectedRow.id] > 0 && (
+                      <p className="text-xs font-mono font-medium text-rose-500 mt-1 bg-rose-50 px-2 py-0.5 rounded w-fit border border-rose-100" title="Total biaya item yang ditolak / Rejected">
+                        - {formatIDR(rejectedCosts[selectedRow.id])} (Rejected)
                       </p>
                     )}
                   </div>

@@ -294,6 +294,7 @@ func PostBulkPendingApprovals(w http.ResponseWriter, r *http.Request) {
 		LatestDate   string  `json:"latest_date"`
 		LatestCost   float64 `json:"latest_cost"`
 		PreviousCost float64 `json:"previous_cost"`
+		RejectedCost float64 `json:"rejected_cost"`
 	}
 
 	var wg sync.WaitGroup
@@ -455,6 +456,7 @@ func PostBulkPendingApprovals(w http.ResponseWriter, r *http.Request) {
 
 					var pendingSum float64
 					var finalCostSum float64
+					var rejectedSum float64
 					dailyCosts := make(map[string]float64)
 
 					var processItems func(items []interface{})
@@ -502,8 +504,9 @@ func PostBulkPendingApprovals(w http.ResponseWriter, r *http.Request) {
 								isLevel1To4 := !isRejected && (approvedLevel >= 1 && approvedLevel <= 4 || strings.HasPrefix(statusAppr, "level") || strings.HasPrefix(statusAppr, "approved level"))
 								isAppr := isAppr5 || (allowLevel1To4 && isLevel1To4)
 
-								if !isAppr && !isRejected {
-
+								if isRejected {
+									rejectedSum += costToAdd
+								} else if !isAppr {
 									pendingSum += costToAdd
 								} else {
 									dateToUse := ""
@@ -527,7 +530,7 @@ func PostBulkPendingApprovals(w http.ResponseWriter, r *http.Request) {
 										dailyCosts[dateOnly] += costToAdd
 									}
 									
-									if isAppr5 {
+									if isAppr {
 										finalCostSum += costToAdd
 									}
 								}
@@ -579,6 +582,7 @@ func PostBulkPendingApprovals(w http.ResponseWriter, r *http.Request) {
 						LatestDate:   latestDate,
 						LatestCost:   latestCost,
 						PreviousCost: previousCost,
+						RejectedCost: rejectedSum,
 					}
 					mu.Unlock()
 				}
