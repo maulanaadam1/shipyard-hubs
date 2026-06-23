@@ -363,13 +363,21 @@ func PostBulkPendingApprovals(w http.ResponseWriter, r *http.Request) {
 
 			if len(rawJson) > 0 {
 				var finalCost, pendingCost, rejectedCost float64
-				db.QueryRow("SELECT approved_cost, pending_cost, rejected_cost FROM work_order_details WHERE wo_id = ?", id).Scan(&finalCost, &pendingCost, &rejectedCost)
+				var latestDate sql.NullString
+				db.QueryRow("SELECT approved_cost, pending_cost, rejected_cost, latest_date FROM work_order_details WHERE wo_id = ?", id).Scan(&finalCost, &pendingCost, &rejectedCost, &latestDate)
+
+				var ld *string
+				if latestDate.Valid && latestDate.String != "" {
+					ldStr := latestDate.String
+					ld = &ldStr
+				}
 
 				mu.Lock()
 				result[id] = BulkResult{
 					Pending:      pendingCost,
 					FinalCost:    finalCost,
 					RejectedCost: rejectedCost,
+					LatestDate:   ld,
 				}
 				mu.Unlock()
 			}

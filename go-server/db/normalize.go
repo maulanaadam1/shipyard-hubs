@@ -48,6 +48,7 @@ func NormalizeWorkOrder(woID string, rawJson []byte) {
 	}
 
 	var approvedCost, pendingCost, rejectedCost float64
+	var latestDate string
 
 	var processItems func(items []interface{}, parentId string)
 	processItems = func(items []interface{}, parentId string) {
@@ -71,6 +72,20 @@ func NormalizeWorkOrder(woID string, rawJson []byte) {
             price := parseFloatAny(item["price"])
             totalPrice := parseFloatAny(item["total_price"])
             volCostFinal := parseFloatAny(item["volume_cost_final"])
+
+            dateAppr, _ := item["date_approval"].(string)
+            updatedAt, _ := item["updated_at"].(string)
+
+            dateToUse := dateAppr
+            if dateToUse == "" { dateToUse = updatedAt }
+            if dateToUse == "" { dateToUse = createdAt }
+            
+            if dateToUse != "" {
+                dateOnly := strings.Split(dateToUse, " ")[0]
+                if dateOnly > latestDate {
+                    latestDate = dateOnly
+                }
+            }
 
 			matRaw, hasMat := item["material"].([]interface{})
 			if hasMat && len(matRaw) > 0 {
@@ -118,6 +133,6 @@ func NormalizeWorkOrder(woID string, rawJson []byte) {
 	processItems(repairList, "")
 
 	// Update calculated columns
-	Exec("UPDATE work_order_details SET approved_cost = ?, pending_cost = ?, rejected_cost = ? WHERE wo_id = ?",
-		approvedCost, pendingCost, rejectedCost, woID)
+	Exec("UPDATE work_order_details SET approved_cost = ?, pending_cost = ?, rejected_cost = ?, latest_date = ? WHERE wo_id = ?",
+		approvedCost, pendingCost, rejectedCost, latestDate, woID)
 }
