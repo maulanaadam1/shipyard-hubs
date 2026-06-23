@@ -421,7 +421,28 @@ func createTables() {
 	DB.Exec(`CREATE TABLE IF NOT EXISTS work_order_details (
 		wo_id TEXT PRIMARY KEY,
 		raw_json TEXT,
-		last_sync TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+		last_sync TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+		approved_cost REAL DEFAULT 0,
+		pending_cost REAL DEFAULT 0,
+		rejected_cost REAL DEFAULT 0
+	);`)
+
+	// Migration: Add work_order_items for LLM and Global Search compatibility
+	DB.Exec(`CREATE TABLE IF NOT EXISTS work_order_items (
+		id TEXT PRIMARY KEY,
+		wo_id TEXT,
+		jo_id TEXT,
+		parent_id TEXT,
+		path TEXT,
+		label TEXT,
+		remark TEXT,
+		volume REAL,
+		unit TEXT,
+		price REAL,
+		total_price REAL,
+		approved_level INTEGER,
+		status_approval TEXT,
+		created_at TIMESTAMP
 	);`)
 
 	// Upgrade raw_json to JSONB if using PostgreSQL
