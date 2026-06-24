@@ -2134,8 +2134,8 @@ export default function WorkOrderDashboard() {
                       </td>
 
                       <td className="py-3.5 px-6 text-right font-semibold font-mono text-xs">
-                        {(previousCosts[item.id] !== undefined && previousCosts[item.id] > 0) ? (
-                          formatIDR(previousCosts[item.id])
+                        {(item.previousCost > 0) ? (
+                          formatIDR(item.previousCost)
                         ) : (
                           <span className="text-slate-400">-</span>
                         )}
@@ -2143,15 +2143,15 @@ export default function WorkOrderDashboard() {
 
                       {/* Kolom Biaya Harian Terakhir */}
                       <td className="py-3.5 px-6 text-right font-mono text-xs text-blue-500">
-                        <div className="font-bold">{finalCosts[item.id] !== undefined ? formatIDR(finalCosts[item.id]) : formatIDR(0)}</div>
-                        {finalDates[item.id] && (
-                          <div className="text-[10px] text-slate-400 font-sans font-normal mt-0.5">{finalDates[item.id]}</div>
+                        <div className="font-bold">{formatIDR(item.latestCost || 0)}</div>
+                        {item.latest_date && (
+                          <div className="text-[10px] text-slate-400 font-sans font-normal mt-0.5">{item.latest_date}</div>
                         )}
                       </td>
 
                       {/* Kolom Pending Approval */}
                       <td className="py-3.5 px-6 text-right font-bold font-mono text-xs text-amber-500">
-                        {pendingApprovals[item.id] !== undefined ? formatIDR(pendingApprovals[item.id]) : formatIDR(0)}
+                        {formatIDR(item.pendingCost || 0)}
                       </td>
 
                       {/* Kolom Terakhir Diperbarui */}
