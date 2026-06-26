@@ -43,8 +43,9 @@ func main() {
 	r.Post("/api/auth/login", handlers.Login)
 	r.Get("/api/auth/session", handlers.GetSession)
 	
-	// AI Proxy Route
+	// AI Proxy Routes (with live PostgreSQL Database RAG)
 	r.Post("/api/chat/sumopod", handlers.PostSumopodProxy)
+	r.Post("/api/chat/ollama", handlers.PostOllamaProxy)
 
 	// TEMPORARY DEBUG ROUTE
 	r.Get("/api/debug/users", func(w http.ResponseWriter, r *http.Request) {

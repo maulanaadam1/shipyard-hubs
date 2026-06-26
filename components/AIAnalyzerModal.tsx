@@ -159,8 +159,8 @@ Instruksi Penting:
           setMessages(prev => [...prev, { role: 'assistant', content: data.choices[0].message.content, timestamp: new Date() }]);
         }
       } else {
-        // Mencoba menembak API lokal Ollama (default port 11434)
-        const response = await fetch('http://localhost:11434/api/chat', {
+        // Mencoba menembak API proxy lokal Ollama di backend Go
+        const response = await fetch('/api/chat/ollama', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -261,9 +261,11 @@ Instruksi Penting:
 
             <button 
               onClick={onClose}
-              className="p-2 rounded-full hover:bg-rose-500/10 text-slate-400 hover:text-rose-500 transition"
+              title="Tutup / Sembunyikan Widget AI"
+              className="flex items-center gap-1.5 py-1.5 px-3 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 text-rose-500 transition font-bold text-xs border border-rose-500/30 ml-1"
             >
-              <X size={24} />
+              <span>Hide</span>
+              <X size={18} />
             </button>
           </div>
         </div>

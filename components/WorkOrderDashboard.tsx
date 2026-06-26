@@ -1373,6 +1373,15 @@ export default function WorkOrderDashboard() {
           </span>
 
           <button
+            onClick={() => setIsAIModalOpen(prev => !prev)}
+            title={isAIModalOpen ? "Sembunyikan Analisa AI" : "Buka Analisa Cerdas AI"}
+            className={`flex items-center gap-1.5 px-3 py-2 rounded-xl border transition-all font-bold text-xs shadow-sm ${isAIModalOpen ? 'bg-gradient-to-r from-indigo-500 to-purple-600 text-white border-transparent shadow-indigo-500/20' : 'bg-white border-slate-200 text-indigo-600 hover:bg-indigo-50 hover:border-indigo-200'}`}
+          >
+            <Sparkles size={16} className={isAIModalOpen ? "animate-spin" : ""} />
+            <span className="hidden md:inline">Analisa AI</span>
+          </button>
+
+          <button
             onClick={toggleHideNominal}
             title={isNominalHidden ? "Tampilkan Nominal" : "Sembunyikan Nominal"}
             className={`flex items-center justify-center p-2 rounded-xl border transition-all shadow-sm ${isNominalHidden ? 'bg-amber-100 border-amber-200 text-amber-600' : 'bg-white border-slate-200 text-slate-500 hover:text-slate-800 hover:border-slate-300'}`}
