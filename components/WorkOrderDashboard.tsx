@@ -57,6 +57,7 @@ export default function WorkOrderDashboard() {
   const [selectedVendor, setSelectedVendor] = useState<string>("All");
   
   const [isAIModalOpen, setIsAIModalOpen] = useState(false);
+  const [showFloatingAI, setShowFloatingAI] = useState(true);
   
   // Date Filtering States
   const [datePreset, setDatePreset] = useState("week"); // Options: "week", "month", "3months", "6months", "year", "all", "custom"
@@ -1325,14 +1326,23 @@ export default function WorkOrderDashboard() {
       {/* SYNC LOADING OVERLAY REMOVED (User preferred non-intrusive sync) */}
 
       {/* FLOATING AI BUTTON */}
-      {canAccess('AI_Analyzer', 'view') && (
-        <button
-          onClick={() => setIsAIModalOpen(true)}
-          title="Analisa AI"
-          className={`fixed bottom-4 right-4 sm:bottom-6 sm:right-6 z-[90] flex items-center justify-center p-3.5 md:p-4 rounded-full shadow-2xl transition-all duration-300 group hover:-translate-y-1 ${isAIModalOpen ? 'opacity-0 scale-75 pointer-events-none' : 'opacity-100 scale-100'} ${isDarkMode ? 'bg-gradient-to-r from-indigo-500 to-purple-600 text-white shadow-indigo-900/30' : 'bg-gradient-to-r from-indigo-600 to-purple-600 text-white shadow-indigo-500/30'}`}
-        >
-          <Sparkles size={24} className="group-hover:animate-pulse" />
-        </button>
+      {canAccess('AI_Analyzer', 'view') && showFloatingAI && (
+        <div className={`fixed bottom-4 right-4 sm:bottom-6 sm:right-6 z-[90] transition-all duration-300 group ${isAIModalOpen ? 'opacity-0 scale-75 pointer-events-none' : 'opacity-100 scale-100'}`}>
+          <button
+            onClick={() => setIsAIModalOpen(true)}
+            title="Analisa AI"
+            className={`flex items-center justify-center p-3.5 md:p-4 rounded-full shadow-2xl transition-all duration-300 hover:-translate-y-1 ${isDarkMode ? 'bg-gradient-to-r from-indigo-500 to-purple-600 text-white shadow-indigo-900/30' : 'bg-gradient-to-r from-indigo-600 to-purple-600 text-white shadow-indigo-500/30'}`}
+          >
+            <Sparkles size={24} className="hover:animate-pulse" />
+          </button>
+          <button
+            onClick={(e) => { e.stopPropagation(); setShowFloatingAI(false); }}
+            title="Sembunyikan Widget Floating AI (Klik Ikon Header untuk Menampilkan Kembali)"
+            className="absolute -top-2 -right-2 z-[95] p-1.5 rounded-full bg-rose-600 hover:bg-rose-700 text-white shadow-xl transition-all duration-200 opacity-0 group-hover:opacity-100 scale-75 group-hover:scale-100 border-2 border-white dark:border-slate-800 cursor-pointer"
+          >
+            <X size={12} strokeWidth={3} />
+          </button>
+        </div>
       )}
 
       {/* AI ANALYZER MODAL */}
@@ -1371,11 +1381,11 @@ export default function WorkOrderDashboard() {
           </span>
 
           <button
-            onClick={() => setIsAIModalOpen(prev => !prev)}
+            onClick={() => { setShowFloatingAI(true); setIsAIModalOpen(prev => !prev); }}
             title={isAIModalOpen ? "Sembunyikan Analisa AI" : "Buka Analisa Cerdas AI"}
             className={`flex items-center justify-center p-2.5 rounded-xl border transition-all shadow-sm ${isAIModalOpen ? 'bg-gradient-to-r from-indigo-500 to-purple-600 text-white border-transparent shadow-indigo-500/20' : 'bg-white border-slate-200 text-indigo-600 hover:bg-indigo-50 hover:border-indigo-200'}`}
           >
-            <Sparkles size={18} className={isAIModalOpen ? "animate-spin" : ""} />
+            <Sparkles size={18} />
           </button>
 
           <button

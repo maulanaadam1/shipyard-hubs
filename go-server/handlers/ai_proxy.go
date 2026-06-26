@@ -104,7 +104,7 @@ func enhancePayloadWithDatabaseRAG(bodyBytes []byte) []byte {
 
 	words := strings.Fields(strings.ToLower(userQuestion))
 	var searchTerms []string
-	stopWords := map[string]bool{"berapa": true, "total": true, "untuk": true, "dalam": true, "pada": true, "dari": true, "adalah": true, "tentang": true, "semua": true, "seluruh": true, "tampilkan": true, "berikan": true, "coba": true, "hitungkan": true, "rincian": true, "daftar": true, "tahun": true, "bulan": true, "yang": true, "sama": true, "dan": true, "atau": true, "dengan": true}
+	stopWords := map[string]bool{"berapa": true, "total": true, "untuk": true, "dalam": true, "pada": true, "dari": true, "adalah": true, "tentang": true, "semua": true, "seluruh": true, "tampilkan": true, "berikan": true, "coba": true, "hitungkan": true, "rincian": true, "daftar": true, "tahun": true, "bulan": true, "yang": true, "sama": true, "dan": true, "atau": true, "dengan": true, "biaya": true, "material": true, "aktual": true, "estimasi": true, "pekerjaan": true, "reparasi": true, "kapal": true, "vendor": true, "kode": true, "data": true, "cari": true, "carikan": true, "cek": true, "tolong": true, "bagaimana": true, "apa": true, "saja": true, "bagian": true, "kondisi": true, "keuangan": true, "laporan": true}
 	for _, w := range words {
 		clean := strings.Trim(w, ".,?!\"'()[]{}:;")
 		if len(clean) > 2 && !stopWords[clean] {

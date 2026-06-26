@@ -149,15 +149,6 @@ export default function AIAnalyzerModal({ isOpen, onClose, stats, globalStats, f
   return (
     <div className="fixed bottom-4 right-4 sm:bottom-6 sm:right-6 z-[100] flex items-end justify-end pointer-events-none">
       <div className="relative pointer-events-auto">
-        {/* EXTERNAL FLOATING TOP-RIGHT CLOSE BUTTON */}
-        <button
-          onClick={onClose}
-          title="Tutup Widget AI (Klik Ikon Header untuk Membuka Kembali)"
-          className="absolute -top-3.5 -right-3.5 z-50 p-2.5 rounded-full bg-rose-600 hover:bg-rose-700 text-white shadow-xl hover:scale-110 transition-all cursor-pointer border-2 border-white dark:border-slate-800"
-        >
-          <X size={18} strokeWidth={3} />
-        </button>
-
         <div className={`w-[calc(100vw-2rem)] sm:w-[450px] h-[calc(100vh-8rem)] sm:h-[650px] max-h-[85vh] flex flex-col rounded-3xl overflow-hidden shadow-2xl border transition-all ${isDarkMode ? 'bg-slate-900 border-slate-700 shadow-slate-900/50' : 'bg-white border-slate-200 shadow-slate-500/20'}`}>
         
         {/* HEADER */}
@@ -209,6 +200,13 @@ export default function AIAnalyzerModal({ isOpen, onClose, stats, globalStats, f
               className={`p-1.5 rounded-xl border transition-all ${isDarkMode ? 'border-slate-700 text-slate-400 hover:bg-rose-500/10 hover:text-rose-500 hover:border-rose-500/20' : 'border-slate-200 text-slate-400 hover:bg-rose-50 hover:text-rose-500 hover:border-rose-200'}`}
             >
               <Trash2 size={16} />
+            </button>
+            <button 
+              onClick={onClose}
+              title="Tutup Widget AI"
+              className={`p-1.5 rounded-xl border transition-all ${isDarkMode ? 'border-slate-700 text-slate-400 hover:bg-slate-800 hover:text-white' : 'border-slate-200 text-slate-400 hover:bg-slate-100 hover:text-slate-700'}`}
+            >
+              <X size={16} />
             </button>
           </div>
         </div>

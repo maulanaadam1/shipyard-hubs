@@ -291,10 +291,17 @@ func ExtractToAITables(woID string, rawJsonBytes []byte) error {
 
 // RunAIEtlBackfill checks if the AI tables are missing any data, and if so, runs the extraction.
 func RunAIEtlBackfill() {
-	var extractedCount, totalCount int
+	var extractedCount, totalCount, matCount int
 	
 	db.QueryRow("SELECT COUNT(*) FROM ai_work_orders").Scan(&extractedCount)
 	db.QueryRow("SELECT COUNT(*) FROM work_order_details").Scan(&totalCount)
+	db.QueryRow("SELECT COUNT(*) FROM ai_material_deliveries").Scan(&matCount)
+
+	if totalCount > 0 && matCount == 0 {
+		log.Println("[AI ETL] Empty material deliveries detected! Wiping AI tables to re-sync with fixed keys...")
+		db.Exec("DELETE FROM ai_work_orders; DELETE FROM ai_wo_breakdowns; DELETE FROM ai_material_deliveries;")
+		extractedCount = 0
+	}
 
 	if totalCount == 0 || extractedCount >= totalCount {
 		// Already fully synced: robot sleeps forever
