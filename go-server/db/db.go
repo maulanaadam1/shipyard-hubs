@@ -495,7 +495,9 @@ func createTables() {
 		vendor_name TEXT,
 		ship_name TEXT,
 		total_cost_contract NUMERIC,
-		status_pekerjaan TEXT,
+		status_approval TEXT,
+		approval_date TEXT,
+		last_updated TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
 		created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 	);`)
 
@@ -515,6 +517,8 @@ func createTables() {
 		total_price NUMERIC,
 		approved_level INTEGER,
 		status_approval TEXT,
+		approval_date TEXT,
+		last_updated TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
 		created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 	);`)
 
@@ -539,6 +543,14 @@ func createTables() {
 		receiver_vendor TEXT,
 		created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 	);`)
+
+	// Safe schema migrations for existing AI tables
+	DB.Exec("ALTER TABLE ai_work_orders RENAME COLUMN status_pekerjaan TO status_approval")
+	DB.Exec("ALTER TABLE ai_work_orders ADD COLUMN status_approval TEXT")
+	DB.Exec("ALTER TABLE ai_work_orders ADD COLUMN approval_date TEXT")
+	DB.Exec("ALTER TABLE ai_work_orders ADD COLUMN last_updated TIMESTAMP DEFAULT CURRENT_TIMESTAMP")
+	DB.Exec("ALTER TABLE ai_wo_breakdowns ADD COLUMN approval_date TEXT")
+	DB.Exec("ALTER TABLE ai_wo_breakdowns ADD COLUMN last_updated TIMESTAMP DEFAULT CURRENT_TIMESTAMP")
 }
 
 func seedMasterStatusDock() {

@@ -28,6 +28,11 @@ func InitRedis() {
 			if _, err := RDB.Ping(Ctx).Result(); err == nil {
 				log.Printf("Redis Init: Successfully connected via Redis URL")
 				return
+			} else {
+				log.Printf("Redis Init: Failed to connect via Redis URL (%v), falling back to local DB cache.", err)
+				_ = RDB.Close()
+				RDB = nil
+				return
 			}
 		}
 	}
@@ -48,6 +53,7 @@ func InitRedis() {
 	_, err := RDB.Ping(Ctx).Result()
 	if err != nil {
 		log.Printf("Redis Init: Failed to connect to Redis at %s (%v), falling back to local DB cache.", redisHost, err)
+		_ = RDB.Close()
 		RDB = nil
 	} else {
 		log.Printf("Redis Init: Successfully connected to Redis at %s", redisHost)

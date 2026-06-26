@@ -101,14 +101,25 @@ func ExtractToAITables(woID string, rawJsonBytes []byte) error {
 	}
 	defer tx.Rollback() // Will be ignored if committed
 
+	// Try to find approval date from JSON
+	approvalDate := "-"
+	if dataMap, ok := rootObj.(map[string]interface{}); ok {
+		if ad, ok := dataMap["approval_date"]; ok && ad != nil {
+			approvalDate = fmt.Sprintf("%v", ad)
+		} else if aa, ok := dataMap["approved_at"]; ok && aa != nil {
+			approvalDate = fmt.Sprintf("%v", aa)
+		}
+	}
+
 	// Upsert into ai_work_orders
 	tx.Exec(db.FormatQuery(`
-		INSERT INTO ai_work_orders (wo_id, wo_code, jo_id, jo_code, vendor_name, ship_name, total_cost_contract, status_pekerjaan) 
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?) 
+		INSERT INTO ai_work_orders (wo_id, wo_code, jo_id, jo_code, vendor_name, ship_name, total_cost_contract, status_approval, approval_date, last_updated) 
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP) 
 		ON CONFLICT(wo_id) DO UPDATE SET 
 		wo_code = EXCLUDED.wo_code, vendor_name = EXCLUDED.vendor_name, ship_name = EXCLUDED.ship_name, 
-		total_cost_contract = EXCLUDED.total_cost_contract, status_pekerjaan = EXCLUDED.status_pekerjaan
-	`), woID, mWo.Code, joID, mWo.JoCode, mWo.MVendorName, mWo.MShipName, totalCost, mWo.ApprovalStatus)
+		total_cost_contract = EXCLUDED.total_cost_contract, status_approval = EXCLUDED.status_approval,
+		approval_date = EXCLUDED.approval_date, last_updated = CURRENT_TIMESTAMP
+	`), woID, mWo.Code, joID, mWo.JoCode, mWo.MVendorName, mWo.MShipName, totalCost, mWo.ApprovalStatus, approvalDate)
 
 	// Clean up old breakdown data for this WO
 	tx.Exec(db.FormatQuery("DELETE FROM ai_wo_breakdowns WHERE wo_id = ?"), woID)
@@ -164,16 +175,16 @@ func ExtractToAITables(woID string, rawJsonBytes []byte) error {
 			parentRef := parentID
 			if parentID == "" {
 				tx.Exec(db.FormatQuery(`
-					INSERT INTO ai_wo_breakdowns (id, wo_id, jo_id, vendor_name, ship_name, parent_id, path, label, remark, volume, unit, price, total_price, approved_level, status_approval) 
-					VALUES (?, ?, ?, ?, ?, NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+					INSERT INTO ai_wo_breakdowns (id, wo_id, jo_id, vendor_name, ship_name, parent_id, path, label, remark, volume, unit, price, total_price, approved_level, status_approval, approval_date, last_updated) 
+					VALUES (?, ?, ?, ?, ?, NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
 					ON CONFLICT(id) DO NOTHING
-				`), id, woID, joID, mWo.MVendorName, mWo.MShipName, path, label, remark, volume, unit, price, totalPrice, approvedLevel, statusApproval)
+				`), id, woID, joID, mWo.MVendorName, mWo.MShipName, path, label, remark, volume, unit, price, totalPrice, approvedLevel, statusApproval, approvalDate)
 			} else {
 				tx.Exec(db.FormatQuery(`
-					INSERT INTO ai_wo_breakdowns (id, wo_id, jo_id, vendor_name, ship_name, parent_id, path, label, remark, volume, unit, price, total_price, approved_level, status_approval) 
-					VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+					INSERT INTO ai_wo_breakdowns (id, wo_id, jo_id, vendor_name, ship_name, parent_id, path, label, remark, volume, unit, price, total_price, approved_level, status_approval, approval_date, last_updated) 
+					VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
 					ON CONFLICT(id) DO NOTHING
-				`), id, woID, joID, mWo.MVendorName, mWo.MShipName, parentRef, path, label, remark, volume, unit, price, totalPrice, approvedLevel, statusApproval)
+				`), id, woID, joID, mWo.MVendorName, mWo.MShipName, parentRef, path, label, remark, volume, unit, price, totalPrice, approvedLevel, statusApproval, approvalDate)
 			}
 
 			// Traverse deeper material
