@@ -204,7 +204,17 @@ Instruksi Penting:
 
   return (
     <div className="fixed bottom-4 right-4 sm:bottom-6 sm:right-6 z-[100] flex items-end justify-end pointer-events-none">
-      <div className={`w-[calc(100vw-2rem)] sm:w-[450px] h-[calc(100vh-8rem)] sm:h-[650px] max-h-[85vh] flex flex-col rounded-3xl overflow-hidden shadow-2xl border pointer-events-auto transition-all ${isDarkMode ? 'bg-slate-900 border-slate-700 shadow-slate-900/50' : 'bg-white border-slate-200 shadow-slate-500/20'}`}>
+      <div className="relative pointer-events-auto">
+        {/* EXTERNAL FLOATING TOP-RIGHT CLOSE BUTTON */}
+        <button
+          onClick={onClose}
+          title="Tutup Widget AI (Klik Ikon Header untuk Membuka Kembali)"
+          className="absolute -top-3.5 -right-3.5 z-50 p-2.5 rounded-full bg-rose-600 hover:bg-rose-700 text-white shadow-xl hover:scale-110 transition-all cursor-pointer border-2 border-white dark:border-slate-800"
+        >
+          <X size={18} strokeWidth={3} />
+        </button>
+
+        <div className={`w-[calc(100vw-2rem)] sm:w-[450px] h-[calc(100vh-8rem)] sm:h-[650px] max-h-[85vh] flex flex-col rounded-3xl overflow-hidden shadow-2xl border transition-all ${isDarkMode ? 'bg-slate-900 border-slate-700 shadow-slate-900/50' : 'bg-white border-slate-200 shadow-slate-500/20'}`}>
         
         {/* HEADER */}
         <div className={`p-5 flex items-center justify-between border-b ${isDarkMode ? 'bg-slate-950/50 border-slate-800' : 'bg-slate-50 border-slate-200'}`}>
@@ -245,8 +255,6 @@ Instruksi Penting:
               </select>
             </div>
 
-
-            
             <button 
               onClick={() => {
                 if (window.confirm("Apakah Anda yakin ingin menghapus seluruh riwayat percakapan?")) {
@@ -257,15 +265,6 @@ Instruksi Penting:
               className={`p-1.5 rounded-xl border transition-all ${isDarkMode ? 'border-slate-700 text-slate-400 hover:bg-rose-500/10 hover:text-rose-500 hover:border-rose-500/20' : 'border-slate-200 text-slate-400 hover:bg-rose-50 hover:text-rose-500 hover:border-rose-200'}`}
             >
               <Trash2 size={16} />
-            </button>
-
-            <button 
-              onClick={onClose}
-              title="Tutup / Sembunyikan Widget AI"
-              className="flex items-center gap-1.5 py-1.5 px-3 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 text-rose-500 transition font-bold text-xs border border-rose-500/30 ml-1"
-            >
-              <span>Hide</span>
-              <X size={18} />
             </button>
           </div>
         </div>
@@ -351,6 +350,7 @@ Instruksi Penting:
           </div>
         </div>
       </div>
+    </div>
     </div>
   );
 }
