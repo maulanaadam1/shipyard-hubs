@@ -55,63 +55,27 @@ export default function AIAnalyzerModal({ isOpen, onClose, stats, globalStats, f
 
   // Siapkan konteks data dari dashboard untuk disuapkan ke LLM
   const getSystemPrompt = () => {
-    return `Anda adalah Analis Finansial dan Logistik Ahli. Jawablah dalam Bahasa Indonesia yang profesional dan mudah dipahami.
+    return `Anda adalah Asisten Eksekutif Cerdas Shiphubs (AI Enterprise RAG). Jawablah dalam Bahasa Indonesia yang profesional, rapi, dan mudah dipahami.
     
-- Total WO Terfilter (Tampil di Layar Saat Ini): ${stats.totalWOs} dokumen
-- Total Biaya WO Terfilter (Saat Ini): Rp ${stats.sumSaatIni.toLocaleString('id-ID')}
-- Total Pending Terfilter: Rp ${stats.sumPending.toLocaleString('id-ID')}
-
-=== KONDISI KEUANGAN GLOBAL (SELURUH DATA PERUSAHAAN) ===
+=== KONDISI KEUANGAN GLOBAL PERUSAHAAN ===
 - Total Keseluruhan WO: ${globalStats?.totalWOs || 0} dokumen
 - Total Keseluruhan Job Order: ${globalStats?.totalJOs || 0}
 - Total Keseluruhan Proyek: ${globalStats?.totalProjects || 0}
-  (Sebaran Proyek per Tahun: ${globalStats?.projectYearsStats && Object.keys(globalStats.projectYearsStats).length > 0 ? Object.entries(globalStats.projectYearsStats).map(([year, count]) => `${year} = ${count} proyek`).join(', ') : 'Data belum tersinkronisasi'})
-  (Daftar Nama Proyek per Tahun:\n  ${globalStats?.projectYearList && Object.keys(globalStats.projectYearList).length > 0 ? Object.entries(globalStats.projectYearList).map(([year, names]: [string, any]) => `[Tahun ${year}]: ${names.join(', ')}`).join('\n  ') : '-'})
 - Total Vendor Keseluruhan: ${globalStats?.totalVendors || 0}
-
 - Total Biaya Kontrak Awal (Global): Rp ${globalStats?.sumTotal?.toLocaleString('id-ID') || 0}
-- Nilai Tagihan Sebelumnya (Global): Rp ${globalStats?.sumSebelumnya?.toLocaleString('id-ID') || 0}
-- Nilai Approval Akhir Saat Ini (Global): Rp ${globalStats?.sumSaatIni?.toLocaleString('id-ID') || 0}
-- Nilai yang Masih Tertahan Pending (Global): Rp ${globalStats?.sumPending?.toLocaleString('id-ID') || 0}
 
-Distribusi Status (Global):
-- Menunggu (Waiting): ${globalStats?.approvalCounts?.['Waiting'] || 0}
-- Level 1: ${globalStats?.approvalCounts?.['Approval Level 1'] || 0}
-- Level 2: ${globalStats?.approvalCounts?.['Approval Level 2'] || 0}
-- Level 3: ${globalStats?.approvalCounts?.['Approval Level 3'] || 0}
-- Level 4: ${globalStats?.approvalCounts?.['Approval Level 4'] || 0}
-- Disetujui (Level 5): ${globalStats?.approvalCounts?.['Approval Level 5'] || 0}
-
-=== DAFTAR VENDOR (TOP 15 BERDASARKAN NILAI TRANSAKSI GLOBAL) ===
+=== DAFTAR VENDOR REKANAN TERBESAR ===
 ${masterDirectories?.allSortedVendorProjects
   ? masterDirectories.allSortedVendorProjects
       .slice(0, 15)
       .map((v: any) => `- ${v.vendorName} (Proyek: ${v.projectName}): Rp ${v.cost.toLocaleString('id-ID')} | Total: ${v.count} WO`)
       .join('\n')
-  : 'Data vendor tidak tersedia saat ini.'
+  : 'Data vendor tidak tersedia.'
 }
 
-=== DATA WORK ORDER DI LAYAR (SELURUH DATA AKTIF) ===
-Data di bawah ini merepresentasikan KESELURUHAN dokumen spesifik yang saat ini sedang dilihat oleh user di tabel.
-${filteredData && filteredData.length > 0 
-  ? [...filteredData]
-      .sort((a, b) => (b.totalCostNum || 0) - (a.totalCostNum || 0))
-      .slice(0, 800) // Batas aman maksimal token
-      .map(wo => `- Tgl: ${wo.latest_date || wo.created_at?.split(' ')[0] || '-'} | Proyek: ${wo.projectName} | WO: ${wo.woCode} | Vendor: ${wo.vendorName} | Status: ${wo.derivedStatus} | Total: Rp ${(wo.fullWoCost || 0).toLocaleString('id-ID')} | Pending: Rp ${(wo.pendingCost || 0).toLocaleString('id-ID')} | Sblm: Rp ${(wo.previousCost || 0).toLocaleString('id-ID')} | Skrg: Rp ${(wo.latestCost || 0).toLocaleString('id-ID')}`)
-      .join('\n')
-  : 'Tidak ada data spesifik yang sedang ditampilkan.'
-}
-
-=== DATA TREN BIAYA OPERASIONAL (WAKTU TERAKHIR) ===
-${trendData && trendData.length > 0
-  ? trendData.slice(-15).map(t => `- Periode: ${t.date} | Total Biaya: Rp ${t.cost.toLocaleString('id-ID')}`).join('\n')
-  : 'Data tren tidak tersedia.'
-}
-
-Instruksi Penting: 
-1. Gunakan informasi di atas untuk menjawab pertanyaan user secara spesifik. 
-2. Anda memiliki akses ke seluruh data. JIKA user meminta batasan jumlah data (misal: "tampilkan 10 WO saja") atau rentang tanggal tertentu (misal: "tampilkan WO bulan Maret"), lakukan penyaringan data tersebut secara mandiri dari data yang tersedia di atas sebelum membalas!
-3. Bedakan secara akurat antara Data Filtered (Work Order di Layar) dan Global saat menjawab. Jangan mengarang angka.`;
+Instruksi Penting:
+1. Seluruh rincian data pekerjaan, material, dan dokumen spesifik di-inject secara real-time langsung oleh server PostgreSQL di Backend.
+2. Jawablah pertanyaan user secara akurat berdasarkan data resmi database perusahaan!`;
   };
 
   const handleSendMessage = async () => {

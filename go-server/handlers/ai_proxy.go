@@ -57,6 +57,9 @@ func enhancePayloadWithDatabaseRAG(bodyBytes []byte) []byte {
 	var woCount int
 	var woTotalCost float64
 	_ = db.QueryRow("SELECT COUNT(*), COALESCE(SUM(total_cost_contract), 0) FROM ai_work_orders").Scan(&woCount, &woTotalCost)
+	if woCount == 0 {
+		_ = db.QueryRow("SELECT COUNT(*) FROM work_order_details").Scan(&woCount)
+	}
 
 	var topShips []string
 	rowsS, _ := db.Query("SELECT ship_name, COUNT(*), COALESCE(SUM(total_cost_contract), 0) FROM ai_work_orders GROUP BY ship_name ORDER BY 3 DESC LIMIT 10")
@@ -84,6 +87,19 @@ func enhancePayloadWithDatabaseRAG(bodyBytes []byte) []byte {
 			}
 		}
 		rowsV.Close()
+	}
+
+	var latestWOs []string
+	rowsW, _ := db.Query("SELECT wo_code, ship_name, vendor_name, total_cost_contract, created_at FROM ai_work_orders ORDER BY created_at DESC LIMIT 12")
+	if rowsW != nil {
+		for rowsW.Next() {
+			var wc, sn, vn, ca string
+			var tc float64
+			if rowsW.Scan(&wc, &sn, &vn, &tc, &ca) == nil {
+				latestWOs = append(latestWOs, fmt.Sprintf("- %s [Kapal %s | Vendor %s]: Rp %s (%s)", wc, sn, vn, formatNum(tc), ca))
+			}
+		}
+		rowsW.Close()
 	}
 
 	words := strings.Fields(strings.ToLower(userQuestion))
@@ -134,6 +150,11 @@ func enhancePayloadWithDatabaseRAG(bodyBytes []byte) []byte {
 		mStr = strings.Join(materials, "\n")
 	}
 
+	lWOStr := "Belum ada Work Order terbaru."
+	if len(latestWOs) > 0 {
+		lWOStr = strings.Join(latestWOs, "\n")
+	}
+
 	dbInjection := fmt.Sprintf(`
 === DATA HISTORIS RESMI GALANGAN DARI POSTGRESQL (ONE BIG TABLE ARCHITECTURE) ===
 Total Seluruh Kontrak SPK: %d berkas
@@ -145,6 +166,9 @@ Top 10 Kapal dengan Biaya Terbesar:
 Top 10 Vendor Rekanan Terbesar:
 - %s
 
+=== 12 WORK ORDER TERAKHIR YANG DITERBITKAN ===
+%s
+
 === TEMUAN DATA SPESIFIK UNTUK PERTANYAAN USER ("%s") ===
 Rincian Pekerjaan Terkait:
 %s
@@ -153,14 +177,14 @@ Logistik Pengiriman Barang/Material Terkait:
 %s
 
 INSTRUKSI KRUSIAL LLM:
-1. Data di atas diambil secara real-time langsung dari mesin database PostgreSQL galangan (bukan dari tampilan tabel browser).
+1. Data di atas diambil secara real-time langsung dari mesin database PostgreSQL galangan.
 2. Gunakan angka pasti di atas sebagai dasar kebenaran mutlak. Jangan berhalusinasi atau mengarang nominal!
-`, woCount, formatNum(woTotalCost), strings.Join(topShips, "\n- "), strings.Join(topVendors, "\n- "), userQuestion, bStr, mStr)
+`, woCount, formatNum(woTotalCost), strings.Join(topShips, "\n- "), strings.Join(topVendors, "\n- "), lWOStr, userQuestion, bStr, mStr)
 
-	// Inject into the system message
+	// OVERWRITE system message so AI never sees browser table dumps
 	for i := range reqBody.Messages {
 		if reqBody.Messages[i].Role == "system" {
-			reqBody.Messages[i].Content = dbInjection + "\n\n" + reqBody.Messages[i].Content
+			reqBody.Messages[i].Content = dbInjection
 			break
 		}
 	}

@@ -475,12 +475,16 @@ func createTables() {
 		modified_by INTEGER
 	);`)
 
-	// Upgrade raw_json to JSONB if using PostgreSQL
+	// Upgrade raw_json to JSONB if using PostgreSQL (only if not already JSONB to avoid Access Exclusive locks)
 	if os.Getenv("DB_CONNECTION") == "postgres" {
-		log.Println("PostgreSQL detected: Upgrading raw_json to JSONB for high-performance querying...")
-		_, err := DB.Exec(`ALTER TABLE work_order_details ALTER COLUMN raw_json TYPE JSONB USING raw_json::jsonb`)
-		if err != nil {
-			log.Printf("Notice: JSONB upgrade skipped or already applied (%v)", err)
+		var colType string
+		err := DB.QueryRow("SELECT data_type FROM information_schema.columns WHERE table_name = 'work_order_details' AND column_name = 'raw_json'").Scan(&colType)
+		if err == nil && colType != "jsonb" {
+			log.Println("PostgreSQL detected: Upgrading raw_json to JSONB for high-performance querying...")
+			_, err = DB.Exec(`ALTER TABLE work_order_details ALTER COLUMN raw_json TYPE JSONB USING raw_json::jsonb`)
+			if err != nil {
+				log.Printf("Notice: JSONB upgrade skipped (%v)", err)
+			}
 		}
 	}
 
