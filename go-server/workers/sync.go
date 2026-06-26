@@ -160,10 +160,56 @@ func RunSyncJob(force bool, targetId string) {
 }
 
 func processJobOrdersIncremental(configId, baseUrl string, headers map[string]string, lastSyncStr string) {
+	// Drop old 3-column schema if exists to upgrade to flattened 46-column AI-ready table
+	db.Exec("DROP TABLE IF EXISTS sync_job_orders")
+
 	_, err := db.Exec(`CREATE TABLE IF NOT EXISTS sync_job_orders (
 		id TEXT PRIMARY KEY,
-		updated_at DATETIME,
-		raw_data TEXT
+		code TEXT,
+		project TEXT,
+		approval_status TEXT,
+		m_customer_id INTEGER,
+		m_customer_name TEXT,
+		m_ship_id INTEGER,
+		m_ship_name TEXT,
+		m_service_id INTEGER,
+		m_slipway_id INTEGER,
+		m_branch_id INTEGER,
+		m_employee_id TEXT,
+		agent TEXT,
+		est_start TEXT,
+		est_finish TEXT,
+		est_arrival_date TEXT,
+		est_departure_date TEXT,
+		est_docking_date TEXT,
+		est_undocking_date TEXT,
+		est_trial_date TEXT,
+		act_start_date TEXT,
+		act_finish_date TEXT,
+		act_arrival_date TEXT,
+		act_departure_date TEXT,
+		act_trial_date TEXT,
+		docking_date TEXT,
+		undocking_date TEXT,
+		floating_before_docking TEXT,
+		floating_after_docking TEXT,
+		floating_before_undocking TEXT,
+		floating_after_undocking TEXT,
+		total_price TEXT,
+		total_price_additional TEXT,
+		adjusted_total NUMERIC,
+		adjusted_total_additional NUMERIC,
+		price_adjustment TEXT,
+		price_adjustment_additional TEXT,
+		t_quotation_id INTEGER,
+		t_quotation_code TEXT,
+		t_repair_list_id INTEGER,
+		latest_version INTEGER,
+		flag_rq BOOLEAN,
+		created_at TIMESTAMP,
+		created_by INTEGER,
+		updated_at TIMESTAMP,
+		modified_by INTEGER
 	)`)
 	if err != nil {
 		log.Printf("IncrementalSync DB error: %v", err)
@@ -222,13 +268,17 @@ func processJobOrdersIncremental(configId, baseUrl string, headers map[string]st
 		case map[string]interface{}:
 			if dataObj, ok := v["data"].([]interface{}); ok {
 				items = dataObj
-			} else {
-				hasMore = false
-				continue
+			} else if recordsObj, ok := v["records"].([]interface{}); ok {
+				items = recordsObj
+			} else if itemsObj, ok := v["items"].([]interface{}); ok {
+				items = itemsObj
+			} else if dataMap, ok := v["data"].(map[string]interface{}); ok {
+				if itemSlice, ok := dataMap["item"].([]interface{}); ok {
+					items = itemSlice
+				} else if itemsSlice, ok := dataMap["items"].([]interface{}); ok {
+					items = itemsSlice
+				}
 			}
-		default:
-			hasMore = false
-			continue
 		}
 
 		if len(items) == 0 {
@@ -242,10 +292,19 @@ func processJobOrdersIncremental(configId, baseUrl string, headers map[string]st
 			break
 		}
 
-		stmt, err := tx.Prepare(`INSERT INTO sync_job_orders (id, updated_at, raw_data) VALUES (?, ?, ?) 
-			ON CONFLICT(id) DO UPDATE SET updated_at=excluded.updated_at, raw_data=excluded.raw_data`)
+		stmt, err := tx.Prepare(db.FormatQuery(`INSERT INTO sync_job_orders (
+			id, code, project, approval_status, m_customer_id, m_customer_name, m_ship_id, m_ship_name, 
+			m_service_id, m_slipway_id, m_branch_id, m_employee_id, agent, est_start, est_finish, 
+			est_arrival_date, est_departure_date, est_docking_date, est_undocking_date, est_trial_date, 
+			act_start_date, act_finish_date, act_arrival_date, act_departure_date, act_trial_date, 
+			docking_date, undocking_date, floating_before_docking, floating_after_docking, 
+			floating_before_undocking, floating_after_undocking, total_price, total_price_additional, 
+			adjusted_total, adjusted_total_additional, price_adjustment, price_adjustment_additional, 
+			t_quotation_id, t_quotation_code, t_repair_list_id, latest_version, flag_rq, 
+			created_at, created_by, updated_at, modified_by
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`))
 			
-		stmtProjects, errProj := tx.Prepare(`INSERT INTO projects (
+		stmtProjects, errProj := tx.Prepare(db.FormatQuery(`INSERT INTO projects (
 			id, id_siaga, idproject, shipname, cust_company, approval_status, 
 			est_start, est_finish, est_docking_date, est_undocking_date, 
 			est_trial_date, est_arrival_date, est_departure_date, 
@@ -269,7 +328,7 @@ func processJobOrdersIncremental(configId, baseUrl string, headers map[string]st
 				price_contract=excluded.price_contract,
 				location=excluded.location,
 				docking_type=excluded.docking_type,
-				m_employee_id=excluded.m_employee_id`)
+				m_employee_id=excluded.m_employee_id`))
 
 		if errProj != nil {
 			log.Printf("IncrementalSync ERROR preparing projects statement: %v", errProj)
@@ -318,8 +377,43 @@ func processJobOrdersIncremental(configId, baseUrl string, headers map[string]st
 					allOlder = false 
 				}
 
-				itemJson, _ := json.Marshal(itemMap)
-				stmt.Exec(itemId, itemUpdatedStr, string(itemJson))
+				// Helper getters
+				getStrNull := func(k string) interface{} {
+					if v, ok := itemMap[k]; ok && v != nil {
+						s := strings.TrimSpace(fmt.Sprintf("%v", v))
+						if s != "" && s != "<nil>" { return s }
+					}
+					return nil
+				}
+				getInt := func(k string) int {
+					if v, ok := itemMap[k].(float64); ok { return int(v) }
+					return 0
+				}
+				getFloat := func(k string) float64 {
+					if v, ok := itemMap[k].(float64); ok { return v }
+					return 0
+				}
+				getBool := func(k string) bool {
+					if v, ok := itemMap[k].(bool); ok { return v }
+					return false
+				}
+
+				tx.Exec(db.FormatQuery("DELETE FROM sync_job_orders WHERE id = ?"), itemId)
+				if stmt != nil {
+					stmt.Exec(
+						itemId, getStrNull("code"), getStrNull("project"), getStrNull("approval_status"),
+						getInt("m_customer_id"), getStrNull("m_customer_name"), getInt("m_ship_id"), getStrNull("m_ship_name"),
+						getInt("m_service_id"), getInt("m_slipway_id"), getInt("m_branch_id"), getStrNull("m_employee_id"), getStrNull("agent"),
+						getStrNull("est_start"), getStrNull("est_finish"), getStrNull("est_arrival_date"), getStrNull("est_departure_date"),
+						getStrNull("est_docking_date"), getStrNull("est_undocking_date"), getStrNull("est_trial_date"),
+						getStrNull("act_start_date"), getStrNull("act_finish_date"), getStrNull("act_arrival_date"), getStrNull("act_departure_date"), getStrNull("act_trial_date"),
+						getStrNull("docking_date"), getStrNull("undocking_date"), getStrNull("floating_before_docking"), getStrNull("floating_after_docking"),
+						getStrNull("floating_before_undocking"), getStrNull("floating_after_undocking"), getStrNull("total_price"), getStrNull("total_price_additional"),
+						getFloat("adjusted_total"), getFloat("adjusted_total_additional"), getStrNull("price_adjustment"), getStrNull("price_adjustment_additional"),
+						getInt("t_quotation_id"), getStrNull("t_quotation_code"), getInt("t_repair_list_id"), getInt("latest_version"), getBool("flag_rq"),
+						getStrNull("created_at"), getInt("created_by"), getStrNull("updated_at"), getInt("modified_by"),
+					)
+				}
 
 				// Map to Projects table
 				if errProj == nil && stmtProjects != nil {

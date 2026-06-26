@@ -26,6 +26,7 @@ func main() {
 	db.Init()
 	db.InitRedis()
 	workers.StartSyncWorker()
+	go workers.RunAIEtlBackfill() // Auto-migrate existing WO data to AI tables in background
 
 	r := chi.NewRouter()
 	r.Use(chiMiddleware.Recoverer)
@@ -79,6 +80,9 @@ func main() {
 		r.Post("/api/work-orders/{id}/sync", handlers.SyncWorkOrderDetail)
 		r.Get("/api/work-orders/pending-approvals", handlers.GetPendingApprovals)
 		r.Post("/api/work-orders/bulk-pending-approvals", handlers.PostBulkPendingApprovals)
+
+		// System endpoints
+		r.Get("/api/system/run-ai-etl", handlers.RunAIEtl)
 
 		// Export (all authenticated roles)
 		r.Get("/api/export/{table}/csv", handlers.ExportCSV)

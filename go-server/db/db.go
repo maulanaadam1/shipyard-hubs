@@ -424,6 +424,57 @@ func createTables() {
 		last_sync TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 	);`)
 
+	// Migration: Flatten sync_job_orders table into 46 AI-ready columns (force drop old schema)
+	DB.Exec("DROP TABLE IF EXISTS sync_job_orders CASCADE")
+	DB.Exec(`CREATE TABLE IF NOT EXISTS sync_job_orders (
+		id TEXT PRIMARY KEY,
+		code TEXT,
+		project TEXT,
+		approval_status TEXT,
+		m_customer_id INTEGER,
+		m_customer_name TEXT,
+		m_ship_id INTEGER,
+		m_ship_name TEXT,
+		m_service_id INTEGER,
+		m_slipway_id INTEGER,
+		m_branch_id INTEGER,
+		m_employee_id TEXT,
+		agent TEXT,
+		est_start TEXT,
+		est_finish TEXT,
+		est_arrival_date TEXT,
+		est_departure_date TEXT,
+		est_docking_date TEXT,
+		est_undocking_date TEXT,
+		est_trial_date TEXT,
+		act_start_date TEXT,
+		act_finish_date TEXT,
+		act_arrival_date TEXT,
+		act_departure_date TEXT,
+		act_trial_date TEXT,
+		docking_date TEXT,
+		undocking_date TEXT,
+		floating_before_docking TEXT,
+		floating_after_docking TEXT,
+		floating_before_undocking TEXT,
+		floating_after_undocking TEXT,
+		total_price TEXT,
+		total_price_additional TEXT,
+		adjusted_total NUMERIC,
+		adjusted_total_additional NUMERIC,
+		price_adjustment TEXT,
+		price_adjustment_additional TEXT,
+		t_quotation_id INTEGER,
+		t_quotation_code TEXT,
+		t_repair_list_id INTEGER,
+		latest_version INTEGER,
+		flag_rq BOOLEAN,
+		created_at TIMESTAMP,
+		created_by INTEGER,
+		updated_at TIMESTAMP,
+		modified_by INTEGER
+	);`)
+
 	// Upgrade raw_json to JSONB if using PostgreSQL
 	if os.Getenv("DB_CONNECTION") == "postgres" {
 		log.Println("PostgreSQL detected: Upgrading raw_json to JSONB for high-performance querying...")
@@ -432,6 +483,62 @@ func createTables() {
 			log.Printf("Notice: JSONB upgrade skipped or already applied (%v)", err)
 		}
 	}
+
+	// ---------------------------------------------------------
+	// AI-First LLM Flattened Tables (One Big Table Architecture)
+	// ---------------------------------------------------------
+	DB.Exec(`CREATE TABLE IF NOT EXISTS ai_work_orders (
+		wo_id TEXT PRIMARY KEY,
+		wo_code TEXT,
+		jo_id TEXT,
+		jo_code TEXT,
+		vendor_name TEXT,
+		ship_name TEXT,
+		total_cost_contract NUMERIC,
+		status_pekerjaan TEXT,
+		created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+	);`)
+
+	DB.Exec(`CREATE TABLE IF NOT EXISTS ai_wo_breakdowns (
+		id TEXT PRIMARY KEY,
+		wo_id TEXT,
+		jo_id TEXT,
+		vendor_name TEXT,
+		ship_name TEXT,
+		parent_id TEXT,
+		path TEXT,
+		label TEXT,
+		remark TEXT,
+		volume NUMERIC,
+		unit TEXT,
+		price NUMERIC,
+		total_price NUMERIC,
+		approved_level INTEGER,
+		status_approval TEXT,
+		created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+	);`)
+
+	DB.Exec(`CREATE TABLE IF NOT EXISTS ai_material_deliveries (
+		id TEXT PRIMARY KEY,
+		wo_id TEXT,
+		jo_id TEXT,
+		vendor_name TEXT,
+		ship_name TEXT,
+		requisition_id TEXT,
+		component_code TEXT,
+		component_name TEXT,
+		part_no TEXT,
+		qty_delivered NUMERIC,
+		unit TEXT,
+		unit_price NUMERIC,
+		total_price NUMERIC,
+		currency TEXT,
+		delivery_code TEXT,
+		delivery_date TEXT,
+		receiver_name TEXT,
+		receiver_vendor TEXT,
+		created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+	);`)
 }
 
 func seedMasterStatusDock() {

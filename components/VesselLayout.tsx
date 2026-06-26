@@ -42,6 +42,7 @@ export default function VesselLayout() {
   const [currentLayout, setCurrentLayout] = useState<VesselLayoutData | null>(null);
   const [isLayoutSelectorOpen, setIsLayoutSelectorOpen] = useState(false);
   const saveTimeoutRef = React.useRef<NodeJS.Timeout | null>(null);
+  const pendingSavesRef = React.useRef(new Set<string>());
   const canView = canAccess('Vessel Layout', 'view');
   const canEdit = canAccess('Vessel Layout', 'edit');
   const [isLegendExpanded, setIsLegendExpanded] = useState(false);
@@ -59,9 +60,18 @@ export default function VesselLayout() {
     fetchLayouts();
   }, []);
 
-  // Sync local projects with context projects
+  // Sync local projects with context projects without clobbering active drags
   React.useEffect(() => {
-    setLocalProjects(projects);
+    setLocalProjects(prev => {
+      if (prev.length === 0) return projects;
+      return projects.map(p => {
+        if (pendingSavesRef.current.has(p.id)) {
+          const local = prev.find(lp => lp.id === p.id);
+          if (local) return { ...p, x_coordinate: local.x_coordinate, y_coordinate: local.y_coordinate, rotation: local.rotation };
+        }
+        return p;
+      });
+    });
   }, [projects]);
 
   if (!canView) {
@@ -115,6 +125,7 @@ export default function VesselLayout() {
   }, [localProjects, searchTerm, dockStatuses, currentLayout]);
 
   const handleUpdatePosition = useCallback(async (vessel: Project, x: number, y: number) => {
+    pendingSavesRef.current.add(vessel.id);
     // 1. Instant Optimistic UI Update
     setLocalProjects(prev => prev.map(p => 
       p.id === vessel.id ? { ...p, x_coordinate: x, y_coordinate: y } : p
@@ -131,14 +142,11 @@ export default function VesselLayout() {
           .eq('id', vessel.id);
         
         if (error) throw error;
-        
-        // After successful save, we could fetch, but optimistic UI is already correct
-        // fetchData(); 
       } catch (err) {
         console.error("Failed to save position:", err);
-        // Rollback on error
         setLocalProjects(projects);
       } finally {
+        pendingSavesRef.current.delete(vessel.id);
         setIsSaving(false);
         saveTimeoutRef.current = null;
       }
@@ -149,6 +157,7 @@ export default function VesselLayout() {
     const currentRotation = vessel.rotation || 0;
     const nextRotation = (currentRotation + 45) % 360;
     
+    pendingSavesRef.current.add(vessel.id);
     // 1. Instant Optimistic UI Update
     setLocalProjects(prev => prev.map(p => 
       p.id === vessel.id ? { ...p, rotation: nextRotation } : p
@@ -169,6 +178,7 @@ export default function VesselLayout() {
         console.error("Failed to save rotation:", err);
         setLocalProjects(projects);
       } finally {
+        pendingSavesRef.current.delete(vessel.id);
         setIsSaving(false);
         saveTimeoutRef.current = null;
       }
@@ -571,10 +581,49 @@ function VesselComponent({ vessel, getSVGCoordinates, handleUpdatePosition, hand
   const mvY = useMotionValue(vessel.y_coordinate || 100);
 
   // Store the drag offset in SVG units
+  const [isDragging, setIsDragging] = useState(false);
   const dragOffset = React.useRef({ x: 0, y: 0 });
-  const lastTapTime = React.useRef(0);
-
+  const startPos = React.useRef({ x: 0, y: 0 });
   const vesselRef = React.useRef<SVGGElement>(null);
+
+  const handlePointerDown = (e: React.PointerEvent) => {
+    if (!canEdit) return;
+    e.stopPropagation();
+    (e.target as Element).setPointerCapture(e.pointerId);
+    const mouseSVG = getSVGCoordinates(e.clientX, e.clientY);
+    startPos.current = { x: e.clientX, y: e.clientY };
+    dragOffset.current = {
+      x: mouseSVG.x - mvX.get(),
+      y: mouseSVG.y - mvY.get()
+    };
+    setIsDragging(true);
+  };
+
+  const handlePointerMove = (e: React.PointerEvent) => {
+    if (!isDragging || !canEdit) return;
+    e.stopPropagation();
+    const mouseSVG = getSVGCoordinates(e.clientX, e.clientY);
+    const finalX = Math.round(mouseSVG.x - dragOffset.current.x);
+    const finalY = Math.round(mouseSVG.y - dragOffset.current.y);
+    mvX.set(finalX);
+    mvY.set(finalY);
+  };
+
+  const handlePointerUp = (e: React.PointerEvent) => {
+    if (!isDragging || !canEdit) return;
+    e.stopPropagation();
+    try {
+      (e.target as Element).releasePointerCapture(e.pointerId);
+    } catch (err) {}
+    setIsDragging(false);
+    
+    const dist = Math.hypot(e.clientX - startPos.current.x, e.clientY - startPos.current.y);
+    if (dist < 5) {
+      setHoveredVessel(vessel);
+    } else {
+      handleUpdatePosition(vessel, mvX.get(), mvY.get());
+    }
+  };
 
   // Hard-block background scrolling on touchstart to ensure drag works on mobile
   React.useEffect(() => {
@@ -582,12 +631,8 @@ function VesselComponent({ vessel, getSVGCoordinates, handleUpdatePosition, hand
     if (!el || !canEdit) return;
     
     const handleTouchStart = (e: TouchEvent) => {
-      // If editing is enabled, prevent the browser from starting a scroll gesture
-      if (e.cancelable) {
-        e.preventDefault();
-      }
+      if (e.cancelable) e.preventDefault();
     };
-    
     el.addEventListener('touchstart', handleTouchStart, { passive: false });
     return () => el.removeEventListener('touchstart', handleTouchStart);
   }, [canEdit]);
@@ -606,45 +651,17 @@ function VesselComponent({ vessel, getSVGCoordinates, handleUpdatePosition, hand
   return (
      <motion.g
       ref={vesselRef}
-      onClick={(e) => e.stopPropagation()}
-      drag={canEdit}
-      dragMomentum={false}
-      dragElastic={0}
-      onDragStart={(e, info) => {
-        if (!canEdit) return;
-        const mouseSVG = getSVGCoordinates(info.point.x, info.point.y);
-        dragOffset.current = {
-          x: mouseSVG.x - mvX.get(),
-          y: mouseSVG.y - mvY.get()
-        };
-      }}
-      onDragEnd={(e, info) => {
-        if (!canEdit) return;
-        const mouseSVG = getSVGCoordinates(info.point.x, info.point.y);
-        const finalX = Math.round(mouseSVG.x - dragOffset.current.x);
-        const finalY = Math.round(mouseSVG.y - dragOffset.current.y);
-        handleUpdatePosition(vessel, finalX, finalY);
-      }}
+      onPointerDown={handlePointerDown}
+      onPointerMove={handlePointerMove}
+      onPointerUp={handlePointerUp}
       style={{ 
         x: mvX, 
         y: mvY,
-        cursor: canEdit ? 'grab' : 'default',
+        cursor: canEdit ? (isDragging ? 'grabbing' : 'grab') : 'default',
         touchAction: 'none'
       }}
-      initial={{ 
-        rotate: vessel.rotation || 0
-      }}
-      animate={{ 
-        rotate: vessel.rotation || 0
-      }}
-      onTap={() => {
-        const now = Date.now();
-        if (now - lastTapTime.current < 300) {
-          setHoveredVessel(vessel);
-        }
-        lastTapTime.current = now;
-      }}
-      className="active:cursor-grabbing"
+      initial={{ rotate: vessel.rotation || 0 }}
+      animate={{ rotate: vessel.rotation || 0 }}
     >
       {/* Invisible larger hit area for easier mobile dragging */}
       <rect 

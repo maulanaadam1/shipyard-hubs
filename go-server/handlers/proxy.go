@@ -15,6 +15,7 @@ import (
 	"github.com/go-chi/chi/v5"
 
 	"shipyard/db"
+	"shipyard/workers"
 )
 
 // GetWorkOrderDetail reads the detail from the local database
@@ -110,6 +111,9 @@ func SyncWorkOrderDetail(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, `{"error": "Failed to save to database"}`, http.StatusInternalServerError)
 		return
 	}
+
+	// Real-time AI ETL trigger: immediately re-flatten updated WO (even if created years ago)
+	go workers.ExtractToAITables(woID, bodyBytes)
 
 	w.Header().Set("Content-Type", "application/json")
 	w.Write(bodyBytes)
@@ -352,6 +356,12 @@ func PostBulkPendingApprovals(w http.ResponseWriter, r *http.Request) {
 							resp.Body.Close()
 							rawJson = bodyBytes
 							db.Exec("INSERT INTO work_order_details (wo_id, raw_json, last_sync) VALUES (?, ?, CURRENT_TIMESTAMP) ON CONFLICT(wo_id) DO UPDATE SET raw_json = excluded.raw_json, last_sync = CURRENT_TIMESTAMP", id, string(bodyBytes))
+							
+							// [AI ETL Pipeline] Jalankan ekstraksi JSON ke Tabel LLM di background agar tidak membebani frontend!
+							go func(woID string, data []byte) {
+								workers.ExtractToAITables(woID, data)
+							}(id, bodyBytes)
+
 							break
 						}
 						resp.Body.Close()
@@ -594,4 +604,33 @@ func PostBulkPendingApprovals(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(result)
+}
+
+// RunAIEtl triggers the AI extractor for all existing Work Orders in the database.
+func RunAIEtl(w http.ResponseWriter, r *http.Request) {
+	rows, err := db.Query("SELECT wo_id, raw_json FROM work_order_details")
+	if err != nil {
+		http.Error(w, err.Error(), 500)
+		return
+	}
+	defer rows.Close()
+
+	count := 0
+	for rows.Next() {
+		var id, rawJson string
+		if err := rows.Scan(&id, &rawJson); err == nil {
+			err = workers.ExtractToAITables(id, []byte(rawJson))
+			if err != nil {
+				log.Printf("[AI ETL ERROR] WO %s: %v", id, err)
+			} else {
+				count++
+			}
+		}
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"success": true,
+		"message": fmt.Sprintf("Berhasil mengekstrak %d Work Orders lama ke tabel AI", count),
+	})
 }
