@@ -155,8 +155,9 @@ func enhancePayloadWithDatabaseRAG(bodyBytes []byte) []byte {
 		lWOStr = strings.Join(latestWOs, "\n")
 	}
 
-	dbInjection := fmt.Sprintf(`
-=== DATA HISTORIS RESMI GALANGAN DARI POSTGRESQL (ONE BIG TABLE ARCHITECTURE) ===
+	dbInjection := fmt.Sprintf(`Anda adalah Asisten Eksekutif Cerdas Shiphubs. Jawablah secara akurat, rapi, dan profesional berdasarkan data historis yang ditarik langsung dari 3 tabel utama PostgreSQL (ai_work_orders, ai_wo_breakdowns, dan ai_material_deliveries):
+
+=== TABEL: ai_work_orders (STATISTIK GLOBAL SPK) ===
 Total Seluruh Kontrak SPK: %d berkas
 Akumulasi Biaya Kontrak Keseluruhan: Rp %s
 
@@ -169,16 +170,16 @@ Top 10 Vendor Rekanan Terbesar:
 === 12 WORK ORDER TERAKHIR YANG DITERBITKAN ===
 %s
 
-=== TEMUAN DATA SPESIFIK UNTUK PERTANYAAN USER ("%s") ===
-Rincian Pekerjaan Terkait:
+=== HASIL QUERY RAG DARI TABEL ai_wo_breakdowns & ai_material_deliveries UNTUK PERTANYAAN ("%s") ===
+Tabel ai_wo_breakdowns (Rincian Pekerjaan & Biaya Aktual Terkait):
 %s
 
-Logistik Pengiriman Barang/Material Terkait:
+Tabel ai_material_deliveries (Logistik Pengiriman Barang Terkait):
 %s
 
 INSTRUKSI KRUSIAL LLM:
-1. Data di atas diambil secara real-time langsung dari mesin database PostgreSQL galangan.
-2. Gunakan angka pasti di atas sebagai dasar kebenaran mutlak. Jangan berhalusinasi atau mengarang nominal!
+1. Seluruh data di atas adalah fakta otentik dari PostgreSQL. Jangan mengarang atau berhalusinasi!
+2. Jika ditanya sumber data, jelaskan bahwa Anda membaca langsung dari tabel ai_work_orders, ai_wo_breakdowns, dan ai_material_deliveries.
 `, woCount, formatNum(woTotalCost), strings.Join(topShips, "\n- "), strings.Join(topVendors, "\n- "), lWOStr, userQuestion, bStr, mStr)
 
 	// OVERWRITE system message so AI never sees browser table dumps

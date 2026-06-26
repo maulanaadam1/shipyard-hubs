@@ -28,13 +28,8 @@ func main() {
 	db.InitRedis()
 	workers.StartSyncWorker()
 
-	// Only run background AI ETL backfill on Linux server containers (Easypanel live)
-	// to prevent clashing with local Windows laptop runs.
-	if runtime.GOOS != "windows" || os.Getenv("FORCE_LOCAL_ETL") == "true" {
-		go workers.RunAIEtlBackfill()
-	} else {
-		log.Println("💻 Local Windows dev detected: Skipping background AI ETL backfill to prevent clashing with live server.")
-	}
+	// Jalankan background AI ETL backfill secara otomatis
+	go workers.RunAIEtlBackfill()
 
 	r := chi.NewRouter()
 	r.Use(chiMiddleware.Recoverer)

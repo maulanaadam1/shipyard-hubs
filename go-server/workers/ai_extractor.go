@@ -20,6 +20,41 @@ type MasterWO struct {
 	ApprovalStatus string      `json:"approval_status"`
 }
 
+var masterWOsCache map[string]MasterWO
+var masterWOsOnce sync.Once
+
+func getMasterWO(woID string) MasterWO {
+	masterWOsOnce.Do(func() {
+		masterWOsCache = make(map[string]MasterWO)
+		var woMasterResp string
+		err := db.QueryRow("SELECT COALESCE(last_response, '[]') FROM sync_configs WHERE id = 'WorkOrders'").Scan(&woMasterResp)
+		if err == nil {
+			var masterWOs []MasterWO
+			var parsedRespItem struct {
+				Data struct {
+					Item []MasterWO `json:"item"`
+				} `json:"data"`
+			}
+			var parsedRespArray struct {
+				Data []MasterWO `json:"data"`
+			}
+
+			if err := json.Unmarshal([]byte(woMasterResp), &parsedRespItem); err == nil && len(parsedRespItem.Data.Item) > 0 {
+				masterWOs = parsedRespItem.Data.Item
+			} else if err := json.Unmarshal([]byte(woMasterResp), &parsedRespArray); err == nil && len(parsedRespArray.Data) > 0 {
+				masterWOs = parsedRespArray.Data
+			} else {
+				json.Unmarshal([]byte(woMasterResp), &masterWOs)
+			}
+
+			for _, m := range masterWOs {
+				masterWOsCache[fmt.Sprintf("%v", m.ID)] = m
+			}
+		}
+	})
+	return masterWOsCache[woID]
+}
+
 // ExtractToAITables parses the raw Work Order detail JSON and flattens it into the 3 AI tables.
 func ExtractToAITables(woID string, rawJsonBytes []byte) error {
 	var detailData struct {
@@ -45,40 +80,7 @@ func ExtractToAITables(woID string, rawJsonBytes []byte) error {
 	innerBytes, _ := json.Marshal(rootObj)
 	json.Unmarshal(innerBytes, &detailData)
 
-	// 1. Fetch Master Work Order Info from sync_configs to get vendor and ship name
-	var masterWOs []MasterWO
-	var woMasterResp string
-	err := db.QueryRow("SELECT COALESCE(last_response, '[]') FROM sync_configs WHERE id = 'WorkOrders'").Scan(&woMasterResp)
-	if err == nil {
-		var parsedRespItem struct {
-			Data struct {
-				Item []MasterWO `json:"item"`
-			} `json:"data"`
-		}
-		var parsedRespArray struct {
-			Data []MasterWO `json:"data"`
-		}
-
-		// Try {"data": {"item": [...]}}
-		if err := json.Unmarshal([]byte(woMasterResp), &parsedRespItem); err == nil && len(parsedRespItem.Data.Item) > 0 {
-			masterWOs = parsedRespItem.Data.Item
-		} else if err := json.Unmarshal([]byte(woMasterResp), &parsedRespArray); err == nil && len(parsedRespArray.Data) > 0 {
-			// Try {"data": [...]}
-			masterWOs = parsedRespArray.Data
-		} else {
-			// Try flat array [...]
-			json.Unmarshal([]byte(woMasterResp), &masterWOs)
-		}
-	}
-
-	// Find the matching master WO
-	var mWo MasterWO
-	for _, m := range masterWOs {
-		if fmt.Sprintf("%v", m.ID) == woID {
-			mWo = m
-			break
-		}
-	}
+	mWo := getMasterWO(woID)
 
 	joID := fmt.Sprintf("%v", detailData.TJobOrderID)
 	if mWo.ID == "" {
@@ -140,8 +142,18 @@ func ExtractToAITables(woID string, rawJsonBytes []byte) error {
 
 			id := fmt.Sprintf("%v", item["id"])
 			path := fmt.Sprintf("%v", item["path"])
-			label := fmt.Sprintf("%v", item["label"])
-			if label == "<nil>" || label == "" {
+			label := ""
+			if l, ok := item["label"]; ok && l != nil && l != "<nil>" && l != "" {
+				label = fmt.Sprintf("%v", l)
+			} else if d, ok := item["description"]; ok && d != nil && d != "<nil>" && d != "" {
+				label = fmt.Sprintf("%v", d)
+			}
+			if param, ok := item["parameter"].(map[string]interface{}); ok {
+				if pn, ok := param["path_name"]; ok && pn != nil && pn != "<nil>" && pn != "" {
+					label = fmt.Sprintf("%v", pn)
+				}
+			}
+			if label == "" || label == "<nil>" {
 				label = fmt.Sprintf("%v", item["code"]) // Fallback for root repair list
 			}
 			remark := fmt.Sprintf("%v", item["remark"])
@@ -150,10 +162,12 @@ func ExtractToAITables(woID string, rawJsonBytes []byte) error {
 			var volume float64
 			if v, ok := item["volume"].(float64); ok {
 				volume = v
+			} else if vs, ok := item["volume"].(string); ok {
+				fmt.Sscanf(vs, "%f", &volume)
 			}
 
 			var price float64
-			if p, ok := item["price"]; ok && p != nil {
+			if p, ok := item["volume_cost_final"]; ok && p != nil {
 				switch pv := p.(type) {
 				case float64:
 					price = pv
@@ -163,9 +177,6 @@ func ExtractToAITables(woID string, rawJsonBytes []byte) error {
 			}
 
 			totalPrice := volume * price
-			if totalPrice == 0 && price > 0 { // For level 2 repair list where volume is usually not defined but price is
-				totalPrice = price
-			}
 
 			// Try to find approval status
 			approvedLevel := 0
@@ -214,8 +225,8 @@ func ExtractToAITables(woID string, rawJsonBytes []byte) error {
 				parseDeliveries(elem)
 			}
 		case map[string]interface{}:
-			// Check if this map is a Requisition object containing t_delivery_details
-			if deliveriesRaw, ok := v["t_delivery_details"].([]interface{}); ok {
+			// Check if this map is a Requisition object containing t_requisition_details
+			if deliveriesRaw, ok := v["t_requisition_details"].([]interface{}); ok {
 				reqID := fmt.Sprintf("%v", v["t_requisition_id"])
 				
 				for _, delRaw := range deliveriesRaw {

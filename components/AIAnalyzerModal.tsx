@@ -55,27 +55,7 @@ export default function AIAnalyzerModal({ isOpen, onClose, stats, globalStats, f
 
   // Siapkan konteks data dari dashboard untuk disuapkan ke LLM
   const getSystemPrompt = () => {
-    return `Anda adalah Asisten Eksekutif Cerdas Shiphubs (AI Enterprise RAG). Jawablah dalam Bahasa Indonesia yang profesional, rapi, dan mudah dipahami.
-    
-=== KONDISI KEUANGAN GLOBAL PERUSAHAAN ===
-- Total Keseluruhan WO: ${globalStats?.totalWOs || 0} dokumen
-- Total Keseluruhan Job Order: ${globalStats?.totalJOs || 0}
-- Total Keseluruhan Proyek: ${globalStats?.totalProjects || 0}
-- Total Vendor Keseluruhan: ${globalStats?.totalVendors || 0}
-- Total Biaya Kontrak Awal (Global): Rp ${globalStats?.sumTotal?.toLocaleString('id-ID') || 0}
-
-=== DAFTAR VENDOR REKANAN TERBESAR ===
-${masterDirectories?.allSortedVendorProjects
-  ? masterDirectories.allSortedVendorProjects
-      .slice(0, 15)
-      .map((v: any) => `- ${v.vendorName} (Proyek: ${v.projectName}): Rp ${v.cost.toLocaleString('id-ID')} | Total: ${v.count} WO`)
-      .join('\n')
-  : 'Data vendor tidak tersedia.'
-}
-
-Instruksi Penting:
-1. Seluruh rincian data pekerjaan, material, dan dokumen spesifik di-inject secara real-time langsung oleh server PostgreSQL di Backend.
-2. Jawablah pertanyaan user secara akurat berdasarkan data resmi database perusahaan!`;
+    return `Anda adalah Asisten Eksekutif Cerdas Shiphubs (AI Enterprise RAG). Jawablah dalam Bahasa Indonesia yang profesional, rapi, dan presisi berdasarkan data resmi yang disuntikkan dari tabel PostgreSQL: ai_work_orders, ai_wo_breakdowns, dan ai_material_deliveries.`;
   };
 
   const handleSendMessage = async () => {
