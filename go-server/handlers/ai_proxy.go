@@ -89,19 +89,6 @@ func enhancePayloadWithDatabaseRAG(bodyBytes []byte) []byte {
 		rowsV.Close()
 	}
 
-	var latestWOs []string
-	rowsW, _ := db.Query("SELECT wo_code, ship_name, vendor_name, total_cost_contract, created_at FROM ai_work_orders ORDER BY created_at DESC LIMIT 12")
-	if rowsW != nil {
-		for rowsW.Next() {
-			var wc, sn, vn, ca string
-			var tc float64
-			if rowsW.Scan(&wc, &sn, &vn, &tc, &ca) == nil {
-				latestWOs = append(latestWOs, fmt.Sprintf("- %s [Kapal %s | Vendor %s]: Rp %s (%s)", wc, sn, vn, formatNum(tc), ca))
-			}
-		}
-		rowsW.Close()
-	}
-
 	words := strings.Fields(strings.ToLower(userQuestion))
 	var searchTerms []string
 	stopWords := map[string]bool{"berapa": true, "total": true, "untuk": true, "dalam": true, "pada": true, "dari": true, "adalah": true, "tentang": true, "semua": true, "seluruh": true, "tampilkan": true, "berikan": true, "coba": true, "hitungkan": true, "rincian": true, "daftar": true, "tahun": true, "bulan": true, "yang": true, "sama": true, "dan": true, "atau": true, "dengan": true, "biaya": true, "material": true, "aktual": true, "estimasi": true, "pekerjaan": true, "reparasi": true, "kapal": true, "vendor": true, "kode": true, "data": true, "cari": true, "carikan": true, "cek": true, "tolong": true, "bagaimana": true, "apa": true, "saja": true, "bagian": true, "kondisi": true, "keuangan": true, "laporan": true}
@@ -112,75 +99,104 @@ func enhancePayloadWithDatabaseRAG(bodyBytes []byte) []byte {
 		}
 	}
 
+	var relevantWOs []string
 	var breakdowns []string
 	var materials []string
+
 	for _, term := range searchTerms {
 		likeTerm := "%" + term + "%"
-		rb, _ := db.Query(db.FormatQuery("SELECT ship_name, vendor_name, label, volume, unit, total_price, status_approval, approval_date FROM ai_wo_breakdowns WHERE label ILIKE ? OR ship_name ILIKE ? OR vendor_name ILIKE ? LIMIT 8"), likeTerm, likeTerm, likeTerm)
+		rw, _ := db.Query(db.FormatQuery("SELECT wo_code, ship_name, vendor_name, total_cost_contract, created_at FROM ai_work_orders WHERE wo_code ILIKE ? OR ship_name ILIKE ? OR vendor_name ILIKE ? LIMIT 10"), likeTerm, likeTerm, likeTerm)
+		if rw != nil {
+			for rw.Next() {
+				var wc, sn, vn, ca string
+				var tc float64
+				if rw.Scan(&wc, &sn, &vn, &tc, &ca) == nil {
+					relevantWOs = append(relevantWOs, fmt.Sprintf("- SPK %s [Kapal %s | Vendor %s]: Nilai Kontrak Rp %s (%s)", wc, sn, vn, formatNum(tc), ca))
+				}
+			}
+			rw.Close()
+		}
+
+		rb, _ := db.Query(db.FormatQuery("SELECT ship_name, vendor_name, label, volume, unit, total_price, status_approval, approval_date FROM ai_wo_breakdowns WHERE label ILIKE ? OR ship_name ILIKE ? OR vendor_name ILIKE ? LIMIT 15"), likeTerm, likeTerm, likeTerm)
 		if rb != nil {
 			for rb.Next() {
 				var s, v, l, u, st, ad string
 				var vol, tp float64
 				if rb.Scan(&s, &v, &l, &vol, &u, &tp, &st, &ad) == nil {
-					breakdowns = append(breakdowns, fmt.Sprintf("- [Kapal %s | Vendor %s]: %s (Vol: %.1f %s | Rp %s | Status: %s tgl %s)", s, v, l, vol, u, formatNum(tp), st, ad))
+					breakdowns = append(breakdowns, fmt.Sprintf("- [Kapal %s | Vendor %s]: %s (Vol: %.1f %s | Biaya: Rp %s | Status: %s tgl %s)", s, v, l, vol, u, formatNum(tp), st, ad))
 				}
 			}
 			rb.Close()
 		}
 
-		rm, _ := db.Query(db.FormatQuery("SELECT ship_name, vendor_name, component_name, qty_delivered, unit, total_price, delivery_date FROM ai_material_deliveries WHERE component_name ILIKE ? OR ship_name ILIKE ? OR vendor_name ILIKE ? LIMIT 8"), likeTerm, likeTerm, likeTerm)
+		rm, _ := db.Query(db.FormatQuery("SELECT ship_name, vendor_name, component_name, qty_delivered, unit, total_price, delivery_date FROM ai_material_deliveries WHERE component_name ILIKE ? OR ship_name ILIKE ? OR vendor_name ILIKE ? LIMIT 15"), likeTerm, likeTerm, likeTerm)
 		if rm != nil {
 			for rm.Next() {
 				var s, v, c, u, dd string
 				var qty, tp float64
 				if rm.Scan(&s, &v, &c, &qty, &u, &tp, &dd) == nil {
-					materials = append(materials, fmt.Sprintf("- [Kapal %s | Vendor %s]: %s (Qty: %.1f %s | Rp %s | Tgl Tiba: %s)", s, v, c, qty, u, formatNum(tp), dd))
+					materials = append(materials, fmt.Sprintf("- [Kapal %s | Vendor %s]: %s (Qty: %.1f %s | Harga: Rp %s | Tgl: %s)", s, v, c, qty, u, formatNum(tp), dd))
 				}
 			}
 			rm.Close()
 		}
 	}
 
-	bStr := "Tidak ada item reparasi spesifik yang cocok."
+	if len(relevantWOs) == 0 {
+		rowsW, _ := db.Query("SELECT wo_code, ship_name, vendor_name, total_cost_contract, created_at FROM ai_work_orders ORDER BY created_at DESC LIMIT 12")
+		if rowsW != nil {
+			for rowsW.Next() {
+				var wc, sn, vn, ca string
+				var tc float64
+				if rowsW.Scan(&wc, &sn, &vn, &tc, &ca) == nil {
+					relevantWOs = append(relevantWOs, fmt.Sprintf("- SPK %s [Kapal %s | Vendor %s]: Nilai Kontrak Rp %s (%s)", wc, sn, vn, formatNum(tc), ca))
+				}
+			}
+			rowsW.Close()
+		}
+	}
+
+	bStr := "Tidak ada rincian jasa spesifik yang cocok dengan kata kunci."
 	if len(breakdowns) > 0 {
 		bStr = strings.Join(breakdowns, "\n")
 	}
-	mStr := "Tidak ada pengiriman material spesifik yang cocok."
+	mStr := "Tidak ada logistik material spesifik yang cocok dengan kata kunci."
 	if len(materials) > 0 {
 		mStr = strings.Join(materials, "\n")
 	}
-
-	lWOStr := "Belum ada Work Order terbaru."
-	if len(latestWOs) > 0 {
-		lWOStr = strings.Join(latestWOs, "\n")
+	woStr := "Tidak ada SPK spesifik yang cocok."
+	if len(relevantWOs) > 0 {
+		woStr = strings.Join(relevantWOs, "\n")
 	}
 
-	dbInjection := fmt.Sprintf(`Anda adalah Asisten Eksekutif Cerdas Shiphubs. Jawablah secara akurat, rapi, dan profesional berdasarkan data historis yang ditarik langsung dari 3 tabel utama PostgreSQL (ai_work_orders, ai_wo_breakdowns, dan ai_material_deliveries):
+	dbInjection := fmt.Sprintf(`Anda adalah Agen Finansial AI Shiphubs. Anda terhubung langsung secara real-time ke tabel database PostgreSQL galangan kapal.
 
-=== TABEL: ai_work_orders (STATISTIK GLOBAL SPK) ===
-Total Seluruh Kontrak SPK: %d berkas
-Akumulasi Biaya Kontrak Keseluruhan: Rp %s
+=== STATISTIK GLOBAL DATABASE ===
+Total Seluruh SPK Terdaftar: %d kontrak
+Akumulasi Nilai Kontrak Keseluruhan: Rp %s
 
-Top 10 Kapal dengan Biaya Terbesar:
+Top 10 Kapal dengan Biaya Reparasi Terbesar:
 - %s
 
 Top 10 Vendor Rekanan Terbesar:
 - %s
 
-=== 12 WORK ORDER TERAKHIR YANG DITERBITKAN ===
+=== DATA OTENTIK HASIL PENELUSURAN TABEL PostgreSQL UNTUK PERTANYAAN ("%s") ===
+
+[TABEL: ai_work_orders (Daftar SPK Terkait)]
 %s
 
-=== HASIL QUERY RAG DARI TABEL ai_wo_breakdowns & ai_material_deliveries UNTUK PERTANYAAN ("%s") ===
-Tabel ai_wo_breakdowns (Rincian Pekerjaan & Biaya Aktual Terkait):
+[TABEL: ai_wo_breakdowns (Rincian Pekerjaan Jasa Terkait)]
 %s
 
-Tabel ai_material_deliveries (Logistik Pengiriman Barang Terkait):
+[TABEL: ai_material_deliveries (Logistik Pengiriman Barang Terkait)]
 %s
 
-INSTRUKSI KRUSIAL LLM:
-1. Seluruh data di atas adalah fakta otentik dari PostgreSQL. Jangan mengarang atau berhalusinasi!
-2. Jika ditanya sumber data, jelaskan bahwa Anda membaca langsung dari tabel ai_work_orders, ai_wo_breakdowns, dan ai_material_deliveries.
-`, woCount, formatNum(woTotalCost), strings.Join(topShips, "\n- "), strings.Join(topVendors, "\n- "), lWOStr, userQuestion, bStr, mStr)
+ATURAN KRUSIAL AGEN AI:
+1. Data pada tabel di atas adalah kutipan otentik 1:1 dari PostgreSQL galangan kapal. Ini adalah kebenaran mutlak.
+2. Jika user bertanya total/rata-rata/rincian biaya, hitunglah secara teliti berdasarkan angka pada baris tabel di atas.
+3. Jangan pernah menebak atau berhalusinasi di luar tabel di atas.
+`, woCount, formatNum(woTotalCost), strings.Join(topShips, "\n- "), strings.Join(topVendors, "\n- "), userQuestion, woStr, bStr, mStr)
 
 	// OVERWRITE system message so AI never sees browser table dumps
 	for i := range reqBody.Messages {
