@@ -5,6 +5,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"runtime"
 	"strings"
 
 	"github.com/go-chi/chi/v5"
@@ -26,7 +27,14 @@ func main() {
 	db.Init()
 	db.InitRedis()
 	workers.StartSyncWorker()
-	go workers.RunAIEtlBackfill() // Auto-migrate existing WO data to AI tables in background
+
+	// Only run background AI ETL backfill on Linux server containers (Easypanel live)
+	// to prevent clashing with local Windows laptop runs.
+	if runtime.GOOS != "windows" || os.Getenv("FORCE_LOCAL_ETL") == "true" {
+		go workers.RunAIEtlBackfill()
+	} else {
+		log.Println("💻 Local Windows dev detected: Skipping background AI ETL backfill to prevent clashing with live server.")
+	}
 
 	r := chi.NewRouter()
 	r.Use(chiMiddleware.Recoverer)
