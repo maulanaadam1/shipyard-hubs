@@ -5,7 +5,6 @@ import (
 	"log"
 	"net/http"
 	"os"
-	"runtime"
 	"strings"
 
 	"github.com/go-chi/chi/v5"
