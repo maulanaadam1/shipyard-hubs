@@ -18,6 +18,13 @@ export default function AIAnalyzerModal({ isOpen, onClose, stats, globalStats, f
   const [messages, setMessages] = useState<{role: 'system' | 'user' | 'assistant', content: string, timestamp?: Date}[]>([]);
   const [inputMessage, setInputMessage] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+  const [activeTab, setActiveTab] = useState<'chat' | 'playground'>('chat');
+  const [customPersona, setCustomPersona] = useState<string>(() => {
+    if (typeof window !== 'undefined') {
+      return localStorage.getItem('shiphubs_ai_persona') || 'Anda adalah Asisten Eksekutif Cerdas Shiphubs (AI Enterprise RAG). Jawablah dalam Bahasa Indonesia yang profesional, rapi, dan presisi berdasarkan data resmi yang disuntikkan dari tabel PostgreSQL.';
+    }
+    return 'Anda adalah Asisten Eksekutif Cerdas Shiphubs (AI Enterprise RAG). Jawablah dalam Bahasa Indonesia yang profesional, rapi, dan presisi berdasarkan data resmi yang disuntikkan dari tabel PostgreSQL.';
+  });
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
@@ -55,7 +62,7 @@ export default function AIAnalyzerModal({ isOpen, onClose, stats, globalStats, f
 
   // Siapkan konteks data dari dashboard untuk disuapkan ke LLM
   const getSystemPrompt = () => {
-    return `Anda adalah Asisten Eksekutif Cerdas Shiphubs (AI Enterprise RAG). Jawablah dalam Bahasa Indonesia yang profesional, rapi, dan presisi berdasarkan data resmi yang disuntikkan dari tabel PostgreSQL: ai_work_orders, ai_wo_breakdowns, dan ai_material_deliveries.`;
+    return customPersona;
   };
 
   const handleSendMessage = async () => {
@@ -211,86 +218,168 @@ export default function AIAnalyzerModal({ isOpen, onClose, stats, globalStats, f
           </div>
         </div>
 
-        {/* CHAT AREA */}
-        <div className={`flex-1 overflow-y-auto p-6 space-y-6 custom-scrollbar ${isDarkMode ? 'bg-slate-900' : 'bg-white'}`}>
-          {/* Panel Info Konteks */}
-          <div className={`p-4 rounded-2xl border text-xs leading-relaxed flex flex-col gap-3 ${isDarkMode ? 'bg-slate-800/50 border-slate-700 text-slate-300' : 'bg-indigo-50/50 border-indigo-100 text-slate-600'}`}>
-            <div className="flex items-start gap-3">
-              <BrainCircuit size={18} className="text-indigo-500 mt-0.5 shrink-0" />
-              <div>
-                <strong>Konteks Aktif:</strong> AI membaca {globalStats?.totalWOs || 0} total dokumen perusahaan, dan {stats.totalWOs} dokumen yang sedang Anda saring di layar. Anda bisa bertanya tentang data global secara bebas!
-              </div>
-            </div>
-            
-            {/* API Key info removed for security */}
-          </div>
+        {/* TAB SWITCHER */}
+        <div className={`flex border-b text-xs font-bold ${isDarkMode ? 'bg-slate-900 border-slate-800 text-slate-400' : 'bg-slate-100/70 border-slate-200 text-slate-500'}`}>
+          <button
+            onClick={() => setActiveTab('chat')}
+            className={`flex-1 py-2.5 flex items-center justify-center gap-2 transition-all ${activeTab === 'chat' ? (isDarkMode ? 'bg-slate-950 text-indigo-400 border-b-2 border-indigo-500' : 'bg-white text-indigo-600 border-b-2 border-indigo-600 shadow-sm') : 'hover:opacity-80'}`}
+          >
+            <MessageSquare size={14} /> Sesi Chat AI
+          </button>
+          <button
+            onClick={() => setActiveTab('playground')}
+            className={`flex-1 py-2.5 flex items-center justify-center gap-2 transition-all ${activeTab === 'playground' ? (isDarkMode ? 'bg-slate-950 text-indigo-400 border-b-2 border-indigo-500' : 'bg-white text-indigo-600 border-b-2 border-indigo-600 shadow-sm') : 'hover:opacity-80'}`}
+          >
+            <Sparkles size={14} className="text-amber-500" /> AI Playground & Custom Prompt
+          </button>
+        </div>
 
-          {messages.map((msg, idx) => (
-            msg.role !== 'system' && (
-              <div key={idx} className={`flex flex-col gap-1 max-w-[85%] ${msg.role === 'user' ? 'ml-auto items-end' : 'items-start'}`}>
-                <div className={`flex gap-3 max-w-full ${msg.role === 'user' ? 'flex-row-reverse' : ''}`}>
-                  <div className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 ${msg.role === 'user' ? 'bg-slate-200 text-slate-600 dark:bg-slate-700 dark:text-slate-300' : 'bg-gradient-to-br from-indigo-500 to-purple-600 text-white shadow-md'}`}>
-                    {msg.role === 'user' ? <MessageSquare size={14} /> : <Bot size={16} />}
-                  </div>
-                  <div className={`p-3.5 rounded-2xl text-sm leading-relaxed whitespace-pre-wrap ${msg.role === 'user' ? (isDarkMode ? 'bg-indigo-600 text-white rounded-tr-sm' : 'bg-indigo-500 text-white rounded-tr-sm') : (isDarkMode ? 'bg-slate-800 text-slate-200 border border-slate-700 rounded-tl-sm' : 'bg-slate-50 border border-slate-200 text-slate-700 rounded-tl-sm')}`}>
-                    {msg.content}
-                  </div>
+        {activeTab === 'chat' ? (
+          <>
+          {/* CHAT AREA */}
+          <div className={`flex-1 overflow-y-auto p-6 space-y-6 custom-scrollbar ${isDarkMode ? 'bg-slate-900' : 'bg-white'}`}>
+            {/* Panel Info Konteks */}
+            <div className={`p-4 rounded-2xl border text-xs leading-relaxed flex flex-col gap-3 ${isDarkMode ? 'bg-slate-800/50 border-slate-700 text-slate-300' : 'bg-indigo-50/50 border-indigo-100 text-slate-600'}`}>
+              <div className="flex items-start gap-3">
+                <BrainCircuit size={18} className="text-indigo-500 mt-0.5 shrink-0" />
+                <div>
+                  <strong>Konteks Aktif:</strong> AI membaca {globalStats?.totalWOs || 0} total dokumen perusahaan, dan {stats.totalWOs} dokumen yang sedang Anda saring di layar. Anda bisa bertanya tentang data global secara bebas!
                 </div>
-                {msg.timestamp && (
-                  <span className={`text-[10px] px-11 font-medium ${isDarkMode ? 'text-slate-500' : 'text-slate-400'}`}>
-                    {msg.timestamp.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })}
-                  </span>
-                )}
-              </div>
-            )
-          ))}
-          {isLoading && (
-            <div className="flex gap-4 max-w-[85%]">
-              <div className="w-8 h-8 rounded-full bg-gradient-to-br from-indigo-500 to-purple-600 text-white flex items-center justify-center shadow-md animate-pulse">
-                <Bot size={16} />
-              </div>
-              <div className={`p-4 rounded-2xl text-sm flex items-center gap-2 ${isDarkMode ? 'bg-slate-800 text-slate-400 border border-slate-700' : 'bg-slate-50 text-slate-500 border border-slate-200'}`}>
-                <Loader2 size={16} className="animate-spin text-indigo-500" /> AI sedang berpikir dan menganalisis data...
               </div>
             </div>
-          )}
-          <div ref={messagesEndRef} />
-        </div>
 
-        {/* INPUT AREA */}
-        <div className={`p-5 border-t ${isDarkMode ? 'bg-slate-950/50 border-slate-800' : 'bg-white border-slate-200'}`}>
-          <div className="flex items-end gap-3 relative">
-            <textarea 
-              ref={textareaRef}
-              value={inputMessage}
-              onChange={(e) => setInputMessage(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter' && !e.shiftKey) {
-                  e.preventDefault();
-                  handleSendMessage();
-                }
-              }}
-              placeholder="Ask Shiphubs..."
-              className={`w-full resize-none rounded-2xl border py-3 px-4 pr-14 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none] ${isDarkMode ? 'bg-slate-900 border-slate-700 text-slate-100 placeholder:text-slate-600' : 'bg-slate-50 border-slate-200 text-slate-900 placeholder:text-slate-400'}`}
-              rows={1}
-              style={{ minHeight: '46px', maxHeight: '132px' }}
-            />
-            <button 
-              onClick={handleSendMessage}
-              disabled={!inputMessage.trim() || isLoading}
-              className={`absolute right-2 bottom-1.5 p-2 rounded-full transition-all duration-200 ${!inputMessage.trim() ? 'opacity-0 scale-75 pointer-events-none' : isLoading ? 'opacity-50 cursor-not-allowed bg-slate-900 dark:bg-white text-white dark:text-slate-900' : 'opacity-100 scale-100 bg-slate-900 hover:bg-slate-800 dark:bg-white dark:hover:bg-slate-200 text-white dark:text-slate-900 shadow-md'}`}
-            >
-              <ArrowUp size={18} strokeWidth={3} />
-            </button>
-          </div>
-          <div className="text-center mt-3 text-[10px] font-medium text-slate-400 dark:text-slate-500 flex items-center justify-center gap-1.5">
-            {!(selectedModel === 'llama3.1' || selectedModel === 'gemma2') ? (
-              <><Cloud size={12} className="text-emerald-500" /> Menggunakan Sumopod API (Cloud). Data dikirimkan ke server Sumopod secara rahasia.</>
-            ) : (
-              <><BrainCircuit size={12} /> AI diaktifkan secara luring (Local AI) sehingga seluruh data perusahaan terjamin aman 100%.</>
+            {messages.map((msg, idx) => (
+              msg.role !== 'system' && (
+                <div key={idx} className={`flex flex-col gap-1 max-w-[85%] ${msg.role === 'user' ? 'ml-auto items-end' : 'items-start'}`}>
+                  <div className={`flex gap-3 max-w-full ${msg.role === 'user' ? 'flex-row-reverse' : ''}`}>
+                    <div className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 ${msg.role === 'user' ? 'bg-slate-200 text-slate-600 dark:bg-slate-700 dark:text-slate-300' : 'bg-gradient-to-br from-indigo-500 to-purple-600 text-white shadow-md'}`}>
+                      {msg.role === 'user' ? <MessageSquare size={14} /> : <Bot size={16} />}
+                    </div>
+                    <div className={`p-3.5 rounded-2xl text-sm leading-relaxed whitespace-pre-wrap ${msg.role === 'user' ? (isDarkMode ? 'bg-indigo-600 text-white rounded-tr-sm' : 'bg-indigo-500 text-white rounded-tr-sm') : (isDarkMode ? 'bg-slate-800 text-slate-200 border border-slate-700 rounded-tl-sm' : 'bg-slate-50 border border-slate-200 text-slate-700 rounded-tl-sm')}`}>
+                      {msg.content}
+                    </div>
+                  </div>
+                  {msg.timestamp && (
+                    <span className={`text-[10px] px-11 font-medium ${isDarkMode ? 'text-slate-500' : 'text-slate-400'}`}>
+                      {msg.timestamp.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })}
+                    </span>
+                  )}
+                </div>
+              )
+            ))}
+            {isLoading && (
+              <div className="flex gap-4 max-w-[85%]">
+                <div className="w-8 h-8 rounded-full bg-gradient-to-br from-indigo-500 to-purple-600 text-white flex items-center justify-center shadow-md animate-pulse">
+                  <Bot size={16} />
+                </div>
+                <div className={`p-4 rounded-2xl text-sm flex items-center gap-2 ${isDarkMode ? 'bg-slate-800 text-slate-400 border border-slate-700' : 'bg-slate-50 text-slate-500 border border-slate-200'}`}>
+                  <Loader2 size={16} className="animate-spin text-indigo-500" /> AI sedang berpikir dan menganalisis data...
+                </div>
+              </div>
             )}
+            <div ref={messagesEndRef} />
           </div>
-        </div>
+
+          {/* INPUT AREA */}
+          <div className={`p-5 border-t ${isDarkMode ? 'bg-slate-950/50 border-slate-800' : 'bg-white border-slate-200'}`}>
+            <div className="flex items-end gap-3 relative">
+              <textarea 
+                ref={textareaRef}
+                value={inputMessage}
+                onChange={(e) => setInputMessage(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault();
+                    handleSendMessage();
+                  }
+                }}
+                placeholder="Ask Shiphubs..."
+                className={`w-full resize-none rounded-2xl border py-3 px-4 pr-14 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none] ${isDarkMode ? 'bg-slate-900 border-slate-700 text-slate-100 placeholder:text-slate-600' : 'bg-slate-50 border-slate-200 text-slate-900 placeholder:text-slate-400'}`}
+                rows={1}
+                style={{ minHeight: '46px', maxHeight: '132px' }}
+              />
+              <button 
+                onClick={handleSendMessage}
+                disabled={!inputMessage.trim() || isLoading}
+                className={`absolute right-2 bottom-1.5 p-2 rounded-full transition-all duration-200 ${!inputMessage.trim() ? 'opacity-0 scale-75 pointer-events-none' : isLoading ? 'opacity-50 cursor-not-allowed bg-slate-900 dark:bg-white text-white dark:text-slate-900' : 'opacity-100 scale-100 bg-slate-900 hover:bg-slate-800 dark:bg-white dark:hover:bg-slate-200 text-white dark:text-slate-900 shadow-md'}`}
+              >
+                <ArrowUp size={18} strokeWidth={3} />
+              </button>
+            </div>
+            <div className="text-center mt-3 text-[10px] font-medium text-slate-400 dark:text-slate-500 flex items-center justify-center gap-1.5">
+              {!(selectedModel === 'llama3.1' || selectedModel === 'gemma2') ? (
+                <><Cloud size={12} className="text-emerald-500" /> Menggunakan Sumopod API (Cloud). Data dikirimkan ke server Sumopod secara rahasia.</>
+              ) : (
+                <><BrainCircuit size={12} /> AI diaktifkan secara luring (Local AI) sehingga seluruh data perusahaan terjamin aman 100%.</>
+              )}
+            </div>
+          </div>
+          </>
+        ) : (
+          <div className={`flex-1 overflow-y-auto p-6 space-y-5 custom-scrollbar ${isDarkMode ? 'bg-slate-900 text-slate-200' : 'bg-white text-slate-700'}`}>
+            <div>
+              <h3 className="text-sm font-bold flex items-center gap-2 text-indigo-500 font-display">
+                <Sparkles size={16} /> Persona & Custom Prompt Studio
+              </h3>
+              <p className="text-[11px] text-slate-400 mt-1 leading-relaxed">
+                Atur kepribadian, gaya laporan, dan sudut pandang analisa AI sebelum memulai percakapan. Aturan yang Anda simpan di sini otomatis digabungkan dengan fakta kueri PostgreSQL galangan kapal.
+              </p>
+            </div>
+
+            <div className="space-y-2.5">
+              <label className="text-[10px] font-bold block text-slate-400 uppercase tracking-wider">Template Persona Cepat</label>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                {[
+                  { label: "👔 Direktur Keuangan (Strict)", prompt: "Anda adalah Direktur Keuangan Senior Galangan Kapal. Analisis data kontrak SPK dan material dengan nada tegas, kritis, mendeteksi potensi ketidakefisienan anggaran, dan memberikan rekomendasi penghematan." },
+                  { label: "🔍 Auditor Investigasi", prompt: "Anda adalah Auditor Investigasi Khusus. Periksa rincian harga material besi, pipa, cat, dan rincian pekerjaan reparasi. Carilah kejanggalan harga satuan, selisih volume yang mencurigakan, atau ketidaksesuaian status persetujuan." },
+                  { label: "📦 Manajer Logistik & Pengadaan", prompt: "Anda adalah Kepala Divisi Pengadaan & Logistik Galangan. Fokuslah pada ketepatan waktu kedatangan material, evaluasi volume pengiriman barang, dan performa vendor rekanan dalam suplai komponen kapal." },
+                  { label: "🤖 Asisten Poin Singkat", prompt: "Anda adalah Asisten AI Shiphubs. Jawablah langsung ke inti poin dengan format poin-poin singkat (bullet points) tanpa basa-basi pendahuluan." }
+                ].map((t, idx) => (
+                  <button
+                    key={idx}
+                    onClick={() => setCustomPersona(t.prompt)}
+                    className={`p-3 rounded-2xl border text-left text-xs transition-all flex flex-col gap-1 ${customPersona === t.prompt ? 'border-indigo-500 bg-indigo-500/10 text-indigo-500 font-bold' : isDarkMode ? 'border-slate-800 hover:bg-slate-800 text-slate-300' : 'border-slate-200 hover:bg-slate-50 text-slate-700'}`}
+                  >
+                    <span>{t.label}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <label className="text-[10px] font-bold block text-slate-400 uppercase tracking-wider">Editor Custom System Prompt</label>
+              <textarea
+                value={customPersona}
+                onChange={(e) => setCustomPersona(e.target.value)}
+                rows={5}
+                className={`w-full rounded-2xl border p-4 text-xs font-mono leading-relaxed focus:outline-none focus:ring-2 focus:ring-indigo-500 ${isDarkMode ? 'bg-slate-950 border-slate-800 text-slate-200 placeholder:text-slate-600' : 'bg-slate-50 border-slate-200 text-slate-800 placeholder:text-slate-400'}`}
+                placeholder="Tulis instruksi kustom AI Anda di sini..."
+              />
+            </div>
+
+            <div className="flex gap-3 pt-2">
+              <button
+                onClick={() => {
+                  localStorage.setItem('shiphubs_ai_persona', customPersona);
+                  setActiveTab('chat');
+                }}
+                className="flex-1 py-3 px-4 rounded-2xl bg-gradient-to-r from-indigo-500 to-purple-600 text-white font-bold text-xs shadow-lg shadow-indigo-500/25 hover:opacity-90 transition-all flex items-center justify-center gap-2"
+              >
+                <Sparkles size={16} /> Terapkan Persona & Mulai Chat
+              </button>
+              <button
+                onClick={() => {
+                  const defaultP = 'Anda adalah Asisten Eksekutif Cerdas Shiphubs (AI Enterprise RAG). Jawablah dalam Bahasa Indonesia yang profesional, rapi, dan presisi berdasarkan data resmi yang disuntikkan dari tabel PostgreSQL.';
+                  setCustomPersona(defaultP);
+                  localStorage.setItem('shiphubs_ai_persona', defaultP);
+                }}
+                className={`py-3 px-4 rounded-2xl border text-xs font-bold transition-all ${isDarkMode ? 'border-slate-800 hover:bg-slate-800 text-slate-400' : 'border-slate-200 hover:bg-slate-100 text-slate-600'}`}
+              >
+                Reset Default
+              </button>
+            </div>
+          </div>
+        )}
       </div>
     </div>
     </div>

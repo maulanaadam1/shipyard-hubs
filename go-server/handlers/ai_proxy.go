@@ -102,10 +102,12 @@ func enhancePayloadWithDatabaseRAG(bodyBytes []byte) []byte {
 	var relevantWOs []string
 	var breakdowns []string
 	var materials []string
+	var totalMatchedMatCost float64
+	var totalMatchedJobCost float64
 
 	for _, term := range searchTerms {
 		likeTerm := "%" + term + "%"
-		rw, _ := db.Query(db.FormatQuery("SELECT wo_code, ship_name, vendor_name, total_cost_contract, created_at FROM ai_work_orders WHERE wo_code ILIKE ? OR ship_name ILIKE ? OR vendor_name ILIKE ? LIMIT 10"), likeTerm, likeTerm, likeTerm)
+		rw, _ := db.Query(db.FormatQuery("SELECT wo_code, ship_name, vendor_name, total_cost_contract, created_at FROM ai_work_orders WHERE wo_code ILIKE ? OR ship_name ILIKE ? OR vendor_name ILIKE ? LIMIT 20"), likeTerm, likeTerm, likeTerm)
 		if rw != nil {
 			for rw.Next() {
 				var wc, sn, vn, ca string
@@ -117,7 +119,11 @@ func enhancePayloadWithDatabaseRAG(bodyBytes []byte) []byte {
 			rw.Close()
 		}
 
-		rb, _ := db.Query(db.FormatQuery("SELECT ship_name, vendor_name, label, volume, unit, total_price, status_approval, approval_date FROM ai_wo_breakdowns WHERE label ILIKE ? OR ship_name ILIKE ? OR vendor_name ILIKE ? LIMIT 15"), likeTerm, likeTerm, likeTerm)
+		var jobSum float64
+		_ = db.QueryRow(db.FormatQuery("SELECT COALESCE(SUM(total_price), 0) FROM ai_wo_breakdowns WHERE label ILIKE ? OR ship_name ILIKE ? OR vendor_name ILIKE ?"), likeTerm, likeTerm, likeTerm).Scan(&jobSum)
+		totalMatchedJobCost += jobSum
+
+		rb, _ := db.Query(db.FormatQuery("SELECT ship_name, vendor_name, label, volume, unit, total_price, status_approval, approval_date FROM ai_wo_breakdowns WHERE label ILIKE ? OR ship_name ILIKE ? OR vendor_name ILIKE ? LIMIT 60"), likeTerm, likeTerm, likeTerm)
 		if rb != nil {
 			for rb.Next() {
 				var s, v, l, u, st, ad string
@@ -129,7 +135,11 @@ func enhancePayloadWithDatabaseRAG(bodyBytes []byte) []byte {
 			rb.Close()
 		}
 
-		rm, _ := db.Query(db.FormatQuery("SELECT ship_name, vendor_name, component_name, qty_delivered, unit, total_price, delivery_date FROM ai_material_deliveries WHERE component_name ILIKE ? OR ship_name ILIKE ? OR vendor_name ILIKE ? LIMIT 15"), likeTerm, likeTerm, likeTerm)
+		var matSum float64
+		_ = db.QueryRow(db.FormatQuery("SELECT COALESCE(SUM(total_price), 0) FROM ai_material_deliveries WHERE component_name ILIKE ? OR ship_name ILIKE ? OR vendor_name ILIKE ?"), likeTerm, likeTerm, likeTerm).Scan(&matSum)
+		totalMatchedMatCost += matSum
+
+		rm, _ := db.Query(db.FormatQuery("SELECT ship_name, vendor_name, component_name, qty_delivered, unit, total_price, delivery_date FROM ai_material_deliveries WHERE component_name ILIKE ? OR ship_name ILIKE ? OR vendor_name ILIKE ? LIMIT 60"), likeTerm, likeTerm, likeTerm)
 		if rm != nil {
 			for rm.Next() {
 				var s, v, c, u, dd string
@@ -182,26 +192,31 @@ Top 10 Vendor Rekanan Terbesar:
 - %s
 
 === DATA OTENTIK HASIL PENELUSURAN TABEL PostgreSQL UNTUK PERTANYAAN ("%s") ===
+Total Keseluruhan Uang Jasa Relevan di Database: Rp %s
+Total Keseluruhan Uang Material Relevan di Database: Rp %s
 
 [TABEL: ai_work_orders (Daftar SPK Terkait)]
 %s
 
-[TABEL: ai_wo_breakdowns (Rincian Pekerjaan Jasa Terkait)]
+[TABEL: ai_wo_breakdowns (Rincian Pekerjaan Jasa Terkait - Top 60)]
 %s
 
-[TABEL: ai_material_deliveries (Logistik Pengiriman Barang Terkait)]
+[TABEL: ai_material_deliveries (Logistik Pengiriman Barang Terkait - Top 60)]
 %s
 
 ATURAN KRUSIAL AGEN AI:
-1. Data pada tabel di atas adalah kutipan otentik 1:1 dari PostgreSQL galangan kapal. Ini adalah kebenaran mutlak.
-2. Jika user bertanya total/rata-rata/rincian biaya, hitunglah secara teliti berdasarkan angka pada baris tabel di atas.
-3. Jangan pernah menebak atau berhalusinasi di luar tabel di atas.
-`, woCount, formatNum(woTotalCost), strings.Join(topShips, "\n- "), strings.Join(topVendors, "\n- "), userQuestion, woStr, bStr, mStr)
+1. Angka "Total Keseluruhan Uang" di atas dihitung otomatis 100% presisi oleh mesin SQL PostgreSQL. Jika ditanya total biaya, WAJIB gunakan angka tersebut!
+2. Baris rincian di atas adalah kutipan otentik 1:1 dari database. Jangan pernah menebak atau berhalusinasi di luar tabel di atas.
+`, woCount, formatNum(woTotalCost), strings.Join(topShips, "\n- "), strings.Join(topVendors, "\n- "), userQuestion, formatNum(totalMatchedJobCost), formatNum(totalMatchedMatCost), woStr, bStr, mStr)
 
-	// OVERWRITE system message so AI never sees browser table dumps
 	for i := range reqBody.Messages {
 		if reqBody.Messages[i].Role == "system" {
-			reqBody.Messages[i].Content = dbInjection
+			userCustomPrompt := reqBody.Messages[i].Content
+			if strings.Contains(userCustomPrompt, "Asisten Eksekutif Cerdas Shiphubs") {
+				reqBody.Messages[i].Content = dbInjection
+			} else {
+				reqBody.Messages[i].Content = userCustomPrompt + "\n\n========================================\n" + dbInjection
+			}
 			break
 		}
 	}
