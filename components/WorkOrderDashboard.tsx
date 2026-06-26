@@ -448,12 +448,10 @@ export default function WorkOrderDashboard() {
 
         let finalCost = 0;
         if (!item.material || item.material.length === 0) {
-          const uPrice = Number(item.volume_cost_final) || Number(item.price) || 0;
+          const uPrice = Number(item.volume_cost_final) || 0;
           if (uPrice > 0) {
             const vol = Number(item.volume) || 1;
             finalCost = uPrice * vol;
-          } else {
-            finalCost = Number(item.total_price) || 0;
           }
         }
 
@@ -2562,12 +2560,10 @@ export default function WorkOrderDashboard() {
                                   } else {
                                     if (nodeMatches) {
                                       let costToAdd = 0;
-                                      const uPrice = Number(node.volume_cost_final) || Number(node.price) || 0;
+                                      const uPrice = Number(node.volume_cost_final) || 0;
                                       if (uPrice > 0) {
                                         const vol = Number(node.volume) || 1;
                                         costToAdd = uPrice * vol;
-                                      } else {
-                                        costToAdd = Number(node.total_price) || 0;
                                       }
                                       totalFilteredCost += costToAdd;
                                     }
@@ -2699,25 +2695,17 @@ export default function WorkOrderDashboard() {
                                         )}
                                       </div>
                                       
-                                      {(!item.material || item.material.length === 0) && (Number(item.volume_cost_final) > 0 || Number(item.price) > 0 || Number(item.total_price) > 0) && (
+                                      {(!item.material || item.material.length === 0) && Number(item.volume_cost_final) > 0 && (
                                         <div className="text-left md:text-right shrink-0 mt-2 md:mt-0 bg-white px-3 py-2 rounded-lg border border-slate-100 flex flex-col md:items-end justify-center">
-                                          {(Number(item.volume_cost_final) > 0 || Number(item.price) > 0) && (
-                                            <span className="text-[9px] text-slate-400 font-mono mb-1 bg-slate-50 px-1.5 py-0.5 rounded border border-slate-100">
-                                              Satuan: {formatIDR(Number(item.volume_cost_final) || Number(item.price))}
-                                            </span>
-                                          )}
-                                          <span className="text-[10px] text-slate-400 block mb-0.5 uppercase tracking-wider font-bold">Total Harga</span>
+                                          <span className="text-[9px] text-slate-400 font-mono mb-1 bg-slate-50 px-1.5 py-0.5 rounded border border-slate-100">
+                                            Satuan Aktual: {formatIDR(Number(item.volume_cost_final))}
+                                          </span>
+                                          <span className="text-[10px] text-slate-400 block mb-0.5 uppercase tracking-wider font-bold">Total Harga Aktual</span>
                                           <p className="text-base font-black text-emerald-600 font-mono tracking-tight">
                                             {(() => {
-                                              let costToDisplay = 0;
-                                              const uPrice = Number(item.volume_cost_final) || Number(item.price) || 0;
-                                              if (uPrice > 0) {
-                                                const vol = Number(item.volume) || 1;
-                                                costToDisplay = uPrice * vol;
-                                              } else {
-                                                costToDisplay = Number(item.total_price) || 0;
-                                              }
-                                              return formatIDR(costToDisplay);
+                                              const uPrice = Number(item.volume_cost_final) || 0;
+                                              const vol = Number(item.volume) || 1;
+                                              return formatIDR(uPrice * vol);
                                             })()}
                                           </p>
                                         </div>

@@ -490,23 +490,15 @@ func PostBulkPendingApprovals(w http.ResponseWriter, r *http.Request) {
 									statusAppr = strings.ToLower(strings.TrimSpace(val))
 								}
 
-								// Base cost calculation
+								// Base cost calculation murni aktual (volume_cost_final * volume)
 								costToAdd := float64(0)
 								baseCost := parseFloatAny(item["volume_cost_final"])
-								if baseCost == 0 {
-									baseCost = parseFloatAny(item["price"])
-								}
 								if baseCost > 0 {
 									vol := float64(1)
-									if v, hasVol := item["volume"]; hasVol {
+									if v, hasVol := item["volume"]; hasVol && v != nil {
 										vol = parseFloatAny(v)
 									}
 									costToAdd = baseCost * vol
-								} else {
-									tPrice := parseFloatAny(item["total_price"])
-									if tPrice > 0 {
-										costToAdd = tPrice
-									}
 								}
 
 								isRejected := statusAppr == "rejected"

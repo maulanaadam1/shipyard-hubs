@@ -230,11 +230,6 @@ export default function FinancialDashboard() {
           const volume = Number(item.volume) || 0;
           const progress = item.progress !== undefined ? Number(item.progress) : 100;
           finalCost = baseCost * volume * (progress / 100);
-        } else if (item.total_price > 0) {
-          finalCost = Number(item.total_price);
-        } else if (item.price > 0 && (!item.material || item.material.length === 0)) {
-          const vol = Number(item.quantity) || Number(item.volume) || 1;
-          finalCost = Number(item.price) * vol;
         }
 
         if (finalCost > 0) {
