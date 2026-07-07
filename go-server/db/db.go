@@ -358,13 +358,16 @@ func createTables() {
 		last_response TEXT,
 		is_active BOOLEAN DEFAULT true,
 		interval_type TEXT DEFAULT 'minutes',
-		interval_value INTEGER DEFAULT 5
+		interval_value INTEGER DEFAULT 5,
+		enable_last_sync BOOLEAN DEFAULT true
 	);`)
 
 	// Migrations for sync_configs if they already exist from previous session
 	DB.Exec("ALTER TABLE sync_configs ADD COLUMN interval_type TEXT DEFAULT 'minutes'")
 	DB.Exec("ALTER TABLE sync_configs ADD COLUMN interval_value INTEGER DEFAULT 5")
+	DB.Exec("ALTER TABLE sync_configs ADD COLUMN enable_last_sync BOOLEAN DEFAULT true")
 	DB.Exec("UPDATE sync_configs SET interval_type = 'minutes', interval_value = 5 WHERE interval_type IS NULL")
+	DB.Exec("UPDATE sync_configs SET enable_last_sync = true WHERE enable_last_sync IS NULL")
 
 	// Migrations for existing schemas
 	DB.Exec("ALTER TABLE projects ADD COLUMN location TEXT")

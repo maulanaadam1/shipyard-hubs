@@ -169,7 +169,7 @@ func GetData(w http.ResponseWriter, r *http.Request) {
 
 	query := "SELECT * FROM " + table
 	if table == "sync_configs" {
-		query = "SELECT id, name, url, headers, last_sync, is_active, interval_type, interval_value FROM sync_configs"
+		query = "SELECT id, name, url, headers, last_sync, is_active, interval_type, interval_value, COALESCE(enable_last_sync, true) as enable_last_sync FROM sync_configs"
 	}
 	
 	args := []any{}

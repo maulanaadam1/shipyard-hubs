@@ -36,7 +36,7 @@ func StartSyncWorker() {
 }
 
 func RunSyncJob(force bool, targetId string) {
-	query := "SELECT id, url, headers, COALESCE(last_sync, ''), COALESCE(interval_type, 'minutes'), COALESCE(interval_value, 5) FROM sync_configs WHERE is_active = true"
+	query := "SELECT id, url, headers, COALESCE(last_sync, ''), COALESCE(interval_type, 'minutes'), COALESCE(interval_value, 5), COALESCE(enable_last_sync, true) FROM sync_configs WHERE is_active = true"
 	var rows *sql.Rows
 	var err error
 
@@ -56,12 +56,17 @@ func RunSyncJob(force bool, targetId string) {
 	for rows.Next() {
 		var id, urlStr, headersStr, lastSyncStr, intervalType string
 		var intervalValue int
-		if err := rows.Scan(&id, &urlStr, &headersStr, &lastSyncStr, &intervalType, &intervalValue); err != nil {
+		var enableLastSync bool
+		if err := rows.Scan(&id, &urlStr, &headersStr, &lastSyncStr, &intervalType, &intervalValue, &enableLastSync); err != nil {
 			continue
 		}
 
 		if urlStr == "" {
 			continue
+		}
+
+		if !enableLastSync {
+			lastSyncStr = ""
 		}
 
 		if !force && lastSyncStr != "" {
@@ -527,8 +532,12 @@ func processJobOrdersIncremental(configId, baseUrl string, headers map[string]st
 			break
 		}
 
-		if page >= 50 {
+		if !lastSync.IsZero() && page >= 50 {
 			log.Printf("IncrementalSync reached max pages safeguard (50). Stopping.")
+			hasMore = false
+			break
+		} else if page >= 2000 {
+			log.Printf("FullSync reached absolute max pages safeguard (2000). Stopping.")
 			hasMore = false
 			break
 		}
