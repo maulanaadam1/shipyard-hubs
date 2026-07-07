@@ -40,7 +40,6 @@ export default function ApiSyncManagement() {
   const [syncStatusMsg, setSyncStatusMsg] = useState("");
   const [isSyncing, setIsSyncing] = useState(false);
   const [lastSyncDate, setLastSyncDate] = useState("");
-  const [enableLastSync, setEnableLastSync] = useState(true);
 
   // Query Params state
   const [baseUrl, setBaseUrl] = useState("");
@@ -179,8 +178,7 @@ export default function ApiSyncManagement() {
           interval_type: config.interval_type,
           interval_value: config.interval_value,
           last_sync: config.last_sync,
-          is_active: config.is_active,
-          enable_last_sync: config.enable_last_sync !== false
+          is_active: config.is_active
         };
         await api.from('sync_configs').upsert(payload, { onConflict: 'id' });
       }
@@ -203,7 +201,6 @@ export default function ApiSyncManagement() {
     setIntervalType("minutes");
     setIntervalValue("5");
     setLastSyncDate("");
-    setEnableLastSync(true);
     setBaseUrl("");
     setQueryParams([]);
     setSyncStatusMsg("");
@@ -217,7 +214,6 @@ export default function ApiSyncManagement() {
     setIntervalType(config.interval_type || "minutes");
     setIntervalValue(config.interval_value || "5");
     setLastSyncDate(config.last_sync || "");
-    setEnableLastSync(config.enable_last_sync !== false);
     
     // Reconstruct cURL command roughly for editing convenience
     let constructedCurl = `curl '${config.url}' \\`;
@@ -338,8 +334,7 @@ export default function ApiSyncManagement() {
          interval_type: intervalType,
          interval_value: parseInt(intervalValue, 10) || 1,
          last_sync: lastSyncDate,
-         is_active: true,
-         enable_last_sync: enableLastSync
+         is_active: true
       };
 
       if (curlCommand) {
@@ -463,12 +458,7 @@ export default function ApiSyncManagement() {
                       </button>
                     </td>
                     <td className="px-6 py-4">
-                      {cfg.enable_last_sync === false ? (
-                        <div className="flex items-center gap-1.5 text-[11px] font-bold w-fit px-2 py-1 rounded-md text-amber-700 bg-amber-50 border border-amber-200" title="Last Sync Dinonaktifkan (Selalu Full Sync)">
-                          <AlertCircle className="w-3.5 h-3.5 text-amber-500 shrink-0" />
-                          Nonaktif (Full Sync)
-                        </div>
-                      ) : cfg.last_sync ? (
+                      {cfg.last_sync ? (
                         <div className={`flex items-center gap-1.5 text-xs w-fit px-2 py-1 rounded-md ${cfg.is_active ? 'text-emerald-600 bg-emerald-50' : 'text-slate-400 bg-slate-100'}`}>
                           <CheckCircle2 className="w-3.5 h-3.5" />
                           {cfg.last_sync}
@@ -639,58 +629,28 @@ export default function ApiSyncManagement() {
                   </div>
                 </div>
 
-                <div className="space-y-2 bg-slate-50 p-4 rounded-2xl border border-slate-200">
-                  <div className="flex items-center justify-between">
-                    <label className="text-xs font-bold text-slate-600 uppercase tracking-wider flex items-center gap-1.5">
-                      <Clock className="w-3.5 h-3.5 text-indigo-500" />
-                      Pengaturan Waktu Sinkronisasi Terakhir (Last Sync)
-                    </label>
-                    <label className="flex items-center gap-2 cursor-pointer text-xs font-bold text-slate-700 bg-white hover:bg-slate-100 border border-slate-200 px-3 py-1.5 rounded-xl transition-all shadow-sm">
-                      <input 
-                        type="checkbox" 
-                        checked={enableLastSync} 
-                        onChange={e => setEnableLastSync(e.target.checked)} 
-                        className="w-4 h-4 text-indigo-600 rounded border-slate-300 focus:ring-indigo-500 cursor-pointer"
-                      />
-                      <span className={enableLastSync ? "text-indigo-600" : "text-slate-500"}>
-                        {enableLastSync ? "Aktif (Incremental Sync)" : "Nonaktif (Full Sync)"}
-                      </span>
-                    </label>
+                <div className="space-y-1.5">
+                  <label className="text-xs font-bold text-slate-500 uppercase tracking-wider flex items-center gap-1.5">
+                    <Clock className="w-3.5 h-3.5 text-indigo-400" />
+                    Waktu Sinkronisasi Terakhir (Last Sync)
+                  </label>
+                  <div className="flex gap-2">
+                    <input 
+                      type="datetime-local" 
+                      step="1"
+                      value={lastSyncDate ? lastSyncDate.replace(' ', 'T') : ""}
+                      onChange={e => setLastSyncDate(e.target.value ? e.target.value.replace('T', ' ') : "")}
+                      className="w-full px-4 py-2.5 bg-indigo-50/30 border border-indigo-200 rounded-xl text-sm outline-none focus:border-indigo-500 transition-all font-mono text-indigo-900"
+                    />
+                    <button 
+                      title="Clear (Full Sync)"
+                      onClick={() => setLastSyncDate("")}
+                      className="px-4 py-2.5 bg-red-50 text-red-600 rounded-xl text-sm font-bold border border-red-100 hover:bg-red-100 transition flex items-center justify-center shrink-0"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
                   </div>
-                  
-                  {enableLastSync ? (
-                    <div className="space-y-1.5 pt-1">
-                      <div className="flex gap-2">
-                        <input 
-                          type="datetime-local" 
-                          step="1"
-                          value={lastSyncDate ? lastSyncDate.replace(' ', 'T') : ""}
-                          onChange={e => setLastSyncDate(e.target.value ? e.target.value.replace('T', ' ') : "")}
-                          className="w-full px-4 py-2.5 bg-white border border-slate-200 rounded-xl text-sm outline-none focus:border-indigo-500 transition-all font-mono text-indigo-900 shadow-inner"
-                        />
-                        <button 
-                          title="Clear (Full Sync Sekali)"
-                          onClick={() => setLastSyncDate("")}
-                          className="px-4 py-2.5 bg-red-50 text-red-600 rounded-xl text-sm font-bold border border-red-100 hover:bg-red-100 transition flex items-center justify-center shrink-0"
-                        >
-                          <X className="w-4 h-4" />
-                        </button>
-                      </div>
-                      <p className="text-[10px] text-slate-500 font-medium">
-                        Saat aktif, sistem otomatis berhenti menarik halaman baru jika menemukan data yang lebih lama dari waktu di atas guna menghemat kuota API.
-                      </p>
-                    </div>
-                  ) : (
-                    <div className="p-3 bg-amber-50 border border-amber-200/80 rounded-xl text-xs text-amber-900 flex items-start gap-2.5 shadow-sm">
-                      <AlertCircle className="w-4 h-4 shrink-0 text-amber-600 mt-0.5" />
-                      <div className="space-y-1">
-                        <p className="font-bold">Cek Waktu Sinkronisasi Terakhir Dinonaktifkan</p>
-                        <p className="text-[11px] leading-relaxed text-amber-800">
-                          API ini akan mengabaikan batas waktu dan selalu melakukan <b>Full Sync (Menyapu bersih dari Halaman 1 hingga maksimal 2.000 halaman)</b> tanpa terhenti oleh data lama. Cocok untuk API yang datanya tidak berurutan atau sedang backfill massal.
-                        </p>
-                      </div>
-                    </div>
-                  )}
+                  <p className="text-[10px] text-slate-400 font-medium pt-1">Gunakan tombol 'X' (Clear) untuk memaksa sistem menarik <b>seluruh data historis dari awal</b> (Full Sync).</p>
                 </div>
 
                 <div className="space-y-1.5 pt-2">
