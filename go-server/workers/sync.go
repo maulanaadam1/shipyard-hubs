@@ -102,7 +102,7 @@ func RunSyncJob(force bool, targetId string) {
 			req.Header.Set(k, v)
 		}
 
-		if id == "JobOrders" {
+		if id == "JobOrders" || id == "WorkOrders" {
 			processJobOrdersIncremental(id, urlStr, headers, lastSyncStr)
 			continue
 		} else if id == "Locations" {
