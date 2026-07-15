@@ -97,7 +97,7 @@ func RunSyncJob(force bool, targetId string) {
 			req.Header.Set(k, v)
 		}
 
-		if id == "JobOrders" || id == "WorkOrders" {
+		if id == "JobOrders" {
 			processJobOrdersIncremental(id, urlStr, headers, lastSyncStr)
 			continue
 		} else if id == "Locations" {
@@ -378,55 +378,39 @@ func processJobOrdersIncremental(configId, baseUrl string, headers map[string]st
 				}
 
 				// Helper getters
-				getStrNull := func(k ...string) interface{} {
-					for _, key := range k {
-						if v, ok := itemMap[key]; ok && v != nil {
-							s := strings.TrimSpace(fmt.Sprintf("%v", v))
-							if s != "" && s != "<nil>" { return s }
-						}
+				getStrNull := func(k string) interface{} {
+					if v, ok := itemMap[k]; ok && v != nil {
+						s := strings.TrimSpace(fmt.Sprintf("%v", v))
+						if s != "" && s != "<nil>" { return s }
 					}
 					return nil
 				}
-				getInt := func(k ...string) int {
-					for _, key := range k {
-						if v, ok := itemMap[key].(float64); ok { return int(v) }
-						if vStr, ok := itemMap[key].(string); ok {
-							var i int
-							if _, err := fmt.Sscanf(vStr, "%d", &i); err == nil { return i }
-						}
-					}
+				getInt := func(k string) int {
+					if v, ok := itemMap[k].(float64); ok { return int(v) }
 					return 0
 				}
-				getFloat := func(k ...string) float64 {
-					for _, key := range k {
-						if v, ok := itemMap[key].(float64); ok { return v }
-						if vStr, ok := itemMap[key].(string); ok {
-							var f float64
-							if _, err := fmt.Sscanf(vStr, "%f", &f); err == nil { return f }
-						}
-					}
+				getFloat := func(k string) float64 {
+					if v, ok := itemMap[k].(float64); ok { return v }
 					return 0
 				}
-				getBool := func(k ...string) bool {
-					for _, key := range k {
-						if v, ok := itemMap[key].(bool); ok { return v }
-					}
+				getBool := func(k string) bool {
+					if v, ok := itemMap[k].(bool); ok { return v }
 					return false
 				}
 
 				tx.Exec(db.FormatQuery("DELETE FROM sync_job_orders WHERE id = ?"), itemId)
 				if stmt != nil {
 					stmt.Exec(
-						itemId, getStrNull("code"), getStrNull("project"), getStrNull("approval_status", "status_approval", "status"),
-						getInt("m_customer_id", "m_vendor_id"), getStrNull("m_customer_name", "m_vendor_name", "code_vendor"), getInt("m_ship_id"), getStrNull("m_ship_name"),
+						itemId, getStrNull("code"), getStrNull("project"), getStrNull("approval_status"),
+						getInt("m_customer_id"), getStrNull("m_customer_name"), getInt("m_ship_id"), getStrNull("m_ship_name"),
 						getInt("m_service_id"), getInt("m_slipway_id"), getInt("m_branch_id"), getStrNull("m_employee_id"), getStrNull("agent"),
 						getStrNull("est_start"), getStrNull("est_finish"), getStrNull("est_arrival_date"), getStrNull("est_departure_date"),
 						getStrNull("est_docking_date"), getStrNull("est_undocking_date"), getStrNull("est_trial_date"),
 						getStrNull("act_start_date"), getStrNull("act_finish_date"), getStrNull("act_arrival_date"), getStrNull("act_departure_date"), getStrNull("act_trial_date"),
 						getStrNull("docking_date"), getStrNull("undocking_date"), getStrNull("floating_before_docking"), getStrNull("floating_after_docking"),
-						getStrNull("floating_before_undocking"), getStrNull("floating_after_undocking"), getStrNull("total_price", "total_cost"), getStrNull("total_price_additional"),
-						getFloat("adjusted_total", "total_cost", "total_price"), getFloat("adjusted_total_additional"), getStrNull("price_adjustment"), getStrNull("price_adjustment_additional"),
-						getInt("t_quotation_id"), getStrNull("t_quotation_code", "jo_code"), getInt("t_repair_list_id"), getInt("latest_version"), getBool("flag_rq"),
+						getStrNull("floating_before_undocking"), getStrNull("floating_after_undocking"), getStrNull("total_price"), getStrNull("total_price_additional"),
+						getFloat("adjusted_total"), getFloat("adjusted_total_additional"), getStrNull("price_adjustment"), getStrNull("price_adjustment_additional"),
+						getInt("t_quotation_id"), getStrNull("t_quotation_code"), getInt("t_repair_list_id"), getInt("latest_version"), getBool("flag_rq"),
 						getStrNull("created_at"), getInt("created_by"), getStrNull("updated_at"), getInt("modified_by"),
 					)
 				}
@@ -435,31 +419,34 @@ func processJobOrdersIncremental(configId, baseUrl string, headers map[string]st
 				if errProj == nil && stmtProjects != nil {
 					idStr := fmt.Sprintf("JO-%v", itemId)
 					
-					id_siaga := getInt("id")
+					id_siaga := 0
+					if val, ok := itemMap["id"].(float64); ok {
+						id_siaga = int(val)
+					}
 
 					idproject := ""
-					if val := getStrNull("code"); val != nil {
-						idproject = fmt.Sprintf("%v", val)
+					if val, ok := itemMap["code"].(string); ok {
+						idproject = val
 					}
 
 					shipname := ""
-					if val := getStrNull("m_ship_name"); val != nil {
-						shipname = fmt.Sprintf("%v", val)
+					if val, ok := itemMap["m_ship_name"].(string); ok {
+						shipname = val
 					}
 
 					cust_company := ""
-					if val := getStrNull("m_customer_name", "m_vendor_name", "code_vendor"); val != nil {
-						cust_company = fmt.Sprintf("%v", val)
+					if val, ok := itemMap["m_customer_name"].(string); ok {
+						cust_company = val
 					}
 
 					approval_status := ""
-					if val := getStrNull("approval_status", "status_approval", "status"); val != nil {
-						approval_status = fmt.Sprintf("%v", val)
+					if val, ok := itemMap["approval_status"].(string); ok {
+						approval_status = val
 					}
 
-					getString := func(keys ...string) string {
-						if val := getStrNull(keys...); val != nil {
-							return fmt.Sprintf("%v", val)
+					getString := func(key string) string {
+						if val, ok := itemMap[key].(string); ok {
+							return val
 						}
 						return ""
 					}
@@ -487,7 +474,12 @@ func processJobOrdersIncremental(configId, baseUrl string, headers map[string]st
 						status = "Completed"
 					}
 
-					price_contract := getFloat("total_price", "total_cost", "adjusted_total")
+					price_contract := 0.0
+					if valStr, ok := itemMap["total_price"].(string); ok {
+						fmt.Sscanf(valStr, "%f", &price_contract)
+					} else if valFloat, ok := itemMap["total_price"].(float64); ok {
+						price_contract = valFloat
+					}
 
 					location := ""
 					if valStr, ok := itemMap["m_slipway_id"].(string); ok {
