@@ -581,14 +581,20 @@ export default function WorkOrderDashboard() {
       const ship = item.m_ship_name || "N/A";
       const combProjectName = `${jo.toUpperCase()} - ${ship.toUpperCase()}`;
 
+      const isApprovedLvl5 = item.min_approval_level >= 5 || item.status_approval?.toLowerCase() === 'approved' || item.status_approval?.toLowerCase() === 'approved level 5';
+      const pendingVal = isApprovedLvl5 ? 0 : (fin ? fin.pending : 0);
+      const approvedVal = fin && fin.final_cost !== undefined && fin.final_cost > 0 
+        ? fin.final_cost 
+        : (isApprovedLvl5 ? Number(item.total_cost || 0) : (fin ? fin.final_cost : 0));
+
       return {
         ...item,
         derivedStatus: levelStatus,
         fullWoCost: Number(item.total_cost || 0),
-        fullApprovedCost: fin ? fin.final_cost : 0,
-        totalCostNum: fin && fin.latest_cost !== undefined ? fin.latest_cost : (fin ? fin.final_cost : Number(item.total_cost || 0)), // Delta for compatibility
+        fullApprovedCost: approvedVal,
+        totalCostNum: fin && fin.latest_cost !== undefined ? fin.latest_cost : approvedVal, // Delta for compatibility
         latest_date: fin ? fin.latest_date : null,
-        pendingCost: fin ? fin.pending : 0,
+        pendingCost: pendingVal,
         previousCost: fin ? fin.previous_cost : 0,
         latestCost: fin ? fin.latest_cost : 0,
         projectName: combProjectName, 
@@ -857,7 +863,8 @@ export default function WorkOrderDashboard() {
 
     filteredData.forEach(item => {
       const fin = financialData[item.id];
-      const pend = pendingApprovals[item.id] !== undefined ? pendingApprovals[item.id] : (fin?.pending || 0);
+      const isApprovedLvl5 = item.min_approval_level >= 5 || item.status_approval?.toLowerCase() === 'approved' || item.status_approval?.toLowerCase() === 'approved level 5';
+      const pend = isApprovedLvl5 ? 0 : (pendingApprovals[item.id] !== undefined ? pendingApprovals[item.id] : (fin?.pending || 0));
       const finCost = finalCosts[item.id] !== undefined ? finalCosts[item.id] : (fin?.latest_cost !== undefined ? fin.latest_cost : (fin?.final_cost || 0));
       const prevCost = previousCosts[item.id] !== undefined ? previousCosts[item.id] : (fin?.previous_cost !== undefined ? fin.previous_cost : (fin?.final_cost || 0));
 
@@ -936,7 +943,8 @@ export default function WorkOrderDashboard() {
 
     processedData.forEach(item => {
       const fin = financialData[item.id];
-      const pend = pendingApprovals[item.id] !== undefined ? pendingApprovals[item.id] : (fin?.pending || 0);
+      const isApprovedLvl5 = item.min_approval_level >= 5 || item.status_approval?.toLowerCase() === 'approved' || item.status_approval?.toLowerCase() === 'approved level 5';
+      const pend = isApprovedLvl5 ? 0 : (pendingApprovals[item.id] !== undefined ? pendingApprovals[item.id] : (fin?.pending || 0));
       const finCost = finalCosts[item.id] !== undefined ? finalCosts[item.id] : (fin?.latest_cost !== undefined ? fin.latest_cost : (fin?.final_cost || 0));
       const prevCost = previousCosts[item.id] !== undefined ? previousCosts[item.id] : (fin?.previous_cost !== undefined ? fin.previous_cost : (fin?.final_cost || 0));
 

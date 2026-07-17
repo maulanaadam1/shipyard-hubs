@@ -407,6 +407,10 @@ func PostBulkPendingApprovals(w http.ResponseWriter, r *http.Request) {
 						rootStatusAppr = strings.ToLower(strings.TrimSpace(val))
 					}
 
+					if rootMinApprovalLevel >= 5 || rootStatusAppr == "approved" || rootStatusAppr == "approved level 5" {
+						isGlobalApproved = true
+					}
+
 					var latestApprove5Date string
 					var latestWaitingDate string
 
@@ -548,8 +552,10 @@ func PostBulkPendingApprovals(w http.ResponseWriter, r *http.Request) {
 						rootTotalCost, _ = strconv.ParseFloat(valStr, 64)
 					}
 					
-					if isGlobalApproved && rootTotalCost > 0 {
-						finalCostSum = rootTotalCost
+					if (isGlobalApproved || rootMinApprovalLevel >= 5 || rootStatusAppr == "approved" || rootStatusAppr == "approved level 5") {
+						if finalCostSum == 0 && rootTotalCost > 0 {
+							finalCostSum = rootTotalCost
+						}
 						pendingSum = 0
 					} else if pendingSum == 0 && rootTotalCost > 0 && len(dailyCosts) == 0 {
 						pendingSum = rootTotalCost
