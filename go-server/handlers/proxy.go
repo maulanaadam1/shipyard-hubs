@@ -569,6 +569,12 @@ func PostBulkPendingApprovals(w http.ResponseWriter, r *http.Request) {
 							}
 						}
 					}
+					if latestDate == "" && rootUpdatedAt != "" {
+						latestDate = strings.Split(rootUpdatedAt, " ")[0]
+					}
+					if latestDate == "" && rootCreatedAt != "" {
+						latestDate = strings.Split(rootCreatedAt, " ")[0]
+					}
 					
 					var latestCost float64
 					var previousCost float64
