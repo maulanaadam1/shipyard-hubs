@@ -429,6 +429,11 @@ func processJobOrdersIncremental(configId, baseUrl string, headers map[string]st
 						idproject = val
 					}
 
+					// Jangan masukkan Work Order ke tabel Master Projects (Job Orders)
+					if strings.HasPrefix(strings.ToUpper(strings.TrimSpace(idproject)), "WO") {
+						continue
+					}
+
 					shipname := ""
 					if val, ok := itemMap["m_ship_name"].(string); ok {
 						shipname = val

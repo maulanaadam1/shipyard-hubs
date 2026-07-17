@@ -318,12 +318,18 @@ export default function ProjectManagement() {
     document.body.removeChild(link);
   };
 
-  const filteredProjects = projects.filter(p => 
-    p.idproject.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    p.shipname?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    p.cust_company?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    p.project_lead?.toLowerCase().includes(searchTerm.toLowerCase())
-  ).sort((a, b) => {
+  const filteredProjects = projects.filter(p => {
+    // Memisahkan transaksi Work Order (WO...) agar tidak muncul di tabel Job Order
+    if (p.idproject && p.idproject.trim().toUpperCase().startsWith('WO')) {
+      return false;
+    }
+    return (
+      p.idproject.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      p.shipname?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      p.cust_company?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      p.project_lead?.toLowerCase().includes(searchTerm.toLowerCase())
+    );
+  }).sort((a, b) => {
     const dateA = new Date(a.create_date || 0).getTime();
     const dateB = new Date(b.create_date || 0).getTime();
     return dateB - dateA; // Descending order (newest first)
