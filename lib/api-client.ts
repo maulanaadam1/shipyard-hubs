@@ -29,6 +29,34 @@ export const getHeaders = async () => {
     return headers;
 };
 
+const getLocalSession = async () => {
+    try {
+        const headers = await getHeaders();
+        const res = await fetch(`/api/auth/session`, { headers });
+        const data = await res.json();
+        return { data: { session: data.session || null }, error: null };
+    } catch(e: any) {
+        return { data: { session: null }, error: { message: e.message } };
+    }
+};
+
+const signInWithLocalPassword = async ({ email, password }: any) => {
+    try {
+        const res = await fetch(`/api/auth/login`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ email, password })
+        });
+        const data = await res.json();
+        if (data.error) return { error: { message: data.error }, data: null };
+        
+        localStorage.setItem('auth_token', data.token);
+        return { data: { user: data.user }, error: null };
+    } catch(e: any) {
+        return { error: { message: e.message }, data: null };
+    }
+};
+
 class ApiQueryBuilder {
     table: string;
     action: string = 'GET';
@@ -129,7 +157,7 @@ export const api = {
         getSession: async () => {
             if (supabase) {
                 const { data: { session }, error } = await supabase.auth.getSession();
-                if (error) return { data: { session: null }, error };
+                if (error) return getLocalSession();
                 
                 // Map Supabase session to our app's session format if needed
                 if (session) {
@@ -148,41 +176,19 @@ export const api = {
                         error: null 
                     };
                 }
-                return { data: { session: null }, error: null };
+                return getLocalSession();
             }
 
-            // Fallback to local server session
-            try {
-                const headers = await getHeaders();
-                const res = await fetch(`/api/auth/session`, { headers });
-                const data = await res.json();
-                return { data: { session: data.session }, error: null };
-            } catch(e: any) {
-                return { data: { session: null }, error: { message: e.message } };
-            }
+            return getLocalSession();
         },
         signInWithPassword: async ({ email, password }: any) => {
              if (supabase) {
                  const { data, error } = await supabase.auth.signInWithPassword({ email, password });
-                 if (error) return { error: { message: error.message }, data: null };
+                 if (error) return signInWithLocalPassword({ email, password });
                  return { data: { user: data.user }, error: null };
              }
 
-             // Fallback to local server login
-             try {
-                const res = await fetch(`/api/auth/login`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ email, password })
-                });
-                const data = await res.json();
-                if (data.error) return { error: { message: data.error }, data: null };
-                
-                localStorage.setItem('auth_token', data.token);
-                return { data: { user: data.user }, error: null };
-             } catch(e: any) {
-                 return { error: { message: e.message }, data: null };
-             }
+             return signInWithLocalPassword({ email, password });
         },
         signOut: async () => {
             if (supabase) {

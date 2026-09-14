@@ -25,6 +25,30 @@ import {
 import { api, getHeaders } from '@/lib/api-client';
 import { useData } from '@/context/DataContext';
 
+const extractCurlUrls = (curlCommand: string): string[] => {
+  const urls: string[] = [];
+  const addUrl = (candidate?: string) => {
+    const cleaned = (candidate || '').trim();
+    if (!cleaned || cleaned === '--url' || cleaned === 'url' || cleaned.startsWith('-')) return;
+    if (!/^https?:\/\//i.test(cleaned)) return;
+    if (!urls.includes(cleaned)) urls.push(cleaned);
+  };
+
+  const explicitUrlRegex = /--url\s+(?:'([^']+)'|"([^"]+)"|([^\s\\]+))/g;
+  let explicitMatch;
+  while ((explicitMatch = explicitUrlRegex.exec(curlCommand)) !== null) {
+    addUrl(explicitMatch[1] || explicitMatch[2] || explicitMatch[3]);
+  }
+
+  const firstArgRegex = /curl\s+(?:'([^']+)'|"([^"]+)"|([^\s\\]+))/g;
+  let firstArgMatch;
+  while ((firstArgMatch = firstArgRegex.exec(curlCommand)) !== null) {
+    addUrl(firstArgMatch[1] || firstArgMatch[2] || firstArgMatch[3]);
+  }
+
+  return urls;
+};
+
 export default function ApiSyncManagement() {
   const { fetchData } = useData();
   const [configs, setConfigs] = useState<any[]>([]);
@@ -61,13 +85,9 @@ export default function ApiSyncManagement() {
       return;
     }
 
-    let urlMatch = curlCommand.match(/curl\s+'([^']+)'/);
-    if (!urlMatch) urlMatch = curlCommand.match(/curl\s+"([^"]+)"/);
-    if (!urlMatch) urlMatch = curlCommand.match(/curl\s+([^ ]+)/);
+    const extractedUrl = extractCurlUrls(curlCommand)[0];
     
-    if (urlMatch && urlMatch[1]) {
-      const extractedUrl = urlMatch[1];
-      
+    if (extractedUrl) {
       // Prevent loop by checking if extracted URL is the same as current
       try {
         if (baseUrl) {
@@ -296,12 +316,11 @@ export default function ApiSyncManagement() {
 
       if (curlCommand) {
         // Basic cURL parsing
-        let urlMatch = curlCommand.match(/curl\s+'([^']+)'/);
-        if (!urlMatch) urlMatch = curlCommand.match(/curl\s+"([^"]+)"/);
-        if (!urlMatch) urlMatch = curlCommand.match(/curl\s+([^ ]+)/);
-        
-        url = urlMatch ? urlMatch[1] : '';
-        if (!url) throw new Error("Gagal mendeteksi URL dari format cURL yang diberikan.");
+        const urls = extractCurlUrls(curlCommand);
+        url = urls.join("\n");
+        if (!url) {
+          throw new Error("URL API tidak ditemukan. Pastikan cURL berisi endpoint setelah curl atau --url, bukan placeholder '--url'.");
+        }
 
         const headerRegex = /-H\s+['"]([^'"]+)['"]/g;
         let match;
@@ -661,11 +680,11 @@ export default function ApiSyncManagement() {
                   <textarea 
                     value={curlCommand}
                     onChange={e => setCurlCommand(e.target.value)}
-                    placeholder={"curl 'https://api.external.com/v1/data?page=1' \\\n  -H 'accept: application/json'"}
+                    placeholder={"curl 'https://api.external.com/v1/data?page=1' \\\n  -H 'accept: application/json'\n\ncurl 'https://api.external.com/v1/data?page=1&project=internal' \\\n  -H 'accept: application/json'"}
                     className="w-full h-40 p-4 text-xs font-mono rounded-xl bg-slate-900 border-slate-800 text-emerald-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/50"
                   />
                   <p className="text-[10px] text-slate-400 pt-1">
-                    Script cURL akan secara otomatis mengekstrak Headers (termasuk Cookie) dan Query Parameters.
+                    Script cURL akan otomatis mengekstrak Headers (termasuk Cookie). Jika ada lebih dari satu cURL, semua URL akan disinkronkan dan digabung.
                   </p>
                 </div>
 

@@ -1,5 +1,7 @@
 node_modules/
 .next/
+dist/
+.vite/
 coverage/
 .DS_Store
 *.log
@@ -12,11 +14,22 @@ coverage/
 go-server/shipyard
 go-server/shipyard.exe
 go-server/*.exe
+go-server/tmp/
 
 # SQLite database files (data stays on server, not in git)
 go-server/*.sqlite
 go-server/*.sqlite-shm
 go-server/*.sqlite-wal
+*.db
+*.db-shm
+*.db-wal
 
 # CSV imports
 *.csv
+
+# Local editor / OS files
+.idea/
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json
+Thumbs.db

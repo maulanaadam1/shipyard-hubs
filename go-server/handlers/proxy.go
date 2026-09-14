@@ -7,10 +7,11 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
-	"strconv"
 
 	"github.com/go-chi/chi/v5"
 
@@ -114,6 +115,11 @@ func SyncWorkOrderDetail(w http.ResponseWriter, r *http.Request) {
 
 	// Real-time AI ETL trigger: immediately re-flatten updated WO (even if created years ago)
 	go workers.ExtractToAITables(woID, bodyBytes)
+	go func() {
+		if err := UpsertWorkOrderSummaryFromDetail(woID, bodyBytes); err != nil {
+			log.Printf("[WO SUMMARY ERROR] %s: %v", woID, err)
+		}
+	}()
 
 	w.Header().Set("Content-Type", "application/json")
 	w.Write(bodyBytes)
@@ -156,7 +162,6 @@ func GetPendingApprovals(w http.ResponseWriter, r *http.Request) {
 			continue
 		}
 
-
 		var dataObj map[string]interface{}
 		if d, ok := dynamic["data"].(map[string]interface{}); ok {
 			dataObj = d
@@ -190,7 +195,7 @@ func GetPendingApprovals(w http.ResponseWriter, r *http.Request) {
 					if !ok {
 						continue
 					}
-	
+
 					matRaw, hasMat := item["material"].([]interface{})
 					if hasMat && len(matRaw) > 0 {
 						// Parent node, recurse into children
@@ -201,16 +206,16 @@ func GetPendingApprovals(w http.ResponseWriter, r *http.Request) {
 						if val, ok := item["approved_level"].(float64); ok {
 							approvedLevel = val
 						}
-	
+
 						statusAppr := ""
 						if val, ok := item["status_approval"].(string); ok {
 							statusAppr = strings.ToLower(strings.TrimSpace(val))
 						}
-		
+
 						// Only sum if NOT fully approved (level 5 or exact 'approved')
 						isRejected := statusAppr == "rejected"
 						isAppr5 := !isRejected && (approvedLevel >= 5 || statusAppr == "approved" || statusAppr == "approved level 5")
-						
+
 						if !isRejected && !isAppr5 {
 							baseCost := parseFloatAny(item["volume_cost_final"])
 							if baseCost == 0 {
@@ -263,6 +268,178 @@ func parseFloatAny(val interface{}) float64 {
 		}
 	}
 	return 0
+}
+
+type woHistorySnapshot struct {
+	Key             string   `json:"key"`
+	Path            string   `json:"path"`
+	Label           string   `json:"label"`
+	Price           *float64 `json:"price"`
+	Volume          *float64 `json:"volume"`
+	Total           *float64 `json:"total"`
+	ModifiedBy      *string  `json:"modifiedBy"`
+	SourceUpdatedAt *string  `json:"sourceUpdatedAt"`
+}
+
+type woHistoryEvent struct {
+	ID         int                `json:"id"`
+	ItemKey    string             `json:"itemKey"`
+	Kind       string             `json:"kind"`
+	DetectedAt string             `json:"detectedAt"`
+	Before     *woHistorySnapshot `json:"before"`
+	After      *woHistorySnapshot `json:"after"`
+}
+
+// GetLocalWorkOrderHistory returns locally recorded WO item history.
+// This backend currently stores the latest synced WO JSON, so expose it as a
+// stable baseline event instead of letting the frontend receive the Vite HTML fallback.
+func GetLocalWorkOrderHistory(w http.ResponseWriter, r *http.Request) {
+	woID := chi.URLParam(r, "id")
+	if woID == "" {
+		http.Error(w, `{"error": "Missing Work Order ID"}`, http.StatusBadRequest)
+		return
+	}
+
+	var rawJson string
+	var detectedAt string
+	err := db.QueryRow("SELECT raw_json, last_sync FROM work_order_details WHERE wo_id = ?", woID).Scan(&rawJson, &detectedAt)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			w.Header().Set("Content-Type", "application/json")
+			json.NewEncoder(w).Encode(map[string]interface{}{"events": []woHistoryEvent{}})
+			return
+		}
+		http.Error(w, `{"error": "Database error"}`, http.StatusInternalServerError)
+		return
+	}
+
+	var dynamic map[string]interface{}
+	if err := json.Unmarshal([]byte(rawJson), &dynamic); err != nil {
+		http.Error(w, `{"error": "Invalid stored work order JSON"}`, http.StatusInternalServerError)
+		return
+	}
+
+	dataObj := dynamic
+	if d, ok := dynamic["data"].(map[string]interface{}); ok {
+		dataObj = d
+	}
+
+	var repairList []interface{}
+	if rl, ok := dataObj["repair_list"].([]interface{}); ok {
+		repairList = rl
+	}
+
+	events := make([]woHistoryEvent, 0)
+	idCounter := 1
+	var walk func(items []interface{}, parents []string)
+	walk = func(items []interface{}, parents []string) {
+		for _, raw := range items {
+			item, ok := raw.(map[string]interface{})
+			if !ok {
+				continue
+			}
+
+			label := firstString(item, "name", "label", "description", "remark")
+			if label == "" {
+				label = "Item"
+			}
+			pathParts := append(append([]string{}, parents...), label)
+
+			if children, ok := item["material"].([]interface{}); ok && len(children) > 0 {
+				walk(children, pathParts)
+				continue
+			}
+
+			key := firstString(item, "uniqcode", "id", "code")
+			if key == "" {
+				key = strings.Join(pathParts, " / ")
+			}
+
+			price := numberPtrFromAny(firstPresent(item, "volume_cost_final", "price"))
+			volume := numberPtrFromAny(firstPresent(item, "volume", "act_quantity", "quantity"))
+			total := numberPtrFromAny(item["total_price"])
+			if total == nil && price != nil {
+				vol := float64(1)
+				if volume != nil && *volume != 0 {
+					vol = *volume
+				}
+				calculated := *price * vol
+				total = &calculated
+			}
+
+			modifiedBy := stringPtrFromAny(firstPresent(item, "modified_by", "updated_by", "created_by"))
+			sourceUpdatedAt := stringPtrFromAny(firstPresent(item, "updated_at", "date_approval", "created_at"))
+			snapshot := woHistorySnapshot{
+				Key:             key,
+				Path:            strings.Join(pathParts, " / "),
+				Label:           label,
+				Price:           price,
+				Volume:          volume,
+				Total:           total,
+				ModifiedBy:      modifiedBy,
+				SourceUpdatedAt: sourceUpdatedAt,
+			}
+
+			events = append(events, woHistoryEvent{
+				ID:         idCounter,
+				ItemKey:    key,
+				Kind:       "baseline",
+				DetectedAt: detectedAt,
+				Before:     nil,
+				After:      &snapshot,
+			})
+			idCounter++
+		}
+	}
+	walk(repairList, nil)
+
+	sort.Slice(events, func(i, j int) bool {
+		return events[i].ItemKey < events[j].ItemKey
+	})
+	for i := range events {
+		events[i].ID = i + 1
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]interface{}{"events": events})
+}
+
+func firstPresent(item map[string]interface{}, keys ...string) interface{} {
+	for _, key := range keys {
+		if value, ok := item[key]; ok && value != nil {
+			return value
+		}
+	}
+	return nil
+}
+
+func firstString(item map[string]interface{}, keys ...string) string {
+	if value := firstPresent(item, keys...); value != nil {
+		if text, ok := value.(string); ok {
+			return strings.TrimSpace(text)
+		}
+		return strings.TrimSpace(fmt.Sprint(value))
+	}
+	return ""
+}
+
+func numberPtrFromAny(value interface{}) *float64 {
+	if value == nil {
+		return nil
+	}
+	parsed := parseFloatAny(value)
+	return &parsed
+}
+
+func stringPtrFromAny(value interface{}) *string {
+	if value == nil {
+		return nil
+	}
+	text := strings.TrimSpace(fmt.Sprint(value))
+	if text == "" || text == "<nil>" {
+		return nil
+	}
+	return &text
 }
 
 // PostBulkPendingApprovals gets pending approval sum for specific IDs.
@@ -336,7 +513,7 @@ func PostBulkPendingApprovals(w http.ResponseWriter, r *http.Request) {
 					defer func() { <-sem }()
 
 					client := &http.Client{Timeout: 30 * time.Second}
-					
+
 					// Retry up to 2 times
 					for attempt := 0; attempt < 2; attempt++ {
 						req, reqErr := http.NewRequest("GET", fetchUrl, nil)
@@ -356,10 +533,13 @@ func PostBulkPendingApprovals(w http.ResponseWriter, r *http.Request) {
 							resp.Body.Close()
 							rawJson = bodyBytes
 							db.Exec("INSERT INTO work_order_details (wo_id, raw_json, last_sync) VALUES (?, ?, CURRENT_TIMESTAMP) ON CONFLICT(wo_id) DO UPDATE SET raw_json = excluded.raw_json, last_sync = CURRENT_TIMESTAMP", id, string(bodyBytes))
-							
+
 							// [AI ETL Pipeline] Jalankan ekstraksi JSON ke Tabel LLM di background agar tidak membebani frontend!
 							go func(woID string, data []byte) {
 								workers.ExtractToAITables(woID, data)
+								if err := UpsertWorkOrderSummaryFromDetail(woID, data); err != nil {
+									log.Printf("[WO SUMMARY ERROR] %s: %v", woID, err)
+								}
 							}(id, bodyBytes)
 
 							break
@@ -389,7 +569,7 @@ func PostBulkPendingApprovals(w http.ResponseWriter, r *http.Request) {
 					} else {
 						dataObj = dynamic
 					}
-					
+
 					var rootCreatedAt, rootUpdatedAt string
 					if val, ok := dataObj["created_at"].(string); ok {
 						rootCreatedAt = val
@@ -488,7 +668,7 @@ func PostBulkPendingApprovals(w http.ResponseWriter, r *http.Request) {
 								if val, ok := item["approved_level"].(float64); ok {
 									approvedLevel = val
 								}
-								
+
 								statusAppr := ""
 								if val, ok := item["status_approval"].(string); ok {
 									statusAppr = strings.ToLower(strings.TrimSpace(val))
@@ -535,7 +715,7 @@ func PostBulkPendingApprovals(w http.ResponseWriter, r *http.Request) {
 										dateOnly := strings.Split(dateToUse, " ")[0]
 										dailyCosts[dateOnly] += costToAdd
 									}
-									
+
 									if isAppr {
 										finalCostSum += costToAdd
 									}
@@ -544,15 +724,15 @@ func PostBulkPendingApprovals(w http.ResponseWriter, r *http.Request) {
 						}
 					}
 					processItems(repairList)
-					
+
 					var rootTotalCost float64
 					if val, ok := dataObj["total_cost"].(float64); ok {
 						rootTotalCost = val
 					} else if valStr, ok := dataObj["total_cost"].(string); ok {
 						rootTotalCost, _ = strconv.ParseFloat(valStr, 64)
 					}
-					
-					if (isGlobalApproved || rootMinApprovalLevel >= 5 || rootStatusAppr == "approved" || rootStatusAppr == "approved level 5") {
+
+					if isGlobalApproved || rootMinApprovalLevel >= 5 || rootStatusAppr == "approved" || rootStatusAppr == "approved level 5" {
 						if finalCostSum == 0 && rootTotalCost > 0 {
 							finalCostSum = rootTotalCost
 						}
@@ -560,7 +740,7 @@ func PostBulkPendingApprovals(w http.ResponseWriter, r *http.Request) {
 					} else if pendingSum == 0 && rootTotalCost > 0 && len(dailyCosts) == 0 {
 						pendingSum = rootTotalCost
 					}
-					
+
 					var latestDate string
 					for d, cost := range dailyCosts {
 						if cost > 0 {
@@ -575,7 +755,7 @@ func PostBulkPendingApprovals(w http.ResponseWriter, r *http.Request) {
 					if latestDate == "" && rootCreatedAt != "" {
 						latestDate = strings.Split(rootCreatedAt, " ")[0]
 					}
-					
+
 					var latestCost float64
 					var previousCost float64
 					if latestDate != "" {
@@ -586,9 +766,9 @@ func PostBulkPendingApprovals(w http.ResponseWriter, r *http.Request) {
 						latestCost = 0
 						previousCost = finalCostSum
 					}
-					
+
 					var finalCost float64 = finalCostSum
-					
+
 					mu.Lock()
 					result[id] = BulkResult{
 						Pending:      pendingSum,

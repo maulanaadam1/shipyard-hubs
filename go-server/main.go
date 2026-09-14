@@ -44,7 +44,7 @@ func main() {
 	// Public routes (no auth required)
 	r.Post("/api/auth/login", handlers.Login)
 	r.Get("/api/auth/session", handlers.GetSession)
-	
+
 	// AI Proxy Routes (with live PostgreSQL Database RAG)
 	r.Post("/api/chat/sumopod", handlers.PostSumopodProxy)
 	r.Post("/api/chat/ollama", handlers.PostOllamaProxy)
@@ -54,14 +54,14 @@ func main() {
 		query := "SELECT id, email, username, password, name, role, jabatan, city, branch, department, whatsapp, avatar_url, roles, extra_roles FROM profiles WHERE email = 'admin@shipyard.local'"
 		var id, emailVal, password, name, role string
 		var username, jabatan, city, branch, department, whatsapp, avatarURL, roles, extraRoles *string
-		
+
 		err := db.QueryRow(query).Scan(&id, &emailVal, &username, &password, &name, &role, &jabatan, &city, &branch, &department, &whatsapp, &avatarURL, &roles, &extraRoles)
-		
+
 		if err != nil {
 			w.Write([]byte(`{"scan_error_full": "` + err.Error() + `"}`))
 			return
 		}
-		
+
 		w.Write([]byte(`{"success": "Query worked perfectly. User exists and scan succeeded."}`))
 	})
 
@@ -79,13 +79,21 @@ func main() {
 		r.Get("/api/cache/{id}", handlers.GetCacheData)
 
 		// Proxy for single Work Order Detail
+		r.Get("/api/projects/wo-summary", handlers.GetProjectWorkOrderSummaries)
+		r.Get("/api/projects/wo-summary/detail", handlers.GetProjectWorkOrderDetail)
+		r.Get("/api/work-orders", handlers.GetWorkOrders)
+		r.Get("/api/work-orders/export", handlers.GetWorkOrdersExport)
+		r.Get("/api/work-orders/stats", handlers.GetWorkOrderStats)
+		r.Get("/api/work-orders/timeline", handlers.GetWorkOrderTimeline)
 		r.Get("/api/work-orders/{id}/detail", handlers.GetWorkOrderDetail)
 		r.Post("/api/work-orders/{id}/sync", handlers.SyncWorkOrderDetail)
+		r.Get("/api/local-wo-history/{id}", handlers.GetLocalWorkOrderHistory)
 		r.Get("/api/work-orders/pending-approvals", handlers.GetPendingApprovals)
 		r.Post("/api/work-orders/bulk-pending-approvals", handlers.PostBulkPendingApprovals)
 
 		// System endpoints
 		r.Get("/api/system/run-ai-etl", handlers.RunAIEtl)
+		r.Post("/api/system/work-orders/backfill-summary", handlers.BackfillWorkOrderSummariesHandler)
 
 		// Export (all authenticated roles)
 		r.Get("/api/export/{table}/csv", handlers.ExportCSV)
@@ -97,8 +105,15 @@ func main() {
 				ID string `json:"id"`
 			}
 			json.NewDecoder(req.Body).Decode(&body)
-			
+
 			workers.RunSyncJob(true, body.ID)
+			if body.ID == "WorkOrders" {
+				if count, err := handlers.BackfillWorkOrderSummaries(); err != nil {
+					log.Printf("WorkOrders summary backfill after sync failed: %v", err)
+				} else {
+					log.Printf("WorkOrders summary backfill after sync completed: %d rows", count)
+				}
+			}
 			w.Header().Set("Content-Type", "application/json")
 			w.Write([]byte(`{"success": true, "message": "Sync triggered successfully"}`))
 		})
@@ -125,7 +140,7 @@ func main() {
 		fs := http.FileServer(http.Dir(distDir))
 		r.Get("/*", func(w http.ResponseWriter, req *http.Request) {
 			path := req.URL.Path
-			
+
 			// If file exists, serve it
 			if _, err := os.Stat(distDir + path); err == nil {
 				// Assets (JS, CSS, images) can be cached for a long time since they have hashes
@@ -138,8 +153,8 @@ func main() {
 				fs.ServeHTTP(w, req)
 				return
 			}
-			
-			// For SPA routing: if path doesn't have an extension (like .js, .css), 
+
+			// For SPA routing: if path doesn't have an extension (like .js, .css),
 			// it's likely a frontend route, serve index.html.
 			if !strings.Contains(path, ".") {
 				// CRITICAL: Prevent caching of index.html so browser always gets latest asset hashes
@@ -149,7 +164,7 @@ func main() {
 				http.ServeFile(w, req, distDir+"/index.html")
 				return
 			}
-			
+
 			http.NotFound(w, req)
 		})
 		log.Printf("Serving static files from: %s", distDir)
@@ -163,4 +178,3 @@ func main() {
 	log.Printf("🚢 Shipyard Hub server started on port %s", port)
 	log.Fatal(http.ListenAndServe(":"+port, r))
 }
-

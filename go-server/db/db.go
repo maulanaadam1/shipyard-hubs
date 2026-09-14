@@ -9,8 +9,8 @@ import (
 	"strings"
 
 	"github.com/google/uuid"
-	"golang.org/x/crypto/bcrypt"
 	_ "github.com/lib/pq"
+	"golang.org/x/crypto/bcrypt"
 	_ "modernc.org/sqlite"
 )
 
@@ -334,7 +334,7 @@ func createTables() {
 	DB.Exec("ALTER TABLE vessel_layouts ADD COLUMN default_zoom REAL DEFAULT 1.0")
 	DB.Exec("ALTER TABLE equipment ADD COLUMN pic TEXT")
 	DB.Exec("ALTER TABLE deployment_records ADD COLUMN create_date TEXT")
-	
+
 	DB.Exec(`CREATE TABLE IF NOT EXISTS roles_master (
 		id TEXT PRIMARY KEY,
 		name TEXT UNIQUE,
@@ -370,7 +370,7 @@ func createTables() {
 	DB.Exec("ALTER TABLE projects ADD COLUMN location TEXT")
 	DB.Exec("ALTER TABLE projects ADD COLUMN docking_type TEXT")
 
-	seedRolesAndPermissions();
+	seedRolesAndPermissions()
 
 	DB.Exec(`CREATE TABLE IF NOT EXISTS dropdown_configs (
 		id TEXT PRIMARY KEY,
@@ -423,6 +423,45 @@ func createTables() {
 		raw_json TEXT,
 		last_sync TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 	);`)
+
+	if os.Getenv("DB_CONNECTION") == "postgres" {
+		DB.Exec(`DO $$
+		BEGIN
+			IF to_regclass('public.work_order_financial_summary') IS NOT NULL
+				AND to_regclass('public.work_order_summary') IS NULL THEN
+				ALTER TABLE work_order_financial_summary RENAME TO work_order_summary;
+			END IF;
+		END $$;`)
+	} else {
+		DB.Exec("ALTER TABLE work_order_financial_summary RENAME TO work_order_summary")
+	}
+
+	DB.Exec(`CREATE TABLE IF NOT EXISTS work_order_summary (
+		wo_id TEXT PRIMARY KEY,
+		wo_code TEXT,
+		jo_code TEXT,
+		project_name TEXT,
+		vendor_name TEXT,
+		ship_name TEXT,
+		status_approval TEXT,
+		derived_status TEXT,
+		latest_date TEXT,
+		pending_cost NUMERIC DEFAULT 0,
+		final_cost NUMERIC DEFAULT 0,
+		latest_cost NUMERIC DEFAULT 0,
+		previous_cost NUMERIC DEFAULT 0,
+		rejected_cost NUMERIC DEFAULT 0,
+		total_cost NUMERIC DEFAULT 0,
+		created_source_at TEXT,
+		updated_source_at TEXT,
+		created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+		updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+	);`)
+	DB.Exec("CREATE INDEX IF NOT EXISTS idx_wo_summary_latest_date ON work_order_summary(latest_date)")
+	DB.Exec("CREATE INDEX IF NOT EXISTS idx_wo_summary_vendor_date ON work_order_summary(vendor_name, latest_date)")
+	DB.Exec("CREATE INDEX IF NOT EXISTS idx_wo_summary_project_date ON work_order_summary(project_name, latest_date)")
+	DB.Exec("CREATE INDEX IF NOT EXISTS idx_wo_summary_status_date ON work_order_summary(status_approval, latest_date)")
+	DB.Exec("CREATE INDEX IF NOT EXISTS idx_wo_summary_derived_status_date ON work_order_summary(derived_status, latest_date)")
 
 	// Migration: Flatten sync_job_orders table into 46 AI-ready columns (force drop old schema)
 	DB.Exec("DROP TABLE IF EXISTS sync_job_orders CASCADE")
@@ -690,7 +729,7 @@ func seedAdmin() {
 
 	var existingID string
 	err = DB.QueryRow(FormatQuery("SELECT id FROM profiles WHERE email = ?"), defaultEmail).Scan(&existingID)
-	
+
 	if err == nil {
 		// Admin exists, FORCE RESET the password and role to ensure it works
 		_, _ = DB.Exec(FormatQuery("UPDATE profiles SET password = ?, role = 'Admin', jabatan = 'System Administrator' WHERE id = ?"),
@@ -771,16 +810,16 @@ func seedRolesAndPermissions() {
 	for _, r := range roles {
 		roleID := uuid.New().String()
 		_, _ = DB.Exec(FormatQuery("INSERT INTO roles_master (id, name, description) VALUES (?, ?, ?)"), roleID, r.Name, r.Desc)
-		
+
 		// Seed all permissions for Admin, selected for others
 		resources := []string{
-			"Dashboard", "Utility", "Job Order", "Ship Docking", "Request", "Release", "Return", 
-			"Maintenance", "Inventory", "Reports", "Master Equipment", 
-			"Master Vendor", "Master Company", "Master Kapal", "Master Location", "Master Workflow", 
+			"Dashboard", "Utility", "Job Order", "Ship Docking", "Request", "Release", "Return",
+			"Maintenance", "Inventory", "Reports", "Master Equipment",
+			"Master Vendor", "Master Company", "Master Kapal", "Master Location", "Master Workflow",
 			"Master Configuration", "User Management", "Role Management", "Master Dock Status", "Vessel Layout",
 		}
 		actions := []string{"view", "add", "edit", "delete", "approve", "import", "export"}
-		
+
 		for _, res := range resources {
 			for _, act := range actions {
 				isAllowed := false
@@ -791,7 +830,7 @@ func seedRolesAndPermissions() {
 				} else if r.Name == "Staff" && act == "view" {
 					isAllowed = true
 				}
-				
+
 				permID := uuid.New().String()
 				_, _ = DB.Exec(FormatQuery("INSERT INTO role_permissions (id, role_id, resource, action, is_allowed) VALUES (?, ?, ?, ?, ?)"),
 					permID, roleID, res, act, isAllowed,
@@ -818,30 +857,30 @@ func seedDropdownConfigs() {
 		{"roles", "Admin", "Admin"},
 		{"roles", "Manager", "Manager"},
 		{"roles", "Staff", "Staff"},
-		
+
 		// Jabatan / Positions
 		{"positions", "Kepala Divisi Ops", "Kepala Divisi Ops"},
 		{"positions", "Manager Engineering", "Manager Engineering"},
 		{"positions", "Superintendent", "Superintendent"},
 		{"positions", "Maintenance Manager", "Maintenance Manager"},
-		
+
 		// Company Types
 		{"company_types", "Ship Owner", "Ship Owner"},
 		{"company_types", "Charterer", "Charterer"},
 		{"company_types", "Agency", "Agency"},
-		
+
 		// Ship Types
 		{"ship_types", "Tugboat", "Tugboat"},
 		{"ship_types", "Barge", "Barge"},
 		{"ship_types", "LCT", "LCT"},
 		{"ship_types", "SPOB", "SPOB"},
-		
+
 		// Docking Types
 		{"docking_types", "Graving Dock", "Graving Dock"},
 		{"docking_types", "Slipway", "Slipway"},
 		{"docking_types", "Airbag System", "Airbag System"},
 		{"docking_types", "Floating Dock", "Floating Dock"},
-		
+
 		// Departments
 		{"departments", "Operations", "Operations"},
 		{"departments", "Engineering", "Engineering"},
@@ -849,7 +888,7 @@ func seedDropdownConfigs() {
 		{"departments", "HR & GA", "HR & GA"},
 		{"departments", "Procurement", "Procurement"},
 		{"departments", "QHSE", "QHSE"},
-		
+
 		// Extra Permissions Tags
 		{"extra_permissions", "Access Finance", "Access Finance"},
 		{"extra_permissions", "Edit Ship Specs", "Edit Ship Specs"},

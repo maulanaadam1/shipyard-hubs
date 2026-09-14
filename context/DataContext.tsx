@@ -1,7 +1,7 @@
 'use client';
 
 import React, { createContext, useContext, useState, ReactNode, useEffect, useCallback } from 'react';
-import { api } from '@/lib/api-client';
+import { api, supabase } from '@/lib/api-client';
 
 // --- Interfaces ---
 
@@ -320,6 +320,87 @@ export interface Project {
   rotation?: number;
 }
 
+const toNumberOrUndefined = (value: any): number | undefined => {
+  if (value === null || value === undefined || value === '') return undefined;
+  const num = Number(value);
+  return Number.isFinite(num) ? num : undefined;
+};
+
+const getFirstValue = (row: any, keys: string[]) => {
+  for (const key of keys) {
+    const value = row?.[key];
+    if (value !== null && value !== undefined && value !== '') return value;
+  }
+  return undefined;
+};
+
+const mapJobOrderToProject = (row: any): Project => {
+  const id = String(getFirstValue(row, ['id', 'uuid', 'code']) || crypto.randomUUID());
+  const idproject = String(getFirstValue(row, ['code', 'idproject', 'project', 'project_code']) || id);
+  const createDate = getFirstValue(row, ['created_at', 'create_date']);
+  const updatedAt = getFirstValue(row, ['updated_at']);
+  const estStart = getFirstValue(row, ['est_start', 'start_date']);
+  const year = toNumberOrUndefined(getFirstValue(row, ['year'])) ||
+    toNumberOrUndefined(String(createDate || estStart || '').slice(0, 4)) ||
+    new Date().getFullYear();
+
+  return {
+    id: `JO-${id}`,
+    id_siaga: toNumberOrUndefined(row.id),
+    create_date: createDate,
+    updated_at: updatedAt,
+    idproject,
+    shipname: getFirstValue(row, ['m_ship_name', 'shipname', 'ship_name', 'vessel']),
+    cust_company: getFirstValue(row, ['m_customer_name', 'cust_company', 'customer_name', 'customer']),
+    approval_status: getFirstValue(row, ['approval_status']),
+    m_employee_id: String(getFirstValue(row, ['m_employee_id']) || ''),
+    est_start: estStart,
+    est_finish: getFirstValue(row, ['est_finish', 'finish_date']),
+    est_docking_date: getFirstValue(row, ['est_docking_date']),
+    est_undocking_date: getFirstValue(row, ['est_undocking_date']),
+    est_trial_date: getFirstValue(row, ['est_trial_date']),
+    est_arrival_date: getFirstValue(row, ['est_arrival_date']),
+    est_departure_date: getFirstValue(row, ['est_departure_date']),
+    docking: getFirstValue(row, ['docking', 'docking_date']),
+    undocking: getFirstValue(row, ['undocking', 'undocking_date']),
+    act_arrival_date: getFirstValue(row, ['act_arrival_date']),
+    actual_start: getFirstValue(row, ['actual_start', 'act_start_date']),
+    actual_finish: getFirstValue(row, ['actual_finish', 'act_finish_date']),
+    act_trial_date: getFirstValue(row, ['act_trial_date']),
+    act_departure_date: getFirstValue(row, ['act_departure_date']),
+    no: toNumberOrUndefined(row.no),
+    year,
+    company: getFirstValue(row, ['company']),
+    docking_id: String(getFirstValue(row, ['docking_id']) || ''),
+    docking_type: String(getFirstValue(row, ['docking_type', 'm_service_id']) || ''),
+    type: getFirstValue(row, ['type']),
+    width: toNumberOrUndefined(row.width),
+    length: toNumberOrUndefined(row.length),
+    location: String(getFirstValue(row, ['location', 'm_slipway_id']) || ''),
+    x_coordinate: toNumberOrUndefined(row.x_coordinate),
+    y_coordinate: toNumberOrUndefined(row.y_coordinate),
+    status_dock: getFirstValue(row, ['status_dock']),
+    ship_visibility: getFirstValue(row, ['ship_visibility']),
+    ship_condition: getFirstValue(row, ['ship_condition']),
+    status: getFirstValue(row, ['status']) || 'Active',
+    status_comercial: getFirstValue(row, ['status_comercial']),
+    duration_dock: toNumberOrUndefined(row.duration_dock),
+    duration_project: toNumberOrUndefined(row.duration_project),
+    project_lead: getFirstValue(row, ['project_lead', 'agent']),
+    price_contract: toNumberOrUndefined(getFirstValue(row, ['price_contract', 'total_price', 'adjusted_total'])),
+    cost_actual: toNumberOrUndefined(row.cost_actual),
+    gross_profit: toNumberOrUndefined(row.gross_profit),
+    safetyman: getFirstValue(row, ['safetyman']),
+    project_team: getFirstValue(row, ['project_team']),
+    vendor_team: getFirstValue(row, ['vendor_team']),
+    manpower_all: toNumberOrUndefined(row.manpower_all),
+    manpower_in: toNumberOrUndefined(row.manpower_in),
+    manpower_ven: toNumberOrUndefined(row.manpower_ven),
+    update_pdf: getFirstValue(row, ['update_pdf']),
+    print: getFirstValue(row, ['print'])
+  };
+};
+
 // --- Context Type ---
 
 interface DataContextType {
@@ -406,6 +487,47 @@ export function DataProvider({ children }: { children: ReactNode }) {
   // Ref to hold latest user ID — prevents stale closure inside fetchData useCallback
   const currentUserIdRef = React.useRef<string | null>(null);
 
+  const fetchJobOrderProjects = useCallback(async () => {
+    const fallback = () => api.from('projects').select('*').order('create_date', { ascending: false });
+
+    if (!supabase) {
+      return fallback();
+    }
+
+    try {
+      const rows: any[] = [];
+      const pageSize = 1000;
+
+      for (let from = 0; from < 5000; from += pageSize) {
+        const to = from + pageSize - 1;
+        const { data, error } = await supabase
+          .from('job_orders')
+          .select('*')
+          .order('updated_at', { ascending: false })
+          .range(from, to);
+
+        if (error) throw error;
+        if (!data || data.length === 0) break;
+
+        rows.push(...data);
+        if (data.length < pageSize) break;
+      }
+
+      if (rows.length === 0) {
+        return fallback();
+      }
+
+      const mapped = rows
+        .map(mapJobOrderToProject)
+        .filter(project => !project.idproject?.trim().toUpperCase().startsWith('WO'));
+
+      return { data: mapped, error: null };
+    } catch (error: any) {
+      console.warn('Failed to fetch Supabase job_orders, falling back to local projects:', error?.message || error);
+      return fallback();
+    }
+  }, []);
+
   // --- Fetch Initial Data ---
   const fetchData = useCallback(async (isInitial = false) => {
     // Check if we have a session token before fetching
@@ -448,7 +570,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
         api.from('companies').select('*').order('company_name', { ascending: true }),
         api.from('master_locations').select('*'),
         api.from('ships').select('*').order('shipname', { ascending: true }),
-        api.from('projects').select('*').order('create_date', { ascending: false }),
+        fetchJobOrderProjects(),
         api.from('dropdown_configs').select('*'),
         api.from('equipment_release').select('*').order('date_released', { ascending: false }),
         api.from('approval_workflow').select('*').order('step_order', { ascending: true }),
@@ -495,7 +617,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
       setHasInitialLoaded(true);
       console.log('Data fetch completed.');
     }
-  }, []);
+  }, [fetchJobOrderProjects]);
 
   const markNotificationRead = async (id: string) => {
     try {

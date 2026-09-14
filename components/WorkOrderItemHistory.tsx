@@ -64,7 +64,6 @@ export default function WorkOrderItemHistory({ woId, item, employees, formatMone
                 <tr className="font-bold"><td className="py-2">Total</td><td className="text-right font-mono">{money(event.before?.total)}</td><td className="text-right font-mono">{money(event.after?.total)}</td></tr>
               </tbody></table></div>
               {delta !== null && <p className="mt-2 text-right text-xs font-semibold text-amber-800">Selisih total: {money(delta)}</p>}
-              <p className="mt-3 text-xs font-normal text-slate-500">{event.kind === 'removed' ? 'Pengubah item pada data sebelumnya' : 'Pengubah terakhir item saat dicatat'}: <span className="font-semibold text-slate-700">{employeeName(event.after ? event.after.modifiedBy : event.before?.modifiedBy)}</span></p>
               {event.kind === 'baseline' && <p className="mt-2 text-xs text-slate-500">Data pembanding awal; bukan bukti perubahan harga.</p>}
             </li>;
           })}

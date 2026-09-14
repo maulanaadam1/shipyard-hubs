@@ -41,10 +41,36 @@ import WorkOrderItemHistory from './WorkOrderItemHistory';
 
 const MOCK_DATA: any[] = [];
 
+const mapSummaryWorkOrder = (item: any) => ({
+  id: item.id,
+  code: item.wo_code || 'N/A',
+  jo_code: item.jo_code || 'N/A',
+  m_ship_name: item.ship_name || 'N/A',
+  m_vendor_name: item.vendor_name || 'Tanpa Vendor',
+  status_approval: item.status_approval || item.derived_status || 'Waiting',
+  min_approval_level: item.derived_status === 'Approval Level 5' ? 5 : 0,
+  total_cost: item.total_cost || 0,
+  created_at: item.created_at || '',
+  updated_at: item.updated_at || '',
+  latest_date: item.latest_date || '',
+  __summaryFinancial: {
+    pending: item.pending_cost || 0,
+    final_cost: item.final_cost || 0,
+    latest_date: item.latest_date || '',
+    latest_cost: item.latest_cost || 0,
+    previous_cost: item.previous_cost || 0,
+    rejected_cost: item.rejected_cost || 0,
+  }
+});
+
 export default function WorkOrderDashboard() {
   const { syncCache, setSyncCache, syncDates, setSyncDates, canAccess, currentUser, employees } = useData();
   const [rawData, setRawData] = useState<any[]>(syncCache['WorkOrders'] || MOCK_DATA);
   const [financialData, setFinancialData] = useState<Record<string, any>>({});
+  const [isSummarySource, setIsSummarySource] = useState(false);
+  const [serverTotalRows, setServerTotalRows] = useState(0);
+  const [timelineData, setTimelineData] = useState<any[] | null>(null);
+  const [serverStats, setServerStats] = useState<any | null>(null);
   const [isUsingMock, setIsUsingMock] = useState(!syncCache['WorkOrders']);
   const [fileName, setFileName] = useState(syncDates['WorkOrders'] ? `Auto-Synced (${syncDates['WorkOrders']})` : "Data Contoh (Demo)");
   const [lastSyncDate, setLastSyncDate] = useState<string>(syncDates['WorkOrders'] || '');
@@ -149,7 +175,7 @@ export default function WorkOrderDashboard() {
   };
 
   useEffect(() => {
-    if (rawData.length === 0) return;
+    if (rawData.length === 0 || isSummarySource) return;
     const fetchFinances = async () => {
       const ids = rawData.map(d => d.id);
       for (let i = 0; i < ids.length; i += 50) {
@@ -169,7 +195,7 @@ export default function WorkOrderDashboard() {
       }
     };
     fetchFinances();
-  }, [rawData]);
+  }, [rawData, isSummarySource]);
 
   const fetchPendingApprovals = async (ids: string[]) => {
     if (!ids || ids.length === 0) return;
@@ -313,8 +339,35 @@ export default function WorkOrderDashboard() {
 
   const fetchSyncData = async () => {
     try {
-      // 1. Coba ambil dari Redis via API Go Server (Lebih cepat)
       const headers = await getHeaders();
+      const summaryRes = await fetch('/api/work-orders?page=1&limit=1&sort=latest_date&dir=desc', { headers });
+      if (summaryRes.ok) {
+        const summaryJson = await summaryRes.json();
+        if (Array.isArray(summaryJson.data) && summaryJson.data.length > 0) {
+          const list = summaryJson.data.map(mapSummaryWorkOrder);
+          const financeMap: Record<string, any> = {};
+          list.forEach((item: any) => {
+            financeMap[item.id] = item.__summaryFinancial;
+          });
+          setRawData(list);
+          setFinancialData(financeMap);
+          setPendingApprovals(Object.fromEntries(list.map((item: any) => [item.id, item.__summaryFinancial.pending || 0])));
+          setFinalCosts(Object.fromEntries(list.map((item: any) => [item.id, item.__summaryFinancial.latest_cost || 0])));
+          setPreviousCosts(Object.fromEntries(list.map((item: any) => [item.id, item.__summaryFinancial.previous_cost || 0])));
+          setRejectedCosts(Object.fromEntries(list.map((item: any) => [item.id, item.__summaryFinancial.rejected_cost || 0])));
+          setFinalDates(Object.fromEntries(list.map((item: any) => [item.id, item.__summaryFinancial.latest_date || ''])));
+          setIsSummarySource(true);
+          setServerTotalRows(summaryJson.total || list.length);
+          setIsUsingMock(false);
+          setFileName(`Summary Optimized (${summaryJson.total || list.length} WO)`);
+          setLastSyncDate(new Date().toISOString());
+          setSyncCache(prev => ({ ...prev, WorkOrders: list }));
+          setSyncDates(prev => ({ ...prev, WorkOrders: 'Summary Optimized' }));
+          return;
+        }
+      }
+
+      // Fallback lama: cache mentah WorkOrders.
       let res = await fetch('/api/cache/WorkOrders', { headers });
       
       let rawParsed = null;
@@ -343,6 +396,8 @@ export default function WorkOrderDashboard() {
         
         if (list.length > 0) {
           setRawData(list);
+          setIsSummarySource(false);
+          setServerTotalRows(list.length);
           setIsUsingMock(false);
           setFileName(`Auto-Synced (${lastSync || 'Baru Saja'})`);
           setLastSyncDate(lastSync || '');
@@ -387,7 +442,7 @@ export default function WorkOrderDashboard() {
     setProjectPage(1);
     setVendorPage(1);
     setCurrentPage(1);
-  }, [rawData, datePreset, customStartDate, customEndDate]);
+  }, [datePreset, customStartDate, customEndDate, searchTerm, selectedProject, selectedStatus, selectedVendor]);
 
   // Kalkulasi Chart Modal Header
   const detailChartConfig = useMemo(() => {
@@ -579,12 +634,12 @@ export default function WorkOrderDashboard() {
   const processedData = useMemo(() => {
     return rawData.map(item => {
       const fin = financialData[item.id];
-      const levelStatus = getApprovalStatusText(item.min_approval_level);
+      const levelStatus = item.derived_status || getApprovalStatusText(item.min_approval_level);
       const jo = item.jo_code || "N/A";
       const ship = item.m_ship_name || "N/A";
       const combProjectName = `${jo.toUpperCase()} - ${ship.toUpperCase()}`;
 
-      const isApprovedLvl5 = item.min_approval_level >= 5 || item.status_approval?.toLowerCase() === 'approved' || item.status_approval?.toLowerCase() === 'approved level 5';
+      const isApprovedLvl5 = levelStatus === 'Approval Level 5' || item.min_approval_level >= 5 || item.status_approval?.toLowerCase() === 'approved' || item.status_approval?.toLowerCase() === 'approved level 5';
       const pendingVal = isApprovedLvl5 ? 0 : (fin ? fin.pending : 0);
       const approvedVal = fin && fin.final_cost !== undefined && fin.final_cost > 0 
         ? fin.final_cost 
@@ -651,6 +706,62 @@ export default function WorkOrderDashboard() {
 
     return { start, end };
   }, [latestDatasetDate, datePreset, customStartDate, customEndDate]);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    const loadOptimizedWorkOrders = async () => {
+      try {
+        const headers = await getHeaders();
+        const params = new URLSearchParams({
+          page: String(currentPage),
+          limit: String(itemsPerPage),
+          sort: sortColumn,
+          dir: sortDirection,
+        });
+        if (searchTerm.trim()) params.set('search', searchTerm.trim());
+        if (selectedStatus !== 'All') params.set('status', selectedStatus);
+        if (selectedVendor !== 'All') params.set('vendor', selectedVendor);
+        if (selectedProject !== 'All') params.set('project', selectedProject);
+        if (effectiveDateRange.start) params.set('start_date', effectiveDateRange.start.toISOString().split('T')[0]);
+        if (effectiveDateRange.end) params.set('end_date', effectiveDateRange.end.toISOString().split('T')[0]);
+        if (selectedTrendDate) {
+          params.set('trend_date', selectedTrendDate);
+          params.set('group', trendGroupingMode === 'daily' ? 'day' : trendGroupingMode === 'weekly' ? 'week' : 'month');
+        }
+
+        const res = await fetch(`/api/work-orders?${params.toString()}`, { headers, signal: controller.signal });
+        if (!res.ok) return;
+        const result = await res.json();
+        if (!Array.isArray(result.data)) return;
+        if (result.total === 0 && result.data.length === 0) return;
+
+        const list = result.data.map(mapSummaryWorkOrder);
+        const financeMap: Record<string, any> = {};
+        list.forEach((item: any) => {
+          financeMap[item.id] = item.__summaryFinancial;
+        });
+        if (controller.signal.aborted) return;
+        setRawData(list);
+        setFinancialData(financeMap);
+        setPendingApprovals(Object.fromEntries(list.map((item: any) => [item.id, item.__summaryFinancial.pending || 0])));
+        setFinalCosts(Object.fromEntries(list.map((item: any) => [item.id, item.__summaryFinancial.latest_cost || 0])));
+        setPreviousCosts(Object.fromEntries(list.map((item: any) => [item.id, item.__summaryFinancial.previous_cost || 0])));
+        setRejectedCosts(Object.fromEntries(list.map((item: any) => [item.id, item.__summaryFinancial.rejected_cost || 0])));
+        setFinalDates(Object.fromEntries(list.map((item: any) => [item.id, item.__summaryFinancial.latest_date || ''])));
+        setServerTotalRows(result.total || list.length);
+        setIsSummarySource(true);
+        setIsUsingMock(false);
+        setFileName(`Summary Optimized (${result.total || list.length} WO)`);
+      } catch (error) {
+        if (!controller.signal.aborted) {
+          console.warn('Optimized WorkOrder endpoint unavailable, keeping existing data.', error);
+        }
+      }
+    };
+
+    loadOptimizedWorkOrders();
+    return () => controller.abort();
+  }, [currentPage, searchTerm, selectedStatus, selectedVendor, selectedProject, selectedTrendDate, trendGroupingMode, sortColumn, sortDirection, effectiveDateRange.start?.getTime(), effectiveDateRange.end?.getTime()]);
 
   // 1.1. Unsur filter list yang unik (filterOptions) - DIURUTKAN SECARA KRONOLOGIS (TERBARU DI ATAS)
   const filterOptions = useMemo(() => {
@@ -848,6 +959,20 @@ export default function WorkOrderDashboard() {
 
   // 8. Statistik Global Real-time
   const stats = useMemo(() => {
+    if (isSummarySource && serverStats) {
+      return {
+        totalWOs: serverStats.totalWOs || 0,
+        totalJOs: serverStats.totalJOs || 0,
+        totalVendors: serverStats.totalVendors || 0,
+        totalProjects: serverStats.totalProjects || 0,
+        totalCostValue: serverStats.totalCostValue || 0,
+        sumTotal: serverStats.sumTotal || 0,
+        sumSebelumnya: serverStats.sumSebelumnya || 0,
+        sumSaatIni: serverStats.sumSaatIni || 0,
+        sumPending: serverStats.sumPending || 0,
+        approvalCounts: serverStats.approvalCounts || {}
+      };
+    }
     const totalWOs = filteredData.length;
     
     const joSet = new Set(filteredData.map(d => d.joCode).filter(c => c !== "N/A"));
@@ -909,7 +1034,7 @@ export default function WorkOrderDashboard() {
       sumPending,
       approvalCounts
     };
-  }, [filteredData, previousCosts, pendingApprovals, financialData, finalCosts]);
+  }, [filteredData, previousCosts, pendingApprovals, financialData, finalCosts, isSummarySource, serverStats]);
 
   // 8.5 Statistik Keseluruhan (Global) Tanpa Filter
   const globalStats = useMemo(() => {
@@ -1006,8 +1131,86 @@ export default function WorkOrderDashboard() {
     setSelectedTrendDate(null);
   }, [trendGroupingMode]);
 
+  useEffect(() => {
+    if (!isSummarySource) return;
+    const controller = new AbortController();
+    const loadStats = async () => {
+      try {
+        const headers = await getHeaders();
+        const params = new URLSearchParams({
+          group: trendGroupingMode === 'daily' ? 'day' : trendGroupingMode === 'weekly' ? 'week' : 'month',
+        });
+        if (searchTerm.trim()) params.set('search', searchTerm.trim());
+        if (selectedStatus !== 'All') params.set('status', selectedStatus);
+        if (selectedVendor !== 'All') params.set('vendor', selectedVendor);
+        if (selectedProject !== 'All') params.set('project', selectedProject);
+        if (effectiveDateRange.start) params.set('start_date', effectiveDateRange.start.toISOString().split('T')[0]);
+        if (effectiveDateRange.end) params.set('end_date', effectiveDateRange.end.toISOString().split('T')[0]);
+        if (selectedTrendDate) params.set('trend_date', selectedTrendDate);
+        const res = await fetch(`/api/work-orders/stats?${params.toString()}`, { headers, signal: controller.signal });
+        if (!res.ok) return;
+        const result = await res.json();
+        if (!controller.signal.aborted) setServerStats(result);
+      } catch (error) {
+        if (!controller.signal.aborted) setServerStats(null);
+      }
+    };
+    loadStats();
+    return () => controller.abort();
+  }, [isSummarySource, searchTerm, selectedStatus, selectedVendor, selectedProject, selectedTrendDate, trendGroupingMode, effectiveDateRange.start?.getTime(), effectiveDateRange.end?.getTime()]);
+
+  useEffect(() => {
+    if (!isSummarySource) return;
+    const controller = new AbortController();
+    const loadTimeline = async () => {
+      try {
+        const headers = await getHeaders();
+        const params = new URLSearchParams({
+          group: trendGroupingMode === 'daily' ? 'day' : trendGroupingMode === 'weekly' ? 'week' : 'month',
+        });
+        if (effectiveDateRange.start) params.set('start', effectiveDateRange.start.toISOString().split('T')[0]);
+        if (effectiveDateRange.end) params.set('end', effectiveDateRange.end.toISOString().split('T')[0]);
+        if (selectedStatus !== 'All') params.set('status', selectedStatus);
+        if (selectedVendor !== 'All') params.set('vendor', selectedVendor);
+        if (selectedProject !== 'All') params.set('project', selectedProject);
+        const res = await fetch(`/api/work-orders/timeline?${params.toString()}`, { headers, signal: controller.signal });
+        if (!res.ok) return;
+        const result = await res.json();
+        if (!controller.signal.aborted && Array.isArray(result)) {
+          setTimelineData(result);
+        }
+      } catch (error) {
+        if (!controller.signal.aborted) setTimelineData(null);
+      }
+    };
+    loadTimeline();
+    return () => controller.abort();
+  }, [isSummarySource, trendGroupingMode, selectedStatus, selectedVendor, selectedProject, effectiveDateRange.start?.getTime(), effectiveDateRange.end?.getTime()]);
+
   // Kalkulasi Tren Finansial Mingguan / Harian / Bulanan secara Kronologis
   const weeklyCostTrend = useMemo(() => {
+    if (isSummarySource && timelineData) {
+      return timelineData.map(item => {
+        let formattedLabel = item.period;
+        if (trendGroupingMode === "daily") {
+          const d = new Date(item.period);
+          formattedLabel = isNaN(d.getTime()) ? item.period : d.toLocaleDateString('id-ID', { day: 'numeric', month: 'short' });
+        } else if (trendGroupingMode === "weekly") {
+          const d = new Date(item.period);
+          formattedLabel = isNaN(d.getTime()) ? item.period : "Mng-" + d.toLocaleDateString('id-ID', { day: 'numeric', month: 'short' });
+        } else if (item.period?.includes('-')) {
+          const [year, month] = item.period.split('-');
+          const d = new Date(Number(year), Number(month) - 1, 1);
+          formattedLabel = isNaN(d.getTime()) ? item.period : d.toLocaleDateString('id-ID', { month: 'short', year: '2-digit' });
+        }
+        return {
+          key: item.period,
+          label: formattedLabel,
+          cost: item.cost || 0,
+          count: item.count || 0
+        };
+      });
+    }
     const groups: Record<string, { cost: number; count: number }> = {};
     baseFilteredData.forEach(item => {
       // Hanya plot dokumen yang sudah memiliki latest_date (approval finansial)
@@ -1060,7 +1263,7 @@ export default function WorkOrderDashboard() {
           count: groups[groupKey].count
         };
       });
-  }, [filteredData, trendGroupingMode]);
+  }, [filteredData, trendGroupingMode, isSummarySource, timelineData]);
 
   // SVG Coordinates Generator untuk Trendline Dinamis
   const svgChartConfig = useMemo(() => {
@@ -1202,13 +1405,15 @@ export default function WorkOrderDashboard() {
   }, [filteredData, sortColumn, sortDirection, pendingApprovals, finalCosts]);
 
   const paginatedData = useMemo(() => {
+    if (isSummarySource) return sortedData;
     const startIndex = (currentPage - 1) * itemsPerPage;
     return sortedData.slice(startIndex, startIndex + itemsPerPage);
-  }, [sortedData, currentPage]);
+  }, [sortedData, currentPage, isSummarySource]);
 
   const fetchedIdsRef = useRef<Set<string>>(new Set());
 
   useEffect(() => {
+    if (isSummarySource) return;
     const pageIds = paginatedData.map(d => String(d.id));
     const newIds = pageIds.filter(id => !fetchedIdsRef.current.has(id));
     
@@ -1225,9 +1430,10 @@ export default function WorkOrderDashboard() {
       }, 8000);
       return () => clearTimeout(retryTimer);
     }
-  }, [paginatedData]);
+  }, [paginatedData, isSummarySource]);
 
-  const totalPages = Math.ceil(filteredData.length / itemsPerPage) || 1;
+  const totalRows = isSummarySource ? serverTotalRows : filteredData.length;
+  const totalPages = Math.ceil(totalRows / itemsPerPage) || 1;
 
   const formatIDR = (value: number) => {
     if (isNominalHidden) return 'Rp ****';
@@ -1238,7 +1444,43 @@ export default function WorkOrderDashboard() {
     }).format(value);
   };
 
-  const handleExportCSV = () => {
+  const handleExportCSV = async () => {
+    if (isSummarySource) {
+      const params = new URLSearchParams({
+        sort: sortColumn,
+        dir: sortDirection,
+      });
+      if (searchTerm.trim()) params.set('search', searchTerm.trim());
+      if (selectedStatus !== 'All') params.set('status', selectedStatus);
+      if (selectedVendor !== 'All') params.set('vendor', selectedVendor);
+      if (selectedProject !== 'All') params.set('project', selectedProject);
+      if (effectiveDateRange.start) params.set('start_date', effectiveDateRange.start.toISOString().split('T')[0]);
+      if (effectiveDateRange.end) params.set('end_date', effectiveDateRange.end.toISOString().split('T')[0]);
+      if (selectedTrendDate) {
+        params.set('trend_date', selectedTrendDate);
+        params.set('group', trendGroupingMode === 'daily' ? 'day' : trendGroupingMode === 'weekly' ? 'week' : 'month');
+      }
+
+      try {
+        const headers = await getHeaders();
+        const response = await fetch(`/api/work-orders/export?${params.toString()}`, { headers });
+        if (!response.ok) throw new Error('Export failed');
+        const blob = await response.blob();
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement("a");
+        link.setAttribute("href", url);
+        link.setAttribute("download", `Export_WorkOrder_${new Date().toISOString().split('T')[0]}.csv`);
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        URL.revokeObjectURL(url);
+        return;
+      } catch (error) {
+        alert("Gagal export dari server. Coba lagi setelah koneksi backend stabil.");
+        return;
+      }
+    }
+
     const headers = [
       "No",
       "Kode WO",
@@ -1685,7 +1927,10 @@ export default function WorkOrderDashboard() {
                         return (
                         <g 
                           key={idx}
-                          onClick={() => setSelectedTrendDate(prev => prev === pt.key ? null : pt.key)}
+                          onClick={() => {
+                            setCurrentPage(1);
+                            setSelectedTrendDate(prev => prev === pt.key ? null : pt.key);
+                          }}
                           onMouseEnter={() => setHoveredTrendPoint(pt)}
                           onMouseLeave={() => setHoveredTrendPoint(null)}
                           className="cursor-pointer"
@@ -2057,7 +2302,7 @@ export default function WorkOrderDashboard() {
           <div className="px-6 py-4 border-b border-slate-100 dark:border-slate-800 flex flex-wrap justify-between items-center gap-4">
             <div>
               <h3 className="text-base font-bold">Daftar Job Order & Work Order</h3>
-              <p className="text-xs text-slate-400 mt-0.5">Menampilkan {filteredData.length} data Work Order sesuai filter</p>
+              <p className="text-xs text-slate-400 mt-0.5">Menampilkan {totalRows} data Work Order sesuai filter</p>
             </div>
             
             <div className="flex items-center gap-3">
@@ -2201,7 +2446,7 @@ export default function WorkOrderDashboard() {
 
           <div className="px-6 py-4 border-t border-slate-100 bg-slate-50/30 flex items-center justify-between gap-4">
             <span className="text-xs text-slate-400">
-              Menampilkan {Math.min(filteredData.length, (currentPage - 1) * itemsPerPage + 1)}-{Math.min(filteredData.length, currentPage * itemsPerPage)} dari {filteredData.length} data
+              Menampilkan {totalRows === 0 ? 0 : Math.min(totalRows, (currentPage - 1) * itemsPerPage + 1)}-{Math.min(totalRows, (currentPage - 1) * itemsPerPage + paginatedData.length)} dari {totalRows} data
             </span>
 
             <div className="flex items-center gap-2">

@@ -35,6 +35,110 @@ func StartSyncWorker() {
 	log.Println("Background sync worker started (ticks every 1m)")
 }
 
+func splitSyncURLs(urlStr string) []string {
+	urlStr = strings.TrimSpace(urlStr)
+	if urlStr == "" {
+		return nil
+	}
+	var jsonURLs []string
+	if strings.HasPrefix(urlStr, "[") && json.Unmarshal([]byte(urlStr), &jsonURLs) == nil {
+		result := make([]string, 0, len(jsonURLs))
+		for _, value := range jsonURLs {
+			if trimmed := strings.TrimSpace(value); trimmed != "" {
+				result = append(result, trimmed)
+			}
+		}
+		return result
+	}
+	lines := strings.FieldsFunc(urlStr, func(r rune) bool {
+		return r == '\n' || r == '\r'
+	})
+	result := make([]string, 0, len(lines))
+	for _, line := range lines {
+		if trimmed := strings.TrimSpace(line); trimmed != "" {
+			result = append(result, trimmed)
+		}
+	}
+	return result
+}
+
+func fetchSyncURLs(urlStr string, headers map[string]string) ([]byte, error) {
+	urls := splitSyncURLs(urlStr)
+	if len(urls) == 0 {
+		return nil, fmt.Errorf("no sync URL configured")
+	}
+	client := &http.Client{Timeout: 30 * time.Second}
+	responses := make([][]byte, 0, len(urls))
+	for _, currentURL := range urls {
+		req, err := http.NewRequest("GET", currentURL, nil)
+		if err != nil {
+			return nil, err
+		}
+		for k, v := range headers {
+			req.Header.Set(k, v)
+		}
+		resp, err := client.Do(req)
+		if err != nil {
+			return nil, fmt.Errorf("%s: %w", currentURL, err)
+		}
+		bodyBytes, readErr := io.ReadAll(resp.Body)
+		resp.Body.Close()
+		if readErr != nil {
+			return nil, readErr
+		}
+		if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+			return nil, fmt.Errorf("%s: HTTP %d", currentURL, resp.StatusCode)
+		}
+		responses = append(responses, bodyBytes)
+	}
+	if len(responses) == 1 {
+		return responses[0], nil
+	}
+	return mergeSyncResponses(responses)
+}
+
+func mergeSyncResponses(responses [][]byte) ([]byte, error) {
+	merged := make([]interface{}, 0)
+	seen := map[string]bool{}
+	for _, body := range responses {
+		var parsed interface{}
+		if err := json.Unmarshal(body, &parsed); err != nil {
+			return nil, err
+		}
+		var list []interface{}
+		switch value := parsed.(type) {
+		case []interface{}:
+			list = value
+		case map[string]interface{}:
+			if data, ok := value["data"].([]interface{}); ok {
+				list = data
+			} else {
+				list = []interface{}{value}
+			}
+		default:
+			continue
+		}
+		for _, item := range list {
+			key := ""
+			if row, ok := item.(map[string]interface{}); ok {
+				if id, ok := row["id"]; ok && id != nil {
+					key = fmt.Sprint(id)
+				} else if code, ok := row["code"]; ok && code != nil {
+					key = fmt.Sprint(code)
+				}
+			}
+			if key != "" {
+				if seen[key] {
+					continue
+				}
+				seen[key] = true
+			}
+			merged = append(merged, item)
+		}
+	}
+	return json.Marshal(map[string]interface{}{"data": merged})
+}
+
 func RunSyncJob(force bool, targetId string) {
 	query := "SELECT id, url, headers, COALESCE(last_sync, ''), COALESCE(interval_type, 'minutes'), COALESCE(interval_value, 5) FROM sync_configs WHERE is_active = true"
 	var rows *sql.Rows
@@ -76,7 +180,7 @@ func RunSyncJob(force bool, targetId string) {
 				default:
 					nextSync = lastSync.Add(time.Duration(intervalValue) * time.Minute)
 				}
-				
+
 				if time.Now().Before(nextSync) {
 					continue // Not time yet
 				}
@@ -87,14 +191,8 @@ func RunSyncJob(force bool, targetId string) {
 		if headersStr != "" {
 			json.Unmarshal([]byte(headersStr), &headers)
 		}
-
-		req, err := http.NewRequest("GET", urlStr, nil)
-		if err != nil {
-			continue
-		}
-
-		for k, v := range headers {
-			req.Header.Set(k, v)
+		if headers == nil {
+			headers = map[string]string{}
 		}
 
 		if id == "JobOrders" {
@@ -126,30 +224,27 @@ func RunSyncJob(force bool, targetId string) {
 			continue
 		}
 
-		client := &http.Client{Timeout: 30 * time.Second}
-		resp, err := client.Do(req)
+		bodyBytes, err := fetchSyncURLs(urlStr, headers)
 		if err != nil {
 			log.Printf("SyncWorker HTTP error for %s: %v", urlStr, err)
 			continue
 		}
 
-		bodyBytes, err := io.ReadAll(resp.Body)
-		resp.Body.Close()
 		if err == nil {
 			now := time.Now().Format("2006-01-02 15:04:05")
-			
+
 			if db.RDB != nil {
 				// Store massive JSON in Redis
 				cacheKey := "cache:" + id
 				db.RDB.Set(db.Ctx, cacheKey, string(bodyBytes), 0)
-				
+
 				// Update ONLY last_sync in SQL to prevent bloat
 				_, err = db.Exec("UPDATE sync_configs SET last_sync = ? WHERE id = ?", now, id)
 			} else {
 				// Fallback: save to SQL directly
 				_, err = db.Exec("UPDATE sync_configs SET last_sync = ?, last_response = ? WHERE id = ?", now, string(bodyBytes), id)
 			}
-			
+
 			if err != nil {
 				log.Printf("SyncWorker DB error updating %s: %v", id, err)
 			} else {
@@ -224,7 +319,7 @@ func processJobOrdersIncremental(configId, baseUrl string, headers map[string]st
 	page := 1
 	hasMore := true
 	client := &http.Client{Timeout: 30 * time.Second}
-	
+
 	newestUpdatedAt := lastSync
 
 	for hasMore {
@@ -303,7 +398,7 @@ func processJobOrdersIncremental(configId, baseUrl string, headers map[string]st
 			t_quotation_id, t_quotation_code, t_repair_list_id, latest_version, flag_rq, 
 			created_at, created_by, updated_at, modified_by
 		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`))
-			
+
 		stmtProjects, errProj := tx.Prepare(db.FormatQuery(`INSERT INTO projects (
 			id, id_siaga, idproject, shipname, cust_company, approval_status, 
 			est_start, est_finish, est_docking_date, est_undocking_date, 
@@ -347,7 +442,7 @@ func processJobOrdersIncremental(configId, baseUrl string, headers map[string]st
 				} else if val, ok := itemMap["code"]; ok {
 					itemId = fmt.Sprintf("%v", val)
 				} else {
-					continue 
+					continue
 				}
 
 				itemUpdatedStr := ""
@@ -371,30 +466,38 @@ func processJobOrdersIncremental(configId, baseUrl string, headers map[string]st
 
 				if itemUpdatedStr != "" && !itemUpdated.IsZero() && !lastSync.IsZero() {
 					if itemUpdated.After(lastSync) {
-						allOlder = false 
+						allOlder = false
 					}
 				} else {
-					allOlder = false 
+					allOlder = false
 				}
 
 				// Helper getters
 				getStrNull := func(k string) interface{} {
 					if v, ok := itemMap[k]; ok && v != nil {
 						s := strings.TrimSpace(fmt.Sprintf("%v", v))
-						if s != "" && s != "<nil>" { return s }
+						if s != "" && s != "<nil>" {
+							return s
+						}
 					}
 					return nil
 				}
 				getInt := func(k string) int {
-					if v, ok := itemMap[k].(float64); ok { return int(v) }
+					if v, ok := itemMap[k].(float64); ok {
+						return int(v)
+					}
 					return 0
 				}
 				getFloat := func(k string) float64 {
-					if v, ok := itemMap[k].(float64); ok { return v }
+					if v, ok := itemMap[k].(float64); ok {
+						return v
+					}
 					return 0
 				}
 				getBool := func(k string) bool {
-					if v, ok := itemMap[k].(bool); ok { return v }
+					if v, ok := itemMap[k].(bool); ok {
+						return v
+					}
 					return false
 				}
 
@@ -418,7 +521,7 @@ func processJobOrdersIncremental(configId, baseUrl string, headers map[string]st
 				// Map to Projects table
 				if errProj == nil && stmtProjects != nil {
 					idStr := fmt.Sprintf("JO-%v", itemId)
-					
+
 					id_siaga := 0
 					if val, ok := itemMap["id"].(float64); ok {
 						id_siaga = int(val)
@@ -636,7 +739,7 @@ func processLocationsIncremental(configId, baseUrl string, headers map[string]st
 				if val, ok := itemMap["id"]; ok {
 					itemId = fmt.Sprintf("%v", val)
 				} else {
-					continue 
+					continue
 				}
 
 				itemUpdatedStr := ""
@@ -660,17 +763,17 @@ func processLocationsIncremental(configId, baseUrl string, headers map[string]st
 
 				if itemUpdatedStr != "" && !itemUpdated.IsZero() && !lastSync.IsZero() {
 					if itemUpdated.After(lastSync) {
-						allOlder = false 
+						allOlder = false
 					}
 				} else {
-					allOlder = false 
+					allOlder = false
 				}
 
 				name := ""
 				if val, ok := itemMap["name"].(string); ok {
 					name = val
 				}
-				
+
 				length := "0"
 				if val, ok := itemMap["length"].(string); ok {
 					length = val
@@ -684,9 +787,9 @@ func processLocationsIncremental(configId, baseUrl string, headers map[string]st
 				} else if val, ok := itemMap["width"].(float64); ok {
 					width = fmt.Sprintf("%v", val)
 				}
-				
+
 				size := fmt.Sprintf("%s x %s", length, width)
-				
+
 				desc := ""
 				if slipwayType, ok := itemMap["m_slipway_type"].(map[string]interface{}); ok {
 					if typeName, ok2 := slipwayType["name"].(string); ok2 {
@@ -811,7 +914,7 @@ func processServicesIncremental(configId, baseUrl string, headers map[string]str
 				if val, ok := itemMap["id"]; ok {
 					itemId = fmt.Sprintf("%v", val)
 				} else {
-					continue 
+					continue
 				}
 
 				itemUpdatedStr := ""
@@ -835,17 +938,17 @@ func processServicesIncremental(configId, baseUrl string, headers map[string]str
 
 				if itemUpdatedStr != "" && !itemUpdated.IsZero() && !lastSync.IsZero() {
 					if itemUpdated.After(lastSync) {
-						allOlder = false 
+						allOlder = false
 					}
 				} else {
-					allOlder = false 
+					allOlder = false
 				}
 
 				code := ""
 				if val, ok := itemMap["code"].(string); ok {
 					code = val
 				}
-				
+
 				name := ""
 				if val, ok := itemMap["name"].(string); ok {
 					name = val
@@ -973,7 +1076,7 @@ func processEmployeesIncremental(configId, baseUrl string, headers map[string]st
 				if val, ok := itemMap["id"]; ok {
 					itemId = fmt.Sprintf("%v", val)
 				} else {
-					continue 
+					continue
 				}
 
 				itemUpdatedStr := ""
@@ -997,10 +1100,10 @@ func processEmployeesIncremental(configId, baseUrl string, headers map[string]st
 
 				if itemUpdatedStr != "" && !itemUpdated.IsZero() && !lastSync.IsZero() {
 					if itemUpdated.After(lastSync) {
-						allOlder = false 
+						allOlder = false
 					}
 				} else {
-					allOlder = false 
+					allOlder = false
 				}
 
 				getString := func(key string) string {
@@ -1086,22 +1189,32 @@ func processVendorsIncremental(configId, baseUrl string, headers map[string]stri
 		}
 
 		req, err := http.NewRequest("GET", url, nil)
-		if err != nil { break }
-		for k, v := range headers { req.Header.Set(k, v) }
+		if err != nil {
+			break
+		}
+		for k, v := range headers {
+			req.Header.Set(k, v)
+		}
 
 		resp, err := client.Do(req)
-		if err != nil { break }
+		if err != nil {
+			break
+		}
 
 		bodyBytes, err := io.ReadAll(resp.Body)
 		resp.Body.Close()
-		if err != nil { break }
+		if err != nil {
+			break
+		}
 
 		var payload map[string]interface{}
 		if err := json.Unmarshal(bodyBytes, &payload); err != nil {
 			var payloadArray []interface{}
 			if err2 := json.Unmarshal(bodyBytes, &payloadArray); err2 == nil {
 				payload = map[string]interface{}{"data": payloadArray}
-			} else { break }
+			} else {
+				break
+			}
 		}
 
 		var items []interface{}
@@ -1121,7 +1234,9 @@ func processVendorsIncremental(configId, baseUrl string, headers map[string]stri
 
 		allOlder := true
 		tx, err := db.DB.Begin()
-		if err != nil { break }
+		if err != nil {
+			break
+		}
 
 		stmt, err := tx.Prepare(`INSERT INTO vendors (id, vendor, nama_pt, whatapps, category, jumlah_anggota, status) 
 			VALUES (?, ?, ?, ?, ?, ?, ?) ON CONFLICT(id) DO UPDATE SET 
@@ -1131,12 +1246,16 @@ func processVendorsIncremental(configId, baseUrl string, headers map[string]stri
 		if err == nil {
 			for _, item := range items {
 				itemMap, ok := item.(map[string]interface{})
-				if !ok { continue }
+				if !ok {
+					continue
+				}
 
 				var itemId string
 				if val, ok := itemMap["id"]; ok {
 					itemId = fmt.Sprintf("%v", val)
-				} else { continue }
+				} else {
+					continue
+				}
 
 				itemUpdatedStr := ""
 				if val, ok := itemMap["updated_at"].(string); ok {
@@ -1148,14 +1267,22 @@ func processVendorsIncremental(configId, baseUrl string, headers map[string]stri
 				var itemUpdated time.Time
 				if itemUpdatedStr != "" {
 					t, err := time.Parse("2006-01-02 15:04:05", itemUpdatedStr)
-					if err == nil { itemUpdated = t }
+					if err == nil {
+						itemUpdated = t
+					}
 				}
 
-				if itemUpdated.After(newestUpdatedAt) { newestUpdatedAt = itemUpdated }
+				if itemUpdated.After(newestUpdatedAt) {
+					newestUpdatedAt = itemUpdated
+				}
 
 				if itemUpdatedStr != "" && !itemUpdated.IsZero() && !lastSync.IsZero() {
-					if itemUpdated.After(lastSync) { allOlder = false }
-				} else { allOlder = false }
+					if itemUpdated.After(lastSync) {
+						allOlder = false
+					}
+				} else {
+					allOlder = false
+				}
 
 				getString := func(k string) string {
 					if v, ok := itemMap[k]; ok && v != nil {
@@ -1165,14 +1292,22 @@ func processVendorsIncremental(configId, baseUrl string, headers map[string]stri
 				}
 
 				vendor := getString("name")
-				if vendor == "" { vendor = getString("vendor_name") }
+				if vendor == "" {
+					vendor = getString("vendor_name")
+				}
 				nama_pt := getString("company_name")
-				if nama_pt == "" { nama_pt = getString("nama_pt") }
+				if nama_pt == "" {
+					nama_pt = getString("nama_pt")
+				}
 				whatapps := getString("phone")
-				if whatapps == "" { whatapps = getString("whatsapp") }
-				if whatapps == "" { whatapps = getString("whatapps") }
+				if whatapps == "" {
+					whatapps = getString("whatsapp")
+				}
+				if whatapps == "" {
+					whatapps = getString("whatapps")
+				}
 				category := getString("category")
-				
+
 				jumlah := 0
 				if val, ok := itemMap["jumlah_anggota"].(float64); ok {
 					jumlah = int(val)
@@ -1186,7 +1321,10 @@ func processVendorsIncremental(configId, baseUrl string, headers map[string]stri
 		}
 		tx.Commit()
 
-		if allOlder { hasMore = false; break }
+		if allOlder {
+			hasMore = false
+			break
+		}
 		page++
 	}
 
@@ -1198,7 +1336,9 @@ func processVendorsIncremental(configId, baseUrl string, headers map[string]stri
 
 func processCompaniesIncremental(configId, baseUrl string, headers map[string]string, lastSyncStr string) {
 	var lastSync time.Time
-	if lastSyncStr != "" { lastSync, _ = time.Parse("2006-01-02 15:04:05", lastSyncStr) }
+	if lastSyncStr != "" {
+		lastSync, _ = time.Parse("2006-01-02 15:04:05", lastSyncStr)
+	}
 
 	page := 1
 	hasMore := true
@@ -1214,22 +1354,32 @@ func processCompaniesIncremental(configId, baseUrl string, headers map[string]st
 		}
 
 		req, err := http.NewRequest("GET", url, nil)
-		if err != nil { break }
-		for k, v := range headers { req.Header.Set(k, v) }
+		if err != nil {
+			break
+		}
+		for k, v := range headers {
+			req.Header.Set(k, v)
+		}
 
 		resp, err := client.Do(req)
-		if err != nil { break }
+		if err != nil {
+			break
+		}
 
 		bodyBytes, err := io.ReadAll(resp.Body)
 		resp.Body.Close()
-		if err != nil { break }
+		if err != nil {
+			break
+		}
 
 		var payload map[string]interface{}
 		if err := json.Unmarshal(bodyBytes, &payload); err != nil {
 			var payloadArray []interface{}
 			if err2 := json.Unmarshal(bodyBytes, &payloadArray); err2 == nil {
 				payload = map[string]interface{}{"data": payloadArray}
-			} else { break }
+			} else {
+				break
+			}
 		}
 
 		var items []interface{}
@@ -1238,14 +1388,20 @@ func processCompaniesIncremental(configId, baseUrl string, headers map[string]st
 		} else if records, ok := payload["records"].([]interface{}); ok {
 			items = records
 		} else {
-			hasMore = false; break
+			hasMore = false
+			break
 		}
 
-		if len(items) == 0 { hasMore = false; break }
+		if len(items) == 0 {
+			hasMore = false
+			break
+		}
 
 		allOlder := true
 		tx, err := db.DB.Begin()
-		if err != nil { break }
+		if err != nil {
+			break
+		}
 
 		stmt, err := tx.Prepare(`INSERT INTO companies (id, company_type, company_name, status) 
 			VALUES (?, ?, ?, ?) ON CONFLICT(id) DO UPDATE SET 
@@ -1254,12 +1410,16 @@ func processCompaniesIncremental(configId, baseUrl string, headers map[string]st
 		if err == nil {
 			for _, item := range items {
 				itemMap, ok := item.(map[string]interface{})
-				if !ok { continue }
+				if !ok {
+					continue
+				}
 
 				var itemId string
 				if val, ok := itemMap["id"]; ok {
 					itemId = fmt.Sprintf("%v", val)
-				} else { continue }
+				} else {
+					continue
+				}
 
 				itemUpdatedStr := ""
 				if val, ok := itemMap["updated_at"].(string); ok {
@@ -1271,13 +1431,21 @@ func processCompaniesIncremental(configId, baseUrl string, headers map[string]st
 				var itemUpdated time.Time
 				if itemUpdatedStr != "" {
 					t, err := time.Parse("2006-01-02 15:04:05", itemUpdatedStr)
-					if err == nil { itemUpdated = t }
+					if err == nil {
+						itemUpdated = t
+					}
 				}
 
-				if itemUpdated.After(newestUpdatedAt) { newestUpdatedAt = itemUpdated }
+				if itemUpdated.After(newestUpdatedAt) {
+					newestUpdatedAt = itemUpdated
+				}
 				if itemUpdatedStr != "" && !itemUpdated.IsZero() && !lastSync.IsZero() {
-					if itemUpdated.After(lastSync) { allOlder = false }
-				} else { allOlder = false }
+					if itemUpdated.After(lastSync) {
+						allOlder = false
+					}
+				} else {
+					allOlder = false
+				}
 
 				getString := func(k string) string {
 					if v, ok := itemMap[k]; ok && v != nil {
@@ -1287,9 +1455,13 @@ func processCompaniesIncremental(configId, baseUrl string, headers map[string]st
 				}
 
 				cType := getString("type")
-				if cType == "" { cType = getString("company_type") }
+				if cType == "" {
+					cType = getString("company_type")
+				}
 				cName := getString("name")
-				if cName == "" { cName = getString("company_name") }
+				if cName == "" {
+					cName = getString("company_name")
+				}
 				status := "Active"
 
 				stmt.Exec(itemId, cType, cName, status)
@@ -1298,7 +1470,10 @@ func processCompaniesIncremental(configId, baseUrl string, headers map[string]st
 		}
 		tx.Commit()
 
-		if allOlder { hasMore = false; break }
+		if allOlder {
+			hasMore = false
+			break
+		}
 		page++
 	}
 
@@ -1310,7 +1485,9 @@ func processCompaniesIncremental(configId, baseUrl string, headers map[string]st
 
 func processShipsIncremental(configId, baseUrl string, headers map[string]string, lastSyncStr string) {
 	var lastSync time.Time
-	if lastSyncStr != "" { lastSync, _ = time.Parse("2006-01-02 15:04:05", lastSyncStr) }
+	if lastSyncStr != "" {
+		lastSync, _ = time.Parse("2006-01-02 15:04:05", lastSyncStr)
+	}
 
 	page := 1
 	hasMore := true
@@ -1326,22 +1503,32 @@ func processShipsIncremental(configId, baseUrl string, headers map[string]string
 		}
 
 		req, err := http.NewRequest("GET", url, nil)
-		if err != nil { break }
-		for k, v := range headers { req.Header.Set(k, v) }
+		if err != nil {
+			break
+		}
+		for k, v := range headers {
+			req.Header.Set(k, v)
+		}
 
 		resp, err := client.Do(req)
-		if err != nil { break }
+		if err != nil {
+			break
+		}
 
 		bodyBytes, err := io.ReadAll(resp.Body)
 		resp.Body.Close()
-		if err != nil { break }
+		if err != nil {
+			break
+		}
 
 		var payload map[string]interface{}
 		if err := json.Unmarshal(bodyBytes, &payload); err != nil {
 			var payloadArray []interface{}
 			if err2 := json.Unmarshal(bodyBytes, &payloadArray); err2 == nil {
 				payload = map[string]interface{}{"data": payloadArray}
-			} else { break }
+			} else {
+				break
+			}
 		}
 
 		var items []interface{}
@@ -1350,14 +1537,20 @@ func processShipsIncremental(configId, baseUrl string, headers map[string]string
 		} else if records, ok := payload["records"].([]interface{}); ok {
 			items = records
 		} else {
-			hasMore = false; break
+			hasMore = false
+			break
 		}
 
-		if len(items) == 0 { hasMore = false; break }
+		if len(items) == 0 {
+			hasMore = false
+			break
+		}
 
 		allOlder := true
 		tx, err := db.DB.Begin()
-		if err != nil { break }
+		if err != nil {
+			break
+		}
 
 		stmt, err := tx.Prepare(`INSERT INTO ships (id, type, shipname, company, loa, breadth, depth, draft, gt, buid) 
 			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(id) DO UPDATE SET 
@@ -1367,12 +1560,16 @@ func processShipsIncremental(configId, baseUrl string, headers map[string]string
 		if err == nil {
 			for _, item := range items {
 				itemMap, ok := item.(map[string]interface{})
-				if !ok { continue }
+				if !ok {
+					continue
+				}
 
 				var itemId string
 				if val, ok := itemMap["id"]; ok {
 					itemId = fmt.Sprintf("%v", val)
-				} else { continue }
+				} else {
+					continue
+				}
 
 				itemUpdatedStr := ""
 				if val, ok := itemMap["updated_at"].(string); ok {
@@ -1384,13 +1581,21 @@ func processShipsIncremental(configId, baseUrl string, headers map[string]string
 				var itemUpdated time.Time
 				if itemUpdatedStr != "" {
 					t, err := time.Parse("2006-01-02 15:04:05", itemUpdatedStr)
-					if err == nil { itemUpdated = t }
+					if err == nil {
+						itemUpdated = t
+					}
 				}
 
-				if itemUpdated.After(newestUpdatedAt) { newestUpdatedAt = itemUpdated }
+				if itemUpdated.After(newestUpdatedAt) {
+					newestUpdatedAt = itemUpdated
+				}
 				if itemUpdatedStr != "" && !itemUpdated.IsZero() && !lastSync.IsZero() {
-					if itemUpdated.After(lastSync) { allOlder = false }
-				} else { allOlder = false }
+					if itemUpdated.After(lastSync) {
+						allOlder = false
+					}
+				} else {
+					allOlder = false
+				}
 
 				getString := func(k string) string {
 					if v, ok := itemMap[k]; ok && v != nil {
@@ -1411,7 +1616,7 @@ func processShipsIncremental(configId, baseUrl string, headers map[string]string
 				}
 
 				sType := getString("type")
-				
+
 				if typeId, ok := itemMap["m_ship_type_id"]; ok && typeId != nil {
 					sType = fmt.Sprintf("st_%v", typeId)
 				} else if typeObj, ok := itemMap["m_ship_type"].(map[string]interface{}); ok {
@@ -1421,13 +1626,19 @@ func processShipsIncremental(configId, baseUrl string, headers map[string]string
 				}
 
 				sName := getString("name")
-				if sName == "" { sName = getString("shipname") }
-				
+				if sName == "" {
+					sName = getString("shipname")
+				}
+
 				company := getString("company_name")
-				if company == "" { company = getString("company") }
-				if company == "" { 
+				if company == "" {
+					company = getString("company")
+				}
+				if company == "" {
 					if compObj, ok := itemMap["m_customer"].(map[string]interface{}); ok {
-						if cName, ok := compObj["name"].(string); ok { company = cName }
+						if cName, ok := compObj["name"].(string); ok {
+							company = cName
+						}
 					}
 				}
 
@@ -1444,7 +1655,10 @@ func processShipsIncremental(configId, baseUrl string, headers map[string]string
 		}
 		tx.Commit()
 
-		if allOlder { hasMore = false; break }
+		if allOlder {
+			hasMore = false
+			break
+		}
 		page++
 	}
 
@@ -1456,7 +1670,9 @@ func processShipsIncremental(configId, baseUrl string, headers map[string]string
 
 func processShipTypesIncremental(configId, baseUrl string, headers map[string]string, lastSyncStr string) {
 	var lastSync time.Time
-	if lastSyncStr != "" { lastSync, _ = time.Parse("2006-01-02 15:04:05", lastSyncStr) }
+	if lastSyncStr != "" {
+		lastSync, _ = time.Parse("2006-01-02 15:04:05", lastSyncStr)
+	}
 
 	page := 1
 	hasMore := true
@@ -1472,22 +1688,32 @@ func processShipTypesIncremental(configId, baseUrl string, headers map[string]st
 		}
 
 		req, err := http.NewRequest("GET", url, nil)
-		if err != nil { break }
-		for k, v := range headers { req.Header.Set(k, v) }
+		if err != nil {
+			break
+		}
+		for k, v := range headers {
+			req.Header.Set(k, v)
+		}
 
 		resp, err := client.Do(req)
-		if err != nil { break }
+		if err != nil {
+			break
+		}
 
 		bodyBytes, err := io.ReadAll(resp.Body)
 		resp.Body.Close()
-		if err != nil { break }
+		if err != nil {
+			break
+		}
 
 		var payload map[string]interface{}
 		if err := json.Unmarshal(bodyBytes, &payload); err != nil {
 			var payloadArray []interface{}
 			if err2 := json.Unmarshal(bodyBytes, &payloadArray); err2 == nil {
 				payload = map[string]interface{}{"data": payloadArray}
-			} else { break }
+			} else {
+				break
+			}
 		}
 
 		var items []interface{}
@@ -1496,14 +1722,20 @@ func processShipTypesIncremental(configId, baseUrl string, headers map[string]st
 		} else if records, ok := payload["records"].([]interface{}); ok {
 			items = records
 		} else {
-			hasMore = false; break
+			hasMore = false
+			break
 		}
 
-		if len(items) == 0 { hasMore = false; break }
+		if len(items) == 0 {
+			hasMore = false
+			break
+		}
 
 		allOlder := true
 		tx, err := db.DB.Begin()
-		if err != nil { break }
+		if err != nil {
+			break
+		}
 
 		stmt, err := tx.Prepare(`INSERT INTO dropdown_configs (id, category, label, value, is_active) 
 			VALUES (?, 'ship_types', ?, ?, 1) ON CONFLICT(id) DO UPDATE SET 
@@ -1512,12 +1744,16 @@ func processShipTypesIncremental(configId, baseUrl string, headers map[string]st
 		if err == nil {
 			for _, item := range items {
 				itemMap, ok := item.(map[string]interface{})
-				if !ok { continue }
+				if !ok {
+					continue
+				}
 
 				var itemId string
 				if val, ok := itemMap["id"]; ok {
 					itemId = fmt.Sprintf("%v", val)
-				} else { continue }
+				} else {
+					continue
+				}
 
 				itemUpdatedStr := ""
 				if val, ok := itemMap["updated_at"].(string); ok {
@@ -1529,13 +1765,21 @@ func processShipTypesIncremental(configId, baseUrl string, headers map[string]st
 				var itemUpdated time.Time
 				if itemUpdatedStr != "" {
 					t, err := time.Parse("2006-01-02 15:04:05", itemUpdatedStr)
-					if err == nil { itemUpdated = t }
+					if err == nil {
+						itemUpdated = t
+					}
 				}
 
-				if itemUpdated.After(newestUpdatedAt) { newestUpdatedAt = itemUpdated }
+				if itemUpdated.After(newestUpdatedAt) {
+					newestUpdatedAt = itemUpdated
+				}
 				if itemUpdatedStr != "" && !itemUpdated.IsZero() && !lastSync.IsZero() {
-					if itemUpdated.After(lastSync) { allOlder = false }
-				} else { allOlder = false }
+					if itemUpdated.After(lastSync) {
+						allOlder = false
+					}
+				} else {
+					allOlder = false
+				}
 
 				getString := func(k string) string {
 					if v, ok := itemMap[k]; ok && v != nil {
@@ -1546,10 +1790,16 @@ func processShipTypesIncremental(configId, baseUrl string, headers map[string]st
 
 				code := getString("code")
 				name := getString("name")
-				if name == "" { name = getString("type_name") }
-				if name == "" { name = getString("ship_type") }
-				
-				if code == "" { code = name } // Fallback
+				if name == "" {
+					name = getString("type_name")
+				}
+				if name == "" {
+					name = getString("ship_type")
+				}
+
+				if code == "" {
+					code = name
+				} // Fallback
 
 				if name != "" {
 					safeId := fmt.Sprintf("st_%s", itemId)
@@ -1560,7 +1810,10 @@ func processShipTypesIncremental(configId, baseUrl string, headers map[string]st
 		}
 		tx.Commit()
 
-		if allOlder { hasMore = false; break }
+		if allOlder {
+			hasMore = false
+			break
+		}
 		page++
 	}
 
@@ -1618,7 +1871,7 @@ func processComponentsIncremental(configId string, apiUrl string, headers map[st
 				LastPage    int `json:"last_page"`
 			} `json:"meta"`
 		}
-		
+
 		if err := json.Unmarshal(bodyBytes, &apiRes); err != nil {
 			var altRes []map[string]interface{}
 			if err := json.Unmarshal(bodyBytes, &altRes); err == nil {
@@ -1720,7 +1973,7 @@ func processComponentsIncremental(configId string, apiUrl string, headers map[st
 				branchId, itemCode, descriptionCode,
 			)
 		}
-		
+
 		tx.Commit()
 
 		if allOlder {
