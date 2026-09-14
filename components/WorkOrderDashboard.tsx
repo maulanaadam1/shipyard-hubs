@@ -36,11 +36,13 @@ import { api, getHeaders } from '@/lib/api-client';
 import { useData } from '@/context/DataContext';
 import { SearchableSelect } from './SearchableSelect';
 import AIAnalyzerModal from './AIAnalyzerModal';
+import { totalServiceCost } from '@/lib/work-order-cost';
+import WorkOrderItemHistory from './WorkOrderItemHistory';
 
 const MOCK_DATA: any[] = [];
 
 export default function WorkOrderDashboard() {
-  const { syncCache, setSyncCache, syncDates, setSyncDates, canAccess, currentUser } = useData();
+  const { syncCache, setSyncCache, syncDates, setSyncDates, canAccess, currentUser, employees } = useData();
   const [rawData, setRawData] = useState<any[]>(syncCache['WorkOrders'] || MOCK_DATA);
   const [financialData, setFinancialData] = useState<Record<string, any>>({});
   const [isUsingMock, setIsUsingMock] = useState(!syncCache['WorkOrders']);
@@ -181,6 +183,7 @@ export default function WorkOrderDashboard() {
       if (res.ok) {
         const map = await res.json();
         const newPending: Record<string, number> = {};
+        setFinancialData(prev => ({ ...prev, ...map }));
         const newFinal: Record<string, number> = {};
         const newFinalDates: Record<string, string> = {};
         const newPrev: Record<string, number> = {};
@@ -2275,16 +2278,19 @@ export default function WorkOrderDashboard() {
                   <p className="text-xs text-slate-400 font-bold uppercase tracking-wider mb-2">Total Biaya Jasa</p>
                   <div className="flex flex-col">
                     <p className="text-2xl font-black font-mono text-emerald-600 tracking-tighter">
-                      {formatIDR(financialData[selectedRow.id] ? financialData[selectedRow.id].final_cost : selectedRow.totalCostNum)}
+                      {formatIDR(
+                        totalServiceCost(String(detailedRowData?.id) === String(selectedRow.id) ? detailedRowData?.repair_list : undefined)
+                          ?? Number(selectedRow.total_cost ?? 0)
+                      )}
                     </p>
                     {detailChartConfig && detailChartConfig.unapprovedCost > 0 && (
                       <p className="text-xs font-mono font-medium text-amber-500 mt-1 bg-amber-50 px-2 py-0.5 rounded w-fit border border-amber-100" title="Estimasi biaya yang belum mencapai Approval Level 5">
-                        + {formatIDR(detailChartConfig.unapprovedCost)} (Pending)
+                        {formatIDR(detailChartConfig.unapprovedCost)} (Pending — bagian dari total)
                       </p>
                     )}
                     {rejectedCosts[selectedRow.id] > 0 && (
                       <p className="text-xs font-mono font-medium text-rose-500 mt-1 bg-rose-50 px-2 py-0.5 rounded w-fit border border-rose-100" title="Total biaya item yang ditolak / Rejected">
-                        - {formatIDR(rejectedCosts[selectedRow.id])} (Rejected)
+                        {formatIDR(rejectedCosts[selectedRow.id])} (Rejected — bagian dari total)
                       </p>
                     )}
                   </div>
@@ -2472,6 +2478,8 @@ export default function WorkOrderDashboard() {
                   </div>
                 ) : detailedRowData ? (
                   <div className="space-y-6">
+                    {detailedRowData.local_history_warning && <p role="alert" className="text-sm text-amber-700">Pencatatan riwayat gagal: {detailedRowData.local_history_warning}</p>}
+                    <WorkOrderItemHistory woId={selectedRow.id} employees={employees} formatMoney={formatIDR} revision={detailedRowData} />
                     {/* Tabs Header */}
                     <div className="flex border-b border-slate-200">
                       <button
@@ -2730,6 +2738,9 @@ export default function WorkOrderDashboard() {
                                       )}
                                     </div>
                                     
+                                    {(!item.material || item.material.length === 0) && !item.group_flag && item.label?.toLowerCase() !== 'grup' && (
+                                      <WorkOrderItemHistory woId={selectedRow.id} item={item} employees={employees} formatMoney={formatIDR} revision={detailedRowData} />
+                                    )}
                                     {/* Recursion for Children */}
                                     {item.material && item.material.length > 0 && (
                                       <div className="mt-2 space-y-2">
