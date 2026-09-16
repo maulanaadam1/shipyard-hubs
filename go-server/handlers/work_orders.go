@@ -158,10 +158,52 @@ func dateOnly(value string) string {
 	return strings.Split(value, " ")[0]
 }
 
+func nestedMap(item map[string]interface{}, key string) map[string]interface{} {
+	if value, ok := item[key].(map[string]interface{}); ok {
+		return value
+	}
+	return nil
+}
+
+func nestedFirstString(item map[string]interface{}, parent string, keys ...string) string {
+	child := nestedMap(item, parent)
+	if child == nil {
+		return ""
+	}
+	return firstString(child, keys...)
+}
+
+func workOrderJOCode(item map[string]interface{}) string {
+	if value := firstString(item, "jo_code", "joCode"); value != "" {
+		return value
+	}
+	return nestedFirstString(item, "t_job_order", "code", "idproject", "project")
+}
+
+func workOrderShipName(item map[string]interface{}) string {
+	if value := firstString(item, "m_ship_name", "ship_name"); value != "" {
+		return value
+	}
+	if value := nestedFirstString(item, "m_ship", "name", "shipname"); value != "" {
+		return value
+	}
+	return nestedFirstString(nestedMap(item, "t_job_order"), "m_ship", "name", "shipname")
+}
+
+func workOrderVendorName(item map[string]interface{}) string {
+	if value := firstString(item, "m_vendor_name", "vendor_name"); value != "" {
+		return value
+	}
+	if value := nestedFirstString(item, "m_vendor", "name", "vendor", "nama_pt"); value != "" {
+		return value
+	}
+	return firstString(item, "vendor", "code_vendor")
+}
+
 func summaryFromWorkOrderListItem(item map[string]interface{}) workOrderSummary {
 	woID := firstString(item, "id", "wo_id")
-	joCode := firstString(item, "jo_code", "joCode")
-	shipName := firstString(item, "m_ship_name", "ship_name")
+	joCode := workOrderJOCode(item)
+	shipName := workOrderShipName(item)
 	if shipName == "" {
 		shipName = "N/A"
 	}
@@ -181,7 +223,7 @@ func summaryFromWorkOrderListItem(item map[string]interface{}) workOrderSummary 
 		WOCode:          firstString(item, "code", "wo_code"),
 		JOCode:          joCode,
 		ProjectName:     projectName,
-		VendorName:      firstString(item, "m_vendor_name", "vendor_name"),
+		VendorName:      workOrderVendorName(item),
 		ShipName:        strings.ToUpper(shipName),
 		StatusApproval:  status,
 		DerivedStatus:   approvalStatusText(level, status),
@@ -204,16 +246,16 @@ func applyFinancialsFromDetail(summary workOrderSummary, raw []byte) workOrderSu
 		summary.WOCode = firstString(data, "code", "wo_code")
 	}
 	if summary.JOCode == "" || summary.JOCode == "N/A" {
-		summary.JOCode = firstString(data, "jo_code", "joCode")
+		summary.JOCode = workOrderJOCode(data)
 	}
 	if summary.ShipName == "" || summary.ShipName == "N/A" {
-		summary.ShipName = strings.ToUpper(firstString(data, "m_ship_name", "ship_name"))
+		summary.ShipName = strings.ToUpper(workOrderShipName(data))
 	}
-	if summary.ProjectName == "" && summary.JOCode != "" {
+	if summary.ProjectName == "" || strings.EqualFold(summary.ProjectName, "N/A - N/A") {
 		summary.ProjectName = strings.ToUpper(summary.JOCode) + " - " + strings.ToUpper(summary.ShipName)
 	}
 	if summary.VendorName == "" {
-		summary.VendorName = firstString(data, "m_vendor_name", "vendor_name")
+		summary.VendorName = workOrderVendorName(data)
 	}
 	if summary.StatusApproval == "" {
 		summary.StatusApproval = firstString(data, "status_approval")

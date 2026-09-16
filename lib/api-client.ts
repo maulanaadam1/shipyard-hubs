@@ -13,8 +13,15 @@ export const supabase = (supabaseUrl && supabaseAnonKey && supabaseUrl !== 'plac
 // Helper to add auth headers to fetch requests
 export const getHeaders = async () => {
     const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+
+    // Backend Go only accepts the local JWT issued by /api/auth/login.
+    const token = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null;
+    if (token) {
+        headers['Authorization'] = `Bearer ${token}`;
+        return headers;
+    }
     
-    // Check if we use Supabase
+    // Supabase token is only a last resort for Supabase-backed auth flows.
     if (supabase) {
         const { data: { session } } = await supabase.auth.getSession();
         if (session?.access_token) {
@@ -23,9 +30,6 @@ export const getHeaders = async () => {
         }
     }
 
-    // Fallback to local storage (for legacy or if supabase is not available)
-    const token = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null;
-    if (token) headers['Authorization'] = `Bearer ${token}`;
     return headers;
 };
 
@@ -109,7 +113,7 @@ class ApiQueryBuilder {
        this.action = 'POST'; 
        this.queryData = data; 
        this.params.set('upsert', 'true'); 
-       if (options?.onConflict) this.params.set('onConflict', options.onConflict);
+       if (options?.onConflict) this.params.set('on_conflict', options.onConflict);
        return this; 
     }
 
@@ -155,9 +159,14 @@ export const api = {
     from: (table: string) => new ApiQueryBuilder(table),
     auth: {
         getSession: async () => {
+            const localSession = await getLocalSession();
+            if (localSession.data.session) {
+                return localSession;
+            }
+
             if (supabase) {
                 const { data: { session }, error } = await supabase.auth.getSession();
-                if (error) return getLocalSession();
+                if (error) return localSession;
                 
                 // Map Supabase session to our app's session format if needed
                 if (session) {
@@ -176,19 +185,24 @@ export const api = {
                         error: null 
                     };
                 }
-                return getLocalSession();
+                return localSession;
             }
 
-            return getLocalSession();
+            return localSession;
         },
         signInWithPassword: async ({ email, password }: any) => {
+             const localLogin = await signInWithLocalPassword({ email, password });
+             if (!localLogin.error) {
+                 return localLogin;
+             }
+
              if (supabase) {
                  const { data, error } = await supabase.auth.signInWithPassword({ email, password });
-                 if (error) return signInWithLocalPassword({ email, password });
+                 if (error) return localLogin;
                  return { data: { user: data.user }, error: null };
              }
 
-             return signInWithLocalPassword({ email, password });
+             return localLogin;
         },
         signOut: async () => {
             if (supabase) {

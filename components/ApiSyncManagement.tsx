@@ -27,8 +27,12 @@ import { useData } from '@/context/DataContext';
 
 const extractCurlUrls = (curlCommand: string): string[] => {
   const urls: string[] = [];
+  const normalizeMarkdownUrl = (value: string) => {
+    const markdownUrlMatch = value.match(/^\[https?:\/\/[^\]]+\]\((https?:\/\/[^)]+)\)$/i);
+    return markdownUrlMatch ? markdownUrlMatch[1].trim() : value;
+  };
   const addUrl = (candidate?: string) => {
-    const cleaned = (candidate || '').trim();
+    const cleaned = normalizeMarkdownUrl((candidate || '').trim());
     if (!cleaned || cleaned === '--url' || cleaned === 'url' || cleaned.startsWith('-')) return;
     if (!/^https?:\/\//i.test(cleaned)) return;
     if (!urls.includes(cleaned)) urls.push(cleaned);
@@ -47,6 +51,12 @@ const extractCurlUrls = (curlCommand: string): string[] => {
   }
 
   return urls;
+};
+
+const normalizeHeaderValue = (value: string) => {
+  const trimmed = value.trim();
+  const markdownUrlMatch = trimmed.match(/^\[https?:\/\/[^\]]+\]\((https?:\/\/[^)]+)\)$/i);
+  return markdownUrlMatch ? markdownUrlMatch[1].trim() : trimmed;
 };
 
 export default function ApiSyncManagement() {
@@ -329,7 +339,7 @@ export default function ApiSyncManagement() {
           const splitIndex = headerStr.indexOf(':');
           if (splitIndex > -1) {
             const key = headerStr.slice(0, splitIndex).trim();
-            const value = headerStr.slice(splitIndex + 1).trim();
+            const value = normalizeHeaderValue(headerStr.slice(splitIndex + 1));
             headers[key] = value;
           }
         }

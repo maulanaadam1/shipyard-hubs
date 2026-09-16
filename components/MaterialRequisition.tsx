@@ -65,6 +65,9 @@ export default function MaterialRequisition() {
   const [currentPage, setCurrentPage] = useState(1);
   const [isLoading, setIsLoading] = useState(true);
   const [selectedDetailItem, setSelectedDetailItem] = useState<any | null>(null);
+  const [activeView, setActiveView] = useState<'overview' | 'project' | 'material' | 'requests'>('overview');
+  const [statusFilter, setStatusFilter] = useState<'all' | 'pending' | 'delivered' | 'finalized'>('all');
+  const [projectFilter, setProjectFilter] = useState('all');
   const itemsPerPage = 10;
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -178,17 +181,83 @@ export default function MaterialRequisition() {
     const searchJO = (item.jo_code || project?.idproject || '').toLowerCase();
     
     const term = searchTerm.toLowerCase();
-    return searchCode.includes(term) || searchDesc.includes(term) || searchShip.includes(term) || searchJO.includes(term);
+    const matchesSearch = searchCode.includes(term) || searchDesc.includes(term) || searchShip.includes(term) || searchJO.includes(term);
+    const projectKey = (item.jo_code || project?.idproject || item.t_job_order_id || '-').toString();
+    const matchesProject = projectFilter === 'all' || projectKey === projectFilter;
+    const matchesStatus =
+      statusFilter === 'all' ||
+      (statusFilter === 'pending' && !item.flag_delivered) ||
+      (statusFilter === 'delivered' && item.flag_delivered) ||
+      (statusFilter === 'finalized' && item.flag_finalize);
+    return matchesSearch && matchesProject && matchesStatus;
   });
 
   const stats = useMemo(() => {
+    const totalQty = filteredData.reduce((sum, item) => sum + (Number(item.quantity) || 0), 0);
+    const uniqueProjects = new Set(filteredData.map(item => item.t_job_order_id || item.jo_code).filter(Boolean)).size;
+    const uniqueMaterials = new Set(filteredData.map(item => item.m_component_id || item.description).filter(Boolean)).size;
     return {
       total: filteredData.length,
       delivered: filteredData.filter(d => d.flag_delivered).length,
       pending: filteredData.filter(d => !d.flag_delivered).length,
       finalized: filteredData.filter(d => d.flag_finalize).length,
+      totalQty,
+      uniqueProjects,
+      uniqueMaterials,
     };
   }, [filteredData]);
+
+  const projectSummary = useMemo(() => {
+    const map: Record<string, any> = {};
+    filteredData.forEach(item => {
+      const project = projects.find(p => p.id_siaga?.toString() === item.t_job_order_id?.toString());
+      const joCode = item.jo_code || project?.idproject || `JO ID ${item.t_job_order_id || '-'}`;
+      const shipName = item.m_ship_name || project?.shipname || '-';
+      const key = `${joCode}__${shipName}`;
+      if (!map[key]) {
+        map[key] = { joCode, shipName, total: 0, delivered: 0, pending: 0, finalized: 0, quantity: 0 };
+      }
+      map[key].total += 1;
+      map[key].quantity += Number(item.quantity) || 0;
+      if (item.flag_delivered) map[key].delivered += 1;
+      else map[key].pending += 1;
+      if (item.flag_finalize) map[key].finalized += 1;
+    });
+    return Object.values(map).sort((a, b) => b.total - a.total).slice(0, 12);
+  }, [filteredData, projects]);
+
+  const materialSummary = useMemo(() => {
+    const map: Record<string, any> = {};
+    filteredData.forEach(item => {
+      const comp = masterComponentsMap[item.m_component_id?.toString()];
+      const description = item.description || comp?.description_code || comp?.description || `Material ID: ${item.m_component_id || '-'}`;
+      const unit = item.unit || comp?.unit || '-';
+      const key = item.m_component_id?.toString() || description;
+      if (!map[key]) {
+        map[key] = { id: item.m_component_id || '-', description, unit, total: 0, quantity: 0, delivered: 0, pending: 0 };
+      }
+      map[key].total += 1;
+      map[key].quantity += Number(item.quantity) || 0;
+      if (item.flag_delivered) map[key].delivered += 1;
+      else map[key].pending += 1;
+    });
+    return Object.values(map).sort((a, b) => b.quantity - a.quantity || b.total - a.total).slice(0, 12);
+  }, [filteredData, masterComponentsMap]);
+
+  const projectQuickFilters = useMemo(() => {
+    const map: Record<string, any> = {};
+    data.forEach(item => {
+      const project = projects.find(p => p.id_siaga?.toString() === item.t_job_order_id?.toString());
+      const joCode = (item.jo_code || project?.idproject || item.t_job_order_id || '-').toString();
+      const shipName = item.m_ship_name || project?.shipname || '-';
+      if (!map[joCode]) {
+        map[joCode] = { key: joCode, joCode, shipName, total: 0, pending: 0 };
+      }
+      map[joCode].total += 1;
+      if (!item.flag_delivered) map[joCode].pending += 1;
+    });
+    return Object.values(map).sort((a, b) => b.total - a.total).slice(0, 10);
+  }, [data, projects]);
 
   // Group by date for chart
   const chartData = useMemo(() => {
@@ -297,41 +366,146 @@ export default function MaterialRequisition() {
         </div>
       </div>
 
-      {/* Bar Chart Section */}
-      <div className="bg-white rounded-2xl p-5 border border-slate-200 shadow-sm mb-6">
-        <h3 className="text-sm font-bold text-slate-800 mb-6 flex items-center gap-2">
-          <Package className="w-4 h-4 text-indigo-500" /> Trend Permintaan Material
-        </h3>
-        {chartData.dates.length > 0 ? (
-          <div className="flex items-end gap-2 h-40 mt-4 px-2">
-            {chartData.dates.map((date, idx) => {
-               const count = chartData.counts[idx];
-               const heightPct = Math.max((count / chartData.maxCount) * 100, 2); // min 2% height
-               
-               return (
-                 <div key={date} className="flex-1 flex flex-col justify-end items-center group relative h-full">
-                   <div 
-                     className="w-full max-w-[40px] bg-indigo-100 group-hover:bg-indigo-500 rounded-t-lg transition-all duration-500 relative cursor-pointer"
-                     style={{ height: `${heightPct}%` }}
-                   >
-                     <div className="absolute bottom-full mb-2 left-1/2 -translate-x-1/2 opacity-0 group-hover:opacity-100 transition-opacity bg-slate-800 text-white text-xs px-2.5 py-1 rounded-lg pointer-events-none whitespace-nowrap z-10 font-medium">
-                       {count} Request
-                       <div className="absolute top-full left-1/2 -translate-x-1/2 border-4 border-transparent border-t-slate-800" />
-                     </div>
-                   </div>
-                   <div className="mt-3 text-[10px] font-medium text-slate-400 group-hover:text-slate-700 transition-colors">
-                     {date.substring(5)} {/* Tampilkan MM-DD */}
-                   </div>
-                 </div>
-               );
-            })}
+      <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-4 space-y-3">
+        <div className="flex items-center justify-between gap-3">
+          <div>
+            <h3 className="text-sm font-bold text-slate-800">Project Drilldown</h3>
+            <p className="text-xs text-slate-500">Pilih JO/kapal untuk menyaring tabel request material.</p>
           </div>
-        ) : (
-          <div className="h-40 flex items-center justify-center text-slate-400 text-sm border-2 border-dashed border-slate-100 rounded-xl">
-            Belum ada data riwayat permintaan untuk ditampilkan
-          </div>
-        )}
+          <button
+            onClick={() => { setProjectFilter('all'); setStatusFilter('all'); setSearchTerm(''); setCurrentPage(1); }}
+            className="px-3 py-1.5 rounded-lg border border-slate-200 text-xs font-bold text-slate-600 hover:bg-slate-50"
+          >
+            Reset
+          </button>
+        </div>
+        <div className="flex gap-2 overflow-x-auto pb-1">
+          <button
+            onClick={() => { setProjectFilter('all'); setCurrentPage(1); }}
+            className={`shrink-0 px-3 py-2 rounded-xl border text-left transition ${projectFilter === 'all' ? 'bg-slate-900 text-white border-slate-900' : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'}`}
+          >
+            <span className="block text-xs font-black">All Project</span>
+            <span className="block text-[10px] opacity-70">{data.length} request</span>
+          </button>
+          {projectQuickFilters.map((item: any) => (
+            <button
+              key={item.key}
+              onClick={() => { setProjectFilter(item.key); setCurrentPage(1); }}
+              className={`shrink-0 w-56 px-3 py-2 rounded-xl border text-left transition ${projectFilter === item.key ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'}`}
+            >
+              <span className="block text-xs font-black truncate">{item.joCode}</span>
+              <span className="block text-[10px] opacity-70 truncate">{item.shipName}</span>
+              <span className="block text-[10px] mt-1">{item.total} RQ / {item.pending} pending</span>
+            </button>
+          ))}
+        </div>
       </div>
+
+      <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
+          <div className="xl:col-span-2 bg-white rounded-2xl p-5 border border-slate-200 shadow-sm">
+            <h3 className="text-sm font-bold text-slate-800 mb-6 flex items-center gap-2">
+              <Package className="w-4 h-4 text-indigo-500" /> Trend Permintaan Material
+            </h3>
+            {chartData.dates.length > 0 ? (
+              <div className="flex items-end gap-2 h-44 mt-4 px-2">
+                {chartData.dates.map((date, idx) => {
+                  const count = chartData.counts[idx];
+                  const heightPct = Math.max((count / chartData.maxCount) * 100, 2);
+                  return (
+                    <div key={date} className="flex-1 flex flex-col justify-end items-center group relative h-full">
+                      <div className="w-full max-w-[40px] bg-indigo-100 group-hover:bg-indigo-500 rounded-t-lg transition-all duration-500 relative cursor-pointer" style={{ height: `${heightPct}%` }}>
+                        <div className="absolute bottom-full mb-2 left-1/2 -translate-x-1/2 opacity-0 group-hover:opacity-100 transition-opacity bg-slate-800 text-white text-xs px-2.5 py-1 rounded-lg pointer-events-none whitespace-nowrap z-10 font-medium">
+                          {count} Request
+                          <div className="absolute top-full left-1/2 -translate-x-1/2 border-4 border-transparent border-t-slate-800" />
+                        </div>
+                      </div>
+                      <div className="mt-3 text-[10px] font-medium text-slate-400 group-hover:text-slate-700 transition-colors">{date.substring(5)}</div>
+                    </div>
+                  );
+                })}
+              </div>
+            ) : (
+              <div className="h-44 flex items-center justify-center text-slate-400 text-sm border-2 border-dashed border-slate-100 rounded-xl">
+                Belum ada data riwayat permintaan untuk ditampilkan
+              </div>
+            )}
+          </div>
+
+          <div className="bg-white rounded-2xl p-5 border border-slate-200 shadow-sm space-y-4">
+            <h3 className="text-sm font-bold text-slate-800">Ringkasan Operasional</h3>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="rounded-xl bg-slate-50 border border-slate-100 p-4">
+                <p className="text-xs text-slate-500 font-bold uppercase">Total Qty</p>
+                <p className="text-2xl font-black text-slate-900 mt-1">{stats.totalQty.toLocaleString('id-ID')}</p>
+              </div>
+              <div className="rounded-xl bg-slate-50 border border-slate-100 p-4">
+                <p className="text-xs text-slate-500 font-bold uppercase">Project</p>
+                <p className="text-2xl font-black text-slate-900 mt-1">{stats.uniqueProjects}</p>
+              </div>
+              <div className="rounded-xl bg-slate-50 border border-slate-100 p-4">
+                <p className="text-xs text-slate-500 font-bold uppercase">Material</p>
+                <p className="text-2xl font-black text-slate-900 mt-1">{stats.uniqueMaterials}</p>
+              </div>
+              <div className="rounded-xl bg-slate-50 border border-slate-100 p-4">
+                <p className="text-xs text-slate-500 font-bold uppercase">Pending</p>
+                <p className="text-2xl font-black text-amber-600 mt-1">{stats.pending}</p>
+              </div>
+            </div>
+          </div>
+      </div>
+
+      {activeView === 'project' && (
+        <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+          <div className="p-5 border-b border-slate-100">
+            <h3 className="text-sm font-bold text-slate-800">Rekap Request per Project</h3>
+          </div>
+          <div className="divide-y divide-slate-100">
+            {projectSummary.map((item: any) => (
+              <div key={`${item.joCode}-${item.shipName}`} className="p-5 grid grid-cols-1 md:grid-cols-6 gap-4 items-center hover:bg-slate-50">
+                <div className="md:col-span-3">
+                  <p className="font-bold text-slate-800">{item.joCode}</p>
+                  <p className="text-sm text-slate-500 flex items-center gap-2 mt-1"><Ship className="w-4 h-4" />{item.shipName}</p>
+                </div>
+                <div className="text-sm"><span className="text-slate-400">RQ</span><p className="font-black text-slate-800">{item.total}</p></div>
+                <div className="text-sm"><span className="text-slate-400">Qty</span><p className="font-black text-slate-800">{item.quantity.toLocaleString('id-ID')}</p></div>
+                <div className="flex gap-2 md:justify-end">
+                  <span className="px-2 py-1 rounded-lg bg-emerald-50 text-emerald-700 text-xs font-bold">{item.delivered} Delivered</span>
+                  <span className="px-2 py-1 rounded-lg bg-amber-50 text-amber-700 text-xs font-bold">{item.pending} Pending</span>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {activeView === 'material' && (
+        <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+          <div className="p-5 border-b border-slate-100">
+            <h3 className="text-sm font-bold text-slate-800">Rekap Material Paling Banyak Diminta</h3>
+          </div>
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 p-5">
+            {materialSummary.map((item: any) => (
+              <div key={`${item.id}-${item.description}`} className="rounded-xl border border-slate-100 bg-slate-50 p-4">
+                <div className="flex justify-between gap-4">
+                  <div className="min-w-0">
+                    <p className="font-bold text-slate-800 line-clamp-2">{item.description}</p>
+                    <p className="text-xs text-slate-500 font-mono mt-1">ID: {item.id}</p>
+                  </div>
+                  <div className="text-right shrink-0">
+                    <p className="text-2xl font-black text-indigo-600">{item.quantity.toLocaleString('id-ID')}</p>
+                    <p className="text-xs text-slate-500">{item.unit}</p>
+                  </div>
+                </div>
+                <div className="mt-4 flex gap-2">
+                  <span className="px-2 py-1 rounded-lg bg-white border border-slate-200 text-slate-600 text-xs font-bold">{item.total} Request</span>
+                  <span className="px-2 py-1 rounded-lg bg-emerald-50 text-emerald-700 text-xs font-bold">{item.delivered} Delivered</span>
+                  <span className="px-2 py-1 rounded-lg bg-amber-50 text-amber-700 text-xs font-bold">{item.pending} Pending</span>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden mb-6">
         <div className="p-4 border-b border-slate-100 bg-slate-50/50 flex flex-col md:flex-row gap-4 items-center justify-between">
@@ -344,6 +518,22 @@ export default function MaterialRequisition() {
               onChange={(e) => { setSearchTerm(e.target.value); setCurrentPage(1); }}
               className="w-full pl-10 pr-4 py-2 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-[#FDB913]/50 focus:border-[#FDB913] transition-all bg-white text-sm"
             />
+          </div>
+          <div className="flex w-full md:w-auto gap-1 rounded-xl bg-white border border-slate-200 p-1">
+            {[
+              { key: 'all', label: 'All' },
+              { key: 'pending', label: 'Pending' },
+              { key: 'delivered', label: 'Delivered' },
+              { key: 'finalized', label: 'Finalized' },
+            ].map(item => (
+              <button
+                key={item.key}
+                onClick={() => { setStatusFilter(item.key as any); setCurrentPage(1); }}
+                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition ${statusFilter === item.key ? 'bg-slate-900 text-white' : 'text-slate-500 hover:bg-slate-50 hover:text-slate-800'}`}
+              >
+                {item.label}
+              </button>
+            ))}
           </div>
         </div>
 
@@ -494,24 +684,25 @@ export default function MaterialRequisition() {
         </div>
       </div>
 
-      {/* Detail View Modal */}
+      {/* Detail View Drawer */}
       <AnimatePresence>
         {selectedDetailItem && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="fixed inset-0 z-[120] flex justify-end">
             <motion.div 
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
-              className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm" 
+              className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm" 
               onClick={() => setSelectedDetailItem(null)}
             />
             <motion.div 
-              initial={{ scale: 0.95, opacity: 0, y: 20 }}
-              animate={{ scale: 1, opacity: 1, y: 0 }}
-              exit={{ scale: 0.95, opacity: 0, y: 20 }}
-              className="relative w-full max-w-3xl bg-white rounded-3xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]"
+              initial={{ x: 520, opacity: 0 }}
+              animate={{ x: 0, opacity: 1 }}
+              exit={{ x: 520, opacity: 0 }}
+              transition={{ type: 'spring', damping: 28, stiffness: 260 }}
+              className="relative z-[121] h-full w-full max-w-xl bg-white shadow-2xl overflow-hidden flex flex-col border-l border-slate-200"
             >
-              <div className="p-6 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
+              <div className="p-5 border-b border-slate-100 flex justify-between items-center bg-slate-50/80">
                 <div className="flex items-center gap-3">
                   <div className="w-10 h-10 bg-indigo-500/10 rounded-xl flex items-center justify-center text-indigo-600">
                     <FileText className="w-5 h-5" />

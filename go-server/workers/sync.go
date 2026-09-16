@@ -44,7 +44,7 @@ func splitSyncURLs(urlStr string) []string {
 	if strings.HasPrefix(urlStr, "[") && json.Unmarshal([]byte(urlStr), &jsonURLs) == nil {
 		result := make([]string, 0, len(jsonURLs))
 		for _, value := range jsonURLs {
-			if trimmed := strings.TrimSpace(value); trimmed != "" {
+			if trimmed := normalizeSyncURL(strings.TrimSpace(value)); trimmed != "" {
 				result = append(result, trimmed)
 			}
 		}
@@ -55,11 +55,21 @@ func splitSyncURLs(urlStr string) []string {
 	})
 	result := make([]string, 0, len(lines))
 	for _, line := range lines {
-		if trimmed := strings.TrimSpace(line); trimmed != "" {
+		if trimmed := normalizeSyncURL(strings.TrimSpace(line)); trimmed != "" {
 			result = append(result, trimmed)
 		}
 	}
 	return result
+}
+
+func normalizeSyncURL(value string) string {
+	value = strings.TrimSpace(value)
+	if strings.HasPrefix(value, "[http") {
+		if open := strings.Index(value, "]("); open > 0 && strings.HasSuffix(value, ")") {
+			return strings.TrimSpace(value[open+2 : len(value)-1])
+		}
+	}
+	return value
 }
 
 func fetchSyncURLs(urlStr string, headers map[string]string) ([]byte, error) {
@@ -255,6 +265,7 @@ func RunSyncJob(force bool, targetId string) {
 }
 
 func processJobOrdersIncremental(configId, baseUrl string, headers map[string]string, lastSyncStr string) {
+	baseUrl = normalizeSyncURL(baseUrl)
 	// Drop old 3-column schema if exists to upgrade to flattened 46-column AI-ready table
 	db.Exec("DROP TABLE IF EXISTS sync_job_orders")
 

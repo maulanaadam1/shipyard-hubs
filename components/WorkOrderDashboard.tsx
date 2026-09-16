@@ -2476,13 +2476,13 @@ export default function WorkOrderDashboard() {
 
       {/* DETAILED ROW MODAL */}
       {selectedRow && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6">
+        <div className="fixed inset-0 z-[120] flex items-center justify-center p-4 sm:p-6">
           <div 
-            className="absolute inset-0 bg-slate-950/60 backdrop-blur-sm transition-opacity"
+            className="absolute inset-0 z-[120] bg-slate-950/60 backdrop-blur-sm transition-opacity"
             onClick={() => setSelectedRow(null)}
           ></div>
 
-          <div className="relative w-full max-w-6xl max-h-[95vh] flex flex-col shadow-2xl rounded-2xl overflow-hidden bg-white border border-slate-200 text-slate-800">
+          <div className="relative z-[121] w-full max-w-6xl max-h-[95vh] flex flex-col shadow-2xl rounded-2xl overflow-hidden bg-white border border-slate-200 text-slate-800">
             
             <div className="p-5 sm:p-6 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
               <div className="space-y-1">

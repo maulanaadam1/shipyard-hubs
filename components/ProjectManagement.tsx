@@ -330,9 +330,14 @@ export default function ProjectManagement() {
       p.project_lead?.toLowerCase().includes(searchTerm.toLowerCase())
     );
   }).sort((a, b) => {
+    const siagaA = Number(a.id_siaga || 0);
+    const siagaB = Number(b.id_siaga || 0);
+    if (siagaA !== siagaB) {
+      return siagaB - siagaA;
+    }
     const dateA = new Date(a.create_date || 0).getTime();
     const dateB = new Date(b.create_date || 0).getTime();
-    return dateB - dateA; // Descending order (newest first)
+    return dateB - dateA;
   });
 
   // Pagination Logic

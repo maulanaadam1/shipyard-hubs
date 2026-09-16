@@ -369,6 +369,7 @@ func createTables() {
 	// Migrations for existing schemas
 	DB.Exec("ALTER TABLE projects ADD COLUMN location TEXT")
 	DB.Exec("ALTER TABLE projects ADD COLUMN docking_type TEXT")
+	DB.Exec("DELETE FROM projects WHERE UPPER(COALESCE(idproject, '')) LIKE 'WO%'")
 
 	seedRolesAndPermissions()
 
