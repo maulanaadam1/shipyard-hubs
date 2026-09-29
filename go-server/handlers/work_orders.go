@@ -100,6 +100,44 @@ func scanWorkOrderSummaryRows(rows *sql.Rows) []workOrderSummary {
 	return items
 }
 
+func summaryNeedsDetailFinancials(item workOrderSummary) bool {
+	return item.PendingCost == 0 &&
+		item.FinalCost == 0 &&
+		item.LatestCost == 0 &&
+		item.PreviousCost == 0 &&
+		item.RejectedCost == 0
+}
+
+func hydrateWorkOrderSummaryRows(items []workOrderSummary) []workOrderSummary {
+	if len(items) == 0 {
+		return items
+	}
+
+	urlStr, headers, _ := workOrderDetailConfig()
+	client := &http.Client{Timeout: 30 * time.Second}
+
+	for idx, item := range items {
+		if item.WOID == "" || !summaryNeedsDetailFinancials(item) {
+			continue
+		}
+
+		var rawJSON []byte
+		err := db.QueryRow("SELECT raw_json FROM work_order_details WHERE wo_id = ?", item.WOID).Scan(&rawJSON)
+		if err != nil && urlStr != "" {
+			rawJSON, err = fetchAndStoreWorkOrderDetail(item.WOID, urlStr, headers, client)
+		}
+		if err != nil || len(rawJSON) == 0 {
+			continue
+		}
+
+		enriched := applyFinancialsFromDetail(item, rawJSON)
+		items[idx] = enriched
+		_ = upsertWorkOrderSummary(enriched)
+	}
+
+	return items
+}
+
 type workOrderSummary struct {
 	WOID            string  `json:"id"`
 	WOCode          string  `json:"wo_code"`
@@ -629,8 +667,9 @@ func GetWorkOrders(w http.ResponseWriter, r *http.Request) {
 	}
 	defer rows.Close()
 
+	items := hydrateWorkOrderSummaryRows(scanWorkOrderSummaryRows(rows))
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]interface{}{"data": scanWorkOrderSummaryRows(rows), "total": total, "page": page, "limit": limit})
+	json.NewEncoder(w).Encode(map[string]interface{}{"data": items, "total": total, "page": page, "limit": limit})
 }
 
 func GetWorkOrdersExport(w http.ResponseWriter, r *http.Request) {
@@ -653,7 +692,7 @@ func GetWorkOrdersExport(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Disposition", `attachment; filename="Export_WorkOrder.csv"`)
 	w.Write([]byte("No;Kode WO;Kode JO;Proyek (Kapal);Vendor Rekanan;Nilai Total;Nilai Sebelumnya;Nilai Saat Ini;Pending Approval;Terakhir Diperbarui;Status Approval\n"))
 
-	for idx, item := range scanWorkOrderSummaryRows(rows) {
+	for idx, item := range hydrateWorkOrderSummaryRows(scanWorkOrderSummaryRows(rows)) {
 		line := fmt.Sprintf("%d;%s;%s;%s;%s;%.0f;%.0f;%.0f;%.0f;%s;%s\n",
 			idx+1,
 			csvCell(item.WOCode),
