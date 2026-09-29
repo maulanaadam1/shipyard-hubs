@@ -359,9 +359,6 @@ func applyFinancialsFromDetail(summary workOrderSummary, raw []byte) workOrderSu
 
 	itemCost := func(item map[string]interface{}) float64 {
 		baseCost := parseFloatAny(item["volume_cost_final"])
-		if baseCost == 0 {
-			baseCost = parseFloatAny(item["price"])
-		}
 		costToAdd := float64(0)
 		if baseCost > 0 {
 			vol := parseFloatAny(item["volume"])
@@ -377,18 +374,10 @@ func applyFinancialsFromDetail(summary workOrderSummary, raw []byte) workOrderSu
 			costToAdd = baseCost * vol
 		}
 		if costToAdd == 0 {
-			costToAdd = parseFloatAny(item["total_price"])
-		}
-		if costToAdd == 0 {
-			costToAdd = parseFloatAny(item["total_price_details"])
+			costToAdd = parseFloatAny(item["total_cost"])
 		}
 		if costToAdd == 0 {
 			costToAdd = parseFloatAny(item["total_cost_details"])
-		}
-		if costToAdd == 0 {
-			if parameter, ok := item["parameter"].(map[string]interface{}); ok {
-				costToAdd = parseFloatAny(parameter["total_price"])
-			}
 		}
 		return costToAdd
 	}
