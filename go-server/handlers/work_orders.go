@@ -464,6 +464,9 @@ func applyFinancialsFromDetail(summary workOrderSummary, raw []byte) workOrderSu
 	if latestDate == "" {
 		latestDate = dateOnly(rootCreatedAt)
 	}
+	if rootUpdatedDate := dateOnly(rootUpdatedAt); rootUpdatedDate > latestDate {
+		latestDate = rootUpdatedDate
+	}
 
 	latestCost := dailyCosts[latestDate]
 	previousCost := finalCostSum - latestCost
