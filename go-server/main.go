@@ -106,6 +106,29 @@ func main() {
 			}
 			json.NewDecoder(req.Body).Decode(&body)
 
+			if body.ID == "WorkOrdersFull" {
+				go func() {
+					total, err := workers.RunWorkOrdersFullSync()
+					if err != nil {
+						log.Printf("WorkOrders full sync failed: %v", err)
+						return
+					}
+					count, err := handlers.UpsertWorkOrderSummariesFromMasterCacheLimit(0)
+					if err != nil {
+						log.Printf("WorkOrders full summary rebuild failed: %v", err)
+						return
+					}
+					log.Printf("WorkOrders full sync completed: %d synced rows, %d summarized rows", total, count)
+					go handlers.SyncRecentWorkOrderDetailsFromMasterCache(0)
+				}()
+				w.Header().Set("Content-Type", "application/json")
+				json.NewEncoder(w).Encode(map[string]interface{}{
+					"success": true,
+					"message": "Full WorkOrders sync started in background",
+				})
+				return
+			}
+
 			workers.RunSyncJob(true, body.ID)
 			if body.ID == "WorkOrders" {
 				if count, err := handlers.UpsertWorkOrderSummariesFromMasterCache(); err != nil {

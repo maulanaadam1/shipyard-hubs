@@ -7,6 +7,7 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 
@@ -149,6 +150,158 @@ func mergeSyncResponses(responses [][]byte) ([]byte, error) {
 	return json.Marshal(map[string]interface{}{"data": merged})
 }
 
+func responseItems(body []byte) []interface{} {
+	var parsed interface{}
+	if err := json.Unmarshal(body, &parsed); err != nil {
+		return nil
+	}
+	switch value := parsed.(type) {
+	case []interface{}:
+		return value
+	case map[string]interface{}:
+		if data, ok := value["data"].([]interface{}); ok {
+			return data
+		}
+	}
+	return nil
+}
+
+func nextPageFromResponse(body []byte, currentPage int) (int, bool) {
+	var payload map[string]interface{}
+	if err := json.Unmarshal(body, &payload); err != nil {
+		return currentPage + 1, false
+	}
+	if nextURL, ok := payload["next_page_url"].(string); ok && strings.TrimSpace(nextURL) != "" {
+		return currentPage + 1, true
+	}
+	if lastPage, ok := payload["last_page"].(float64); ok {
+		return currentPage + 1, float64(currentPage) < lastPage
+	}
+	return currentPage + 1, false
+}
+
+func pageURL(baseURL string, page int) string {
+	parsed, err := url.Parse(baseURL)
+	if err != nil {
+		if strings.Contains(baseURL, "?") {
+			return fmt.Sprintf("%s&page=%d", baseURL, page)
+		}
+		return fmt.Sprintf("%s?page=%d", baseURL, page)
+	}
+	q := parsed.Query()
+	q.Set("page", fmt.Sprint(page))
+	if q.Get("per_page") == "" {
+		q.Set("per_page", "100")
+	}
+	parsed.RawQuery = q.Encode()
+	return parsed.String()
+}
+
+func fetchWorkOrderPages(urlStr string, headers map[string]string) ([]byte, error) {
+	urls := splitSyncURLs(urlStr)
+	if len(urls) == 0 {
+		return nil, fmt.Errorf("no WorkOrders URL configured")
+	}
+
+	client := &http.Client{Timeout: 120 * time.Second}
+	merged := make([]interface{}, 0)
+	seen := map[string]bool{}
+
+	for _, baseURL := range urls {
+		page := 1
+		for {
+			req, err := http.NewRequest("GET", pageURL(baseURL, page), nil)
+			if err != nil {
+				return nil, err
+			}
+			for k, v := range headers {
+				req.Header.Set(k, v)
+			}
+			resp, err := client.Do(req)
+			if err != nil {
+				return nil, fmt.Errorf("%s page %d: %w", baseURL, page, err)
+			}
+			bodyBytes, readErr := io.ReadAll(resp.Body)
+			resp.Body.Close()
+			if readErr != nil {
+				return nil, readErr
+			}
+			if resp.StatusCode == http.StatusTooManyRequests {
+				log.Printf("WorkOrders full sync rate limited at page %d; storing %d rows fetched so far", page, len(merged))
+				break
+			}
+			if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+				return nil, fmt.Errorf("%s page %d: HTTP %d", baseURL, page, resp.StatusCode)
+			}
+
+			items := responseItems(bodyBytes)
+			if len(items) == 0 {
+				break
+			}
+			if page == 1 || page%50 == 0 {
+				log.Printf("WorkOrders full sync fetched page %d (%d accumulated rows)", page, len(merged)+len(items))
+			}
+			for _, item := range items {
+				key := ""
+				if row, ok := item.(map[string]interface{}); ok {
+					if id, ok := row["id"]; ok && id != nil {
+						key = fmt.Sprint(id)
+					} else if code, ok := row["code"]; ok && code != nil {
+						key = fmt.Sprint(code)
+					}
+				}
+				if key != "" {
+					if seen[key] {
+						continue
+					}
+					seen[key] = true
+				}
+				merged = append(merged, item)
+			}
+
+			next, ok := nextPageFromResponse(bodyBytes, page)
+			if !ok {
+				break
+			}
+			time.Sleep(200 * time.Millisecond)
+			page = next
+		}
+	}
+
+	return json.Marshal(map[string]interface{}{"data": merged})
+}
+
+func storeSyncResponse(id string, bodyBytes []byte) error {
+	now := time.Now().Format("2006-01-02 15:04:05")
+	if db.RDB != nil {
+		cacheKey := "cache:" + id
+		db.RDB.Set(db.Ctx, cacheKey, string(bodyBytes), 0)
+		_, err := db.Exec("UPDATE sync_configs SET last_sync = ? WHERE id = ?", now, id)
+		return err
+	}
+	_, err := db.Exec("UPDATE sync_configs SET last_sync = ?, last_response = ? WHERE id = ?", now, string(bodyBytes), id)
+	return err
+}
+
+func RunWorkOrdersFullSync() (int, error) {
+	var urlStr, headersStr string
+	if err := db.QueryRow("SELECT url, headers FROM sync_configs WHERE id = 'WorkOrders'").Scan(&urlStr, &headersStr); err != nil {
+		return 0, err
+	}
+	headers := map[string]string{}
+	if headersStr != "" {
+		_ = json.Unmarshal([]byte(headersStr), &headers)
+	}
+	bodyBytes, err := fetchWorkOrderPages(urlStr, headers)
+	if err != nil {
+		return 0, err
+	}
+	if err := storeSyncResponse("WorkOrders", bodyBytes); err != nil {
+		return 0, err
+	}
+	return len(responseItems(bodyBytes)), nil
+}
+
 func RunSyncJob(force bool, targetId string) {
 	query := "SELECT id, url, headers, COALESCE(last_sync, ''), COALESCE(interval_type, 'minutes'), COALESCE(interval_value, 5) FROM sync_configs WHERE is_active = true"
 	var rows *sql.Rows
@@ -241,19 +394,7 @@ func RunSyncJob(force bool, targetId string) {
 		}
 
 		if err == nil {
-			now := time.Now().Format("2006-01-02 15:04:05")
-
-			if db.RDB != nil {
-				// Store massive JSON in Redis
-				cacheKey := "cache:" + id
-				db.RDB.Set(db.Ctx, cacheKey, string(bodyBytes), 0)
-
-				// Update ONLY last_sync in SQL to prevent bloat
-				_, err = db.Exec("UPDATE sync_configs SET last_sync = ? WHERE id = ?", now, id)
-			} else {
-				// Fallback: save to SQL directly
-				_, err = db.Exec("UPDATE sync_configs SET last_sync = ?, last_response = ? WHERE id = ?", now, string(bodyBytes), id)
-			}
+			err = storeSyncResponse(id, bodyBytes)
 
 			if err != nil {
 				log.Printf("SyncWorker DB error updating %s: %v", id, err)

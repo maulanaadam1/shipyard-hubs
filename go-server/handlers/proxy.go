@@ -501,7 +501,7 @@ func fetchAndStoreWorkOrderDetail(woID, urlStr string, headers map[string]string
 }
 
 func SyncRecentWorkOrderDetailsFromMasterCache(limit int) {
-	if limit <= 0 {
+	if limit < 0 {
 		limit = 100
 	}
 	urlStr, headers, err := workOrderDetailConfig()
@@ -522,7 +522,7 @@ func SyncRecentWorkOrderDetailsFromMasterCache(limit int) {
 	scheduled := 0
 
 	for _, rawItem := range workOrderListFromResponse(lastResponse) {
-		if scheduled >= limit {
+		if limit > 0 && scheduled >= limit {
 			break
 		}
 		item, ok := rawItem.(map[string]interface{})

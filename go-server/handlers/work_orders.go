@@ -546,6 +546,10 @@ func workOrderListFromResponse(raw string) []interface{} {
 }
 
 func UpsertWorkOrderSummariesFromMasterCache() (int, error) {
+	return UpsertWorkOrderSummariesFromMasterCacheLimit(1000)
+}
+
+func UpsertWorkOrderSummariesFromMasterCacheLimit(limit int) (int, error) {
 	lastResponse, err := workOrdersMasterResponse()
 	if err != nil {
 		return 0, err
@@ -553,7 +557,7 @@ func UpsertWorkOrderSummariesFromMasterCache() (int, error) {
 
 	count := 0
 	for _, rawItem := range workOrderListFromResponse(lastResponse) {
-		if count >= 1000 {
+		if limit > 0 && count >= limit {
 			break
 		}
 		item, ok := rawItem.(map[string]interface{})
