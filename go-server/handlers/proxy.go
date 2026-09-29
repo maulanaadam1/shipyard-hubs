@@ -62,15 +62,7 @@ func SyncWorkOrderDetail(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// Build the fetch URL. If urlStr contains {{id}}, replace it. Otherwise append it.
-	fetchUrl := urlStr
-	if strings.Contains(urlStr, "{{id}}") {
-		fetchUrl = strings.ReplaceAll(urlStr, "{{id}}", woID)
-	} else if strings.Contains(urlStr, "{{WO_ID}}") {
-		fetchUrl = strings.ReplaceAll(urlStr, "{{WO_ID}}", woID)
-	} else if !strings.HasSuffix(urlStr, woID) {
-		fetchUrl = fmt.Sprintf("%s/%s", strings.TrimRight(urlStr, "/"), woID)
-	}
+	fetchUrl := workOrderDetailURL(urlStr, woID)
 
 	var headers map[string]string
 	if headersStr != "" {
@@ -440,6 +432,134 @@ func stringPtrFromAny(value interface{}) *string {
 		return nil
 	}
 	return &text
+}
+
+func workOrderDetailURL(baseURL, woID string) string {
+	if strings.Contains(baseURL, "{{id}}") {
+		return strings.ReplaceAll(baseURL, "{{id}}", woID)
+	}
+	if strings.Contains(baseURL, "{{WO_ID}}") {
+		return strings.ReplaceAll(baseURL, "{{WO_ID}}", woID)
+	}
+	if !strings.HasSuffix(baseURL, woID) {
+		return fmt.Sprintf("%s/%s", strings.TrimRight(baseURL, "/"), woID)
+	}
+	return baseURL
+}
+
+func workOrderDetailConfig() (string, map[string]string, error) {
+	var urlStr, headersStr string
+	err := db.QueryRow("SELECT url, headers FROM sync_configs WHERE id = 'WorkOrderDetails'").Scan(&urlStr, &headersStr)
+	if err != nil {
+		err = db.QueryRow("SELECT url, headers FROM sync_configs WHERE id = 'WorkOrders'").Scan(&urlStr, &headersStr)
+		if err != nil {
+			return "", nil, err
+		}
+	}
+
+	headers := map[string]string{}
+	if headersStr != "" {
+		_ = json.Unmarshal([]byte(headersStr), &headers)
+	}
+	return urlStr, headers, nil
+}
+
+func fetchAndStoreWorkOrderDetail(woID, urlStr string, headers map[string]string, client *http.Client) ([]byte, error) {
+	req, err := http.NewRequest("GET", workOrderDetailURL(urlStr, woID), nil)
+	if err != nil {
+		return nil, err
+	}
+	for k, v := range headers {
+		req.Header.Set(k, v)
+	}
+
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return nil, fmt.Errorf("HTTP %d", resp.StatusCode)
+	}
+
+	bodyBytes, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, err
+	}
+	if !json.Valid(bodyBytes) {
+		return nil, fmt.Errorf("invalid JSON detail response")
+	}
+
+	if _, err = db.Exec(
+		"INSERT INTO work_order_details (wo_id, raw_json, last_sync) VALUES (?, ?, CURRENT_TIMESTAMP) ON CONFLICT(wo_id) DO UPDATE SET raw_json = excluded.raw_json, last_sync = CURRENT_TIMESTAMP",
+		woID, string(bodyBytes),
+	); err != nil {
+		return nil, err
+	}
+
+	return bodyBytes, nil
+}
+
+func SyncRecentWorkOrderDetailsFromMasterCache(limit int) {
+	if limit <= 0 {
+		limit = 100
+	}
+	urlStr, headers, err := workOrderDetailConfig()
+	if err != nil || urlStr == "" {
+		log.Printf("[WO DETAIL ENRICH] config not found: %v", err)
+		return
+	}
+
+	lastResponse, err := workOrdersMasterResponse()
+	if err != nil {
+		log.Printf("[WO DETAIL ENRICH] master cache not available: %v", err)
+		return
+	}
+
+	client := &http.Client{Timeout: 45 * time.Second}
+	sem := make(chan struct{}, 4)
+	var wg sync.WaitGroup
+	scheduled := 0
+
+	for _, rawItem := range workOrderListFromResponse(lastResponse) {
+		if scheduled >= limit {
+			break
+		}
+		item, ok := rawItem.(map[string]interface{})
+		if !ok {
+			continue
+		}
+		woID := firstString(item, "id", "wo_id")
+		if woID == "" {
+			continue
+		}
+
+		var existing string
+		if err := db.QueryRow("SELECT raw_json FROM work_order_details WHERE wo_id = ?", woID).Scan(&existing); err == nil && existing != "" {
+			continue
+		}
+
+		scheduled++
+		wg.Add(1)
+		go func(id string) {
+			defer wg.Done()
+			sem <- struct{}{}
+			defer func() { <-sem }()
+
+			bodyBytes, err := fetchAndStoreWorkOrderDetail(id, urlStr, headers, client)
+			if err != nil {
+				log.Printf("[WO DETAIL ENRICH] %s failed: %v", id, err)
+				return
+			}
+			if err := UpsertWorkOrderSummaryFromDetail(id, bodyBytes); err != nil {
+				log.Printf("[WO SUMMARY ERROR] %s: %v", id, err)
+			}
+			go workers.ExtractToAITables(id, bodyBytes)
+		}(woID)
+	}
+
+	wg.Wait()
+	log.Printf("[WO DETAIL ENRICH] completed: %d scheduled", scheduled)
 }
 
 // PostBulkPendingApprovals gets pending approval sum for specific IDs.

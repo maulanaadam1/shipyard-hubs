@@ -319,33 +319,59 @@ func applyFinancialsFromDetail(summary workOrderSummary, raw []byte) workOrderSu
 	dailyCosts := make(map[string]float64)
 	var pendingSum, finalCostSum, rejectedSum float64
 
-	var processItems func(items []interface{})
-	processItems = func(items []interface{}) {
+	itemCost := func(item map[string]interface{}) float64 {
+		baseCost := parseFloatAny(item["volume_cost_final"])
+		if baseCost == 0 {
+			baseCost = parseFloatAny(item["price"])
+		}
+		costToAdd := float64(0)
+		if baseCost > 0 {
+			vol := parseFloatAny(item["volume"])
+			if vol == 0 {
+				vol = parseFloatAny(item["quantity"])
+			}
+			if vol == 0 {
+				vol = parseFloatAny(item["act_quantity"])
+			}
+			if vol == 0 {
+				vol = 1
+			}
+			costToAdd = baseCost * vol
+		}
+		if costToAdd == 0 {
+			costToAdd = parseFloatAny(item["total_price"])
+		}
+		if costToAdd == 0 {
+			costToAdd = parseFloatAny(item["total_price_details"])
+		}
+		if costToAdd == 0 {
+			costToAdd = parseFloatAny(item["total_cost_details"])
+		}
+		if costToAdd == 0 {
+			if parameter, ok := item["parameter"].(map[string]interface{}); ok {
+				costToAdd = parseFloatAny(parameter["total_price"])
+			}
+		}
+		return costToAdd
+	}
+
+	var processItems func(items []interface{}) float64
+	processItems = func(items []interface{}) float64 {
+		var processedCost float64
 		for _, itemRaw := range items {
 			item, ok := itemRaw.(map[string]interface{})
 			if !ok {
 				continue
 			}
 			if children, ok := item["material"].([]interface{}); ok && len(children) > 0 {
-				processItems(children)
-				continue
+				if childCost := processItems(children); childCost > 0 {
+					processedCost += childCost
+					continue
+				}
 			}
 
-			baseCost := parseFloatAny(item["volume_cost_final"])
-			if baseCost == 0 {
-				baseCost = parseFloatAny(item["price"])
-			}
-			costToAdd := float64(0)
-			if baseCost > 0 {
-				vol := parseFloatAny(item["volume"])
-				if vol == 0 {
-					vol = 1
-				}
-				costToAdd = baseCost * vol
-			}
-			if costToAdd == 0 {
-				costToAdd = parseFloatAny(item["total_price"])
-			}
+			costToAdd := itemCost(item)
+			processedCost += costToAdd
 
 			approvedLevel := parseFloatAny(item["approved_level"])
 			statusAppr := strings.ToLower(strings.TrimSpace(firstString(item, "status_approval")))
@@ -375,6 +401,7 @@ func applyFinancialsFromDetail(summary workOrderSummary, raw []byte) workOrderSu
 			}
 			finalCostSum += costToAdd
 		}
+		return processedCost
 	}
 	processItems(repairList)
 

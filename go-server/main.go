@@ -113,6 +113,7 @@ func main() {
 				} else {
 					log.Printf("WorkOrders summary refresh after sync completed: %d rows", count)
 				}
+				go handlers.SyncRecentWorkOrderDetailsFromMasterCache(100)
 			}
 			w.Header().Set("Content-Type", "application/json")
 			w.Write([]byte(`{"success": true, "message": "Sync triggered successfully"}`))
