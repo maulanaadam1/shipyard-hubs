@@ -108,10 +108,10 @@ func main() {
 
 			workers.RunSyncJob(true, body.ID)
 			if body.ID == "WorkOrders" {
-				if count, err := handlers.BackfillWorkOrderSummaries(); err != nil {
-					log.Printf("WorkOrders summary backfill after sync failed: %v", err)
+				if count, err := handlers.UpsertWorkOrderSummariesFromMasterCache(); err != nil {
+					log.Printf("WorkOrders summary refresh after sync failed: %v", err)
 				} else {
-					log.Printf("WorkOrders summary backfill after sync completed: %d rows", count)
+					log.Printf("WorkOrders summary refresh after sync completed: %d rows", count)
 				}
 			}
 			w.Header().Set("Content-Type", "application/json")

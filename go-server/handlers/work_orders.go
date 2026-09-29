@@ -457,32 +457,76 @@ func UpsertWorkOrderSummaryFromDetail(woID string, raw []byte) error {
 	return upsertWorkOrderSummary(summary)
 }
 
-func BackfillWorkOrderSummaries() (int, error) {
-	summaries := map[string]workOrderSummary{}
+func workOrdersMasterResponse() (string, error) {
+	if db.RDB != nil {
+		if value, err := db.RDB.Get(db.Ctx, "cache:WorkOrders").Result(); err == nil && value != "" {
+			return value, nil
+		}
+	}
 
 	var lastResponse string
 	err := db.QueryRow("SELECT COALESCE(last_response, '') FROM sync_configs WHERE id = 'WorkOrders'").Scan(&lastResponse)
-	if err == nil && lastResponse != "" {
-		var parsed interface{}
-		if json.Unmarshal([]byte(lastResponse), &parsed) == nil {
-			var list []interface{}
-			switch value := parsed.(type) {
-			case []interface{}:
-				list = value
-			case map[string]interface{}:
-				if data, ok := value["data"].([]interface{}); ok {
-					list = data
-				}
+	return lastResponse, err
+}
+
+func workOrderListFromResponse(raw string) []interface{} {
+	if raw == "" {
+		return nil
+	}
+	var parsed interface{}
+	if json.Unmarshal([]byte(raw), &parsed) != nil {
+		return nil
+	}
+	switch value := parsed.(type) {
+	case []interface{}:
+		return value
+	case map[string]interface{}:
+		if data, ok := value["data"].([]interface{}); ok {
+			return data
+		}
+	}
+	return nil
+}
+
+func UpsertWorkOrderSummariesFromMasterCache() (int, error) {
+	lastResponse, err := workOrdersMasterResponse()
+	if err != nil {
+		return 0, err
+	}
+
+	count := 0
+	for _, rawItem := range workOrderListFromResponse(lastResponse) {
+		if count >= 1000 {
+			break
+		}
+		item, ok := rawItem.(map[string]interface{})
+		if !ok {
+			continue
+		}
+		summary := summaryFromWorkOrderListItem(item)
+		if summary.WOID == "" {
+			continue
+		}
+		if err := upsertWorkOrderSummary(summary); err == nil {
+			count++
+		}
+	}
+	return count, nil
+}
+
+func BackfillWorkOrderSummaries() (int, error) {
+	summaries := map[string]workOrderSummary{}
+
+	lastResponse, err := workOrdersMasterResponse()
+	if err == nil {
+		for _, rawItem := range workOrderListFromResponse(lastResponse) {
+			item, ok := rawItem.(map[string]interface{})
+			if !ok {
+				continue
 			}
-			for _, rawItem := range list {
-				item, ok := rawItem.(map[string]interface{})
-				if !ok {
-					continue
-				}
-				summary := summaryFromWorkOrderListItem(item)
-				if summary.WOID != "" {
-					summaries[summary.WOID] = summary
-				}
+			summary := summaryFromWorkOrderListItem(item)
+			if summary.WOID != "" {
+				summaries[summary.WOID] = summary
 			}
 		}
 	}

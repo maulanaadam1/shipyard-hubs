@@ -77,7 +77,7 @@ func fetchSyncURLs(urlStr string, headers map[string]string) ([]byte, error) {
 	if len(urls) == 0 {
 		return nil, fmt.Errorf("no sync URL configured")
 	}
-	client := &http.Client{Timeout: 30 * time.Second}
+	client := &http.Client{Timeout: 120 * time.Second}
 	responses := make([][]byte, 0, len(urls))
 	for _, currentURL := range urls {
 		req, err := http.NewRequest("GET", currentURL, nil)
