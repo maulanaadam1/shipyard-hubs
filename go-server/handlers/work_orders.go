@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"net/url"
 	"sort"
 	"strconv"
 	"strings"
@@ -14,7 +15,10 @@ import (
 )
 
 func workOrderSummaryFilters(r *http.Request) (string, []interface{}, string, string) {
-	q := r.URL.Query()
+	return workOrderSummaryFiltersFromQuery(r.URL.Query())
+}
+
+func workOrderSummaryFiltersFromQuery(q url.Values) (string, []interface{}, string, string) {
 	where := []string{"1=1"}
 	args := []interface{}{}
 	if search := strings.TrimSpace(q.Get("search")); search != "" {
@@ -26,7 +30,9 @@ func workOrderSummaryFilters(r *http.Request) (string, []interface{}, string, st
 		where = append(where, "(derived_status = ? OR status_approval = ?)")
 		args = append(args, status, status)
 	}
-	if vendor := strings.TrimSpace(q.Get("vendor")); vendor != "" && vendor != "All" {
+	if vendor := strings.TrimSpace(q.Get("vendor")); vendor == noVendorLabel {
+		where = append(where, "COALESCE(vendor_name, '') = ''")
+	} else if vendor != "" && vendor != "All" {
 		where = append(where, "vendor_name = ?")
 		args = append(args, vendor)
 	}
@@ -624,7 +630,9 @@ func GetWorkOrderTimeline(w http.ResponseWriter, r *http.Request) {
 		where = append(where, "latest_date <= ?")
 		args = append(args, end)
 	}
-	if vendor := strings.TrimSpace(q.Get("vendor")); vendor != "" && vendor != "All" {
+	if vendor := strings.TrimSpace(q.Get("vendor")); vendor == noVendorLabel {
+		where = append(where, "COALESCE(vendor_name, '') = ''")
+	} else if vendor != "" && vendor != "All" {
 		where = append(where, "vendor_name = ?")
 		args = append(args, vendor)
 	}
@@ -732,6 +740,11 @@ func GetWorkOrderStats(w http.ResponseWriter, r *http.Request) {
 }
 
 func writeWorkOrderStats(w http.ResponseWriter, items []workOrderSummary) {
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(buildWorkOrderStats(items))
+}
+
+func buildWorkOrderStats(items []workOrderSummary) map[string]interface{} {
 	joSet := map[string]bool{}
 	vendorSet := map[string]bool{}
 	projectSet := map[string]bool{}
@@ -760,8 +773,7 @@ func writeWorkOrderStats(w http.ResponseWriter, items []workOrderSummary) {
 		sumPending += item.PendingCost
 		approvalCounts[item.DerivedStatus]++
 	}
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]interface{}{
+	return map[string]interface{}{
 		"totalWOs":       len(items),
 		"totalJOs":       len(joSet),
 		"totalVendors":   len(vendorSet),
@@ -772,7 +784,7 @@ func writeWorkOrderStats(w http.ResponseWriter, items []workOrderSummary) {
 		"sumSaatIni":     sumSaatIni,
 		"sumPending":     sumPending,
 		"approvalCounts": approvalCounts,
-	})
+	}
 }
 
 func GetProjectWorkOrderSummaries(w http.ResponseWriter, r *http.Request) {
