@@ -4,8 +4,13 @@ import { BrowserRouter, Routes, Route, Navigate, Outlet } from 'react-router-dom
 import './globals.css';
 import { DataProvider, useData } from '../context/DataContext';
 
-// Register Service Worker for PWA
-if (typeof window !== 'undefined' && 'serviceWorker' in navigator) {
+// Register Service Worker for PWA in production only.
+// In dev, stale cached bundles can hide Vite updates and show a blank page.
+if (
+  typeof window !== 'undefined' &&
+  import.meta.env.PROD &&
+  'serviceWorker' in navigator
+) {
   window.addEventListener('load', () => {
     // Add version query to bypass potential intermediate caches
     navigator.serviceWorker.register('/sw.js?v=3').then(registration => {
@@ -34,6 +39,10 @@ if (typeof window !== 'undefined' && 'serviceWorker' in navigator) {
     }).catch(registrationError => {
       console.log('SW registration failed: ', registrationError);
     });
+  });
+} else if (typeof window !== 'undefined' && 'serviceWorker' in navigator) {
+  navigator.serviceWorker.getRegistrations().then(registrations => {
+    registrations.forEach(registration => registration.unregister());
   });
 }
 import Dashboard from '../components/Dashboard';
