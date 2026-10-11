@@ -2,14 +2,14 @@
 
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { 
-  Users, 
-  UserPlus, 
-  Shield, 
-  Mail, 
-  Trash2, 
-  Edit2, 
-  X, 
+import {
+  Users,
+  UserPlus,
+  Shield,
+  Mail,
+  Trash2,
+  Edit2,
+  X,
   Check,
   Search,
   MoreVertical,
@@ -28,14 +28,14 @@ export default function UserManagement() {
   const [isInputFocused, setIsInputFocused] = useState(false);
 
   const ALL_RESOURCES = [
-    'Dashboard', 'Utility', 'Job Order', 'Request', 'Release', 'Return', 
-    'Maintenance', 'Inventory', 'Reports', 'Master Equipment', 
-    'Master Vendor', 'Master Company', 'Master Kapal', 'Master Workflow', 
+    'Dashboard', 'Utility', 'Job Order', 'Request', 'Release', 'Return',
+    'Maintenance', 'Inventory', 'Reports', 'Master Equipment',
+    'Master Vendor', 'Master Company', 'Master Kapal', 'Master Workflow',
     'Master Configuration', 'User Management', 'Role Management'
   ];
   const ALL_ACTIONS = ['view', 'add', 'edit', 'delete', 'approve', 'import', 'export'];
-  
-  const SUGGESTED_PERMISSIONS = ALL_RESOURCES.flatMap(res => 
+
+  const SUGGESTED_PERMISSIONS = ALL_RESOURCES.flatMap(res =>
     ALL_ACTIONS.map(act => `${res}:${act}`)
   );
 
@@ -55,7 +55,7 @@ export default function UserManagement() {
     role: 'Staff' as 'Admin' | 'Manager' | 'Staff'
   });
 
-  const filteredUsers = users.filter(user => 
+  const filteredUsers = users.filter(user =>
     user.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
     user.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
     user.role.toLowerCase().includes(searchTerm.toLowerCase())
@@ -64,11 +64,11 @@ export default function UserManagement() {
   const openModal = (user: User | null = null) => {
     if (user) {
       setEditingUser(user);
-      setFormData({ 
-        name: user.name, 
-        email: user.email, 
+      setFormData({
+        name: user.name,
+        email: user.email,
         username: user.username || '',
-        password: '', 
+        password: '',
         role: user.role,
         jabatan: user.jabatan || '',
         city: user.city || '',
@@ -80,11 +80,11 @@ export default function UserManagement() {
       });
     } else {
       setEditingUser(null);
-      setFormData({ 
-        name: '', 
-        email: '', 
+      setFormData({
+        name: '',
+        email: '',
         username: '',
-        password: '', 
+        password: '',
         role: 'Staff',
         jabatan: '',
         city: '',
@@ -100,7 +100,7 @@ export default function UserManagement() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     let errorMsg = '';
     if (editingUser) {
       const defaultAdminUsername = import.meta.env.VITE_DEFAULT_ADMIN_USERNAME || 'superadmin';
@@ -186,7 +186,7 @@ export default function UserManagement() {
           <h2 className="font-display font-bold text-2xl text-slate-800 tracking-tight">User Management</h2>
           <p className="text-sm text-slate-500 mt-1">Manage platform users, roles, and access permissions.</p>
         </div>
-        <button 
+        <button
           onClick={() => openModal()}
           className="inline-flex items-center justify-center gap-2 px-4 py-2 bg-[#FDB913] text-slate-900 rounded-xl text-sm font-bold hover:bg-[#e5a611] transition-colors shadow-lg shadow-[#FDB913]/20 w-full lg:w-auto"
         >
@@ -198,9 +198,9 @@ export default function UserManagement() {
         <div className="p-4 border-b border-slate-100 bg-slate-50/50">
           <div className="relative max-w-md w-full">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-            <input 
-              type="text" 
-              placeholder="Search users..." 
+            <input
+              type="text"
+              placeholder="Search users..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               className="w-full pl-10 pr-4 py-2 bg-white border border-slate-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-[#FDB913]/30 focus:border-[#FDB913] transition-all"
@@ -265,7 +265,7 @@ export default function UserManagement() {
                   <td className="px-6 py-4 text-right">
                     <div className="flex items-center justify-end gap-2">
                       {canAccess('User Management', 'edit') && (
-                        <button 
+                        <button
                           onClick={() => openModal(user)}
                           className="p-2 text-slate-400 hover:text-[#FDB913] hover:bg-[#FDB913]/10 rounded-lg transition-all"
                         >
@@ -273,7 +273,7 @@ export default function UserManagement() {
                         </button>
                       )}
                       {canAccess('User Management', 'delete') && (
-                        <button 
+                        <button
                           onClick={() => handleDelete(user.id, user.email, user.name)}
                           className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-all"
                         >
@@ -293,14 +293,14 @@ export default function UserManagement() {
       <AnimatePresence>
         {isModalOpen && (
           <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-            <motion.div 
+            <motion.div
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
               onClick={() => setIsModalOpen(false)}
               className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm"
             />
-            <motion.div 
+            <motion.div
               initial={{ scale: 0.95, opacity: 0, y: 20 }}
               animate={{ scale: 1, opacity: 1, y: 0 }}
               exit={{ scale: 0.95, opacity: 0, y: 20 }}
@@ -331,7 +331,7 @@ export default function UserManagement() {
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                       <div className="space-y-1">
                         <label className="text-xs font-bold text-slate-500 uppercase">Full Name</label>
-                        <input 
+                        <input
                           required
                           type="text"
                           value={formData.name}
@@ -342,7 +342,7 @@ export default function UserManagement() {
                       </div>
                       <div className="space-y-1">
                         <label className="text-xs font-bold text-slate-500 uppercase">Email Address</label>
-                        <input 
+                        <input
                           required
                           type="email"
                           value={formData.email}
@@ -353,7 +353,7 @@ export default function UserManagement() {
                       </div>
                       <div className="space-y-1">
                         <label className="text-xs font-bold text-slate-500 uppercase">Username</label>
-                        <input 
+                        <input
                           required
                           type="text"
                           value={formData.username}
@@ -366,7 +366,7 @@ export default function UserManagement() {
                         <label className="text-xs font-bold text-slate-500 uppercase">
                           {editingUser ? 'New Password' : 'Initial Password'}
                         </label>
-                        <input 
+                        <input
                           required={!editingUser}
                           type="password"
                           value={formData.password}
@@ -385,7 +385,7 @@ export default function UserManagement() {
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                       <div className="space-y-1">
                         <label className="text-xs font-bold text-slate-500 uppercase">Department</label>
-                        <select 
+                        <select
                           required
                           value={formData.department}
                           onChange={(e) => setFormData({ ...formData, department: e.target.value })}
@@ -402,7 +402,7 @@ export default function UserManagement() {
                       </div>
                       <div className="space-y-1">
                         <label className="text-xs font-bold text-slate-500 uppercase">Position (Jabatan)</label>
-                        <select 
+                        <select
                           value={formData.jabatan}
                           onChange={(e) => setFormData({ ...formData, jabatan: e.target.value })}
                           className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-[#FDB913]/30 focus:border-[#FDB913] transition-all"
@@ -418,7 +418,7 @@ export default function UserManagement() {
                       </div>
                       <div className="space-y-1">
                         <label className="text-xs font-bold text-slate-500 uppercase">Branch Location</label>
-                        <input 
+                        <input
                           type="text"
                           value={formData.branch}
                           onChange={(e) => setFormData({ ...formData, branch: e.target.value })}
@@ -428,7 +428,7 @@ export default function UserManagement() {
                       </div>
                       <div className="space-y-1">
                         <label className="text-xs font-bold text-slate-500 uppercase">WhatsApp / Phone</label>
-                        <input 
+                        <input
                           type="text"
                           value={formData.whatsapp}
                           onChange={(e) => setFormData({ ...formData, whatsapp: e.target.value })}
@@ -438,7 +438,7 @@ export default function UserManagement() {
                       </div>
                       <div className="space-y-1 md:col-span-2">
                         <label className="text-xs font-bold text-slate-500 uppercase">City</label>
-                        <input 
+                        <input
                           type="text"
                           value={formData.city}
                           onChange={(e) => setFormData({ ...formData, city: e.target.value })}
@@ -461,7 +461,7 @@ export default function UserManagement() {
                             return (
                               <label key={role.id} className="flex items-center gap-3 cursor-pointer group">
                                 <div className="relative flex items-center">
-                                  <input 
+                                  <input
                                     type="checkbox"
                                     checked={isSelected}
                                     onChange={(e) => {
@@ -494,7 +494,7 @@ export default function UserManagement() {
                           {formData.extra_roles.split(',').filter(Boolean).map((tag, i) => (
                             <span key={i} className="inline-flex items-center gap-1 px-2 py-1 bg-[#FDB913] text-slate-900 rounded-lg text-[10px] font-bold uppercase tracking-wider shadow-sm">
                               {tag}
-                              <button 
+                              <button
                                 type="button"
                                 onClick={() => {
                                   const newTags = formData.extra_roles.split(',').filter(t => t !== tag).join(',');
@@ -506,7 +506,7 @@ export default function UserManagement() {
                               </button>
                             </span>
                           ))}
-                          <input 
+                          <input
                             type="text"
                             value={tagInput}
                             onChange={(e) => setTagInput(e.target.value)}
@@ -559,14 +559,14 @@ export default function UserManagement() {
                 </div>
 
                 <div className="sticky bottom-0 z-20 p-6 border-t border-slate-100 bg-white/80 backdrop-blur-md flex justify-end gap-3">
-                  <button 
+                  <button
                     type="button"
                     onClick={() => setIsModalOpen(false)}
                     className="px-6 py-2.5 bg-white border border-slate-200 rounded-xl text-sm font-bold text-slate-600 hover:bg-slate-50 transition-colors"
                   >
                     Cancel
                   </button>
-                  <button 
+                  <button
                     type="submit"
                     className="px-10 py-2.5 bg-[#FDB913] text-slate-900 rounded-xl text-sm font-bold hover:bg-[#e5a611] transition-colors shadow-lg shadow-[#FDB913]/20"
                   >
@@ -583,13 +583,13 @@ export default function UserManagement() {
       <AnimatePresence>
         {showSuccessModal && (
           <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
-            <motion.div 
+            <motion.div
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
               className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm"
             />
-            <motion.div 
+            <motion.div
               initial={{ scale: 0.9, opacity: 0, y: 20 }}
               animate={{ scale: 1, opacity: 1, y: 0 }}
               exit={{ scale: 0.9, opacity: 0, y: 20 }}
@@ -602,7 +602,7 @@ export default function UserManagement() {
               <p className="text-slate-500 mb-8">
                 The new user account has been successfully registered. You can now share the credentials with them.
               </p>
-              <button 
+              <button
                 onClick={() => setShowSuccessModal(false)}
                 className="w-full py-4 bg-[#FDB913] text-slate-900 rounded-2xl font-bold hover:bg-[#e5a611] transition-all shadow-lg shadow-[#FDB913]/20"
               >

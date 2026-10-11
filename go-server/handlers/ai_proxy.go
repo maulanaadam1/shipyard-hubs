@@ -205,7 +205,7 @@ Total Keseluruhan Uang Material Relevan di Database: Rp %s
 %s
 
 ATURAN KRUSIAL AGEN AI:
-1. Angka "Total Keseluruhan Uang" di atas dihitung otomatis 100% presisi oleh mesin SQL PostgreSQL. Jika ditanya total biaya, WAJIB gunakan angka tersebut!
+1. Angka "Total Keseluruhan Uang" di atas dihitung otomatis 100%% presisi oleh mesin SQL PostgreSQL. Jika ditanya total biaya, WAJIB gunakan angka tersebut!
 2. Baris rincian di atas adalah kutipan otentik 1:1 dari database. Jangan pernah menebak atau berhalusinasi di luar tabel di atas.
 `, woCount, formatNum(woTotalCost), strings.Join(topShips, "\n- "), strings.Join(topVendors, "\n- "), userQuestion, formatNum(totalMatchedJobCost), formatNum(totalMatchedMatCost), woStr, bStr, mStr)
 

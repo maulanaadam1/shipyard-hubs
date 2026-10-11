@@ -1,0 +1,62 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  frontend:
+    name: Frontend (tests, types, build)
+    runs-on: ubuntu-latest
+    env:
+      # Existing TypeScript errors on main. CI fails only if a change adds more;
+      # lower this number whenever errors are fixed.
+      TS_ERROR_BASELINE: 38
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          # Node 24 runs the .ts imports in the node:test files natively.
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - name: Unit tests
+        run: npm test
+      - name: Type check (no new errors)
+        run: |
+          count=$(npx tsc --noEmit -p . | grep -c "error TS" || true)
+          echo "TypeScript errors: $count (baseline $TS_ERROR_BASELINE)"
+          if [ "$count" -gt "$TS_ERROR_BASELINE" ]; then
+            npx tsc --noEmit -p . || true
+            echo "::error::TypeScript errors increased from $TS_ERROR_BASELINE to $count"
+            exit 1
+          fi
+      - name: Build
+        run: npm run build
+
+  backend:
+    name: Backend (vet, test, build)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: go-server
+    env:
+      # go-server/scripts holds standalone one-off programs (several main funcs).
+      GO_PACKAGES: . ./db/... ./handlers/... ./middleware/... ./workers/...
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go-server/go.mod
+          cache-dependency-path: go-server/go.sum
+      - name: Vet
+        run: go vet $GO_PACKAGES
+      - name: Test
+        run: go test $GO_PACKAGES
+      - name: Build
+        run: go build -o /dev/null .
