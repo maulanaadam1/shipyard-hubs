@@ -39,3 +39,23 @@ curl.txt
 
 # Local scratch / build caches
 scratch/
+
+# Data dumps from SIAGA / production (business data, keep out of the repo)
+APSample.json
+WOXA.json
+responseWOdetail.json
+
+# Local test credentials and one-off scripts
+go-server/login.json
+go-server/test_login.py
+go-server/workorder.txt
+scratch_eval.*
+calc.js
+calc.cjs
+test.js
+
+# Build artifacts
+*.tsbuildinfo
+
+# Claude Code local settings (dev-server launch config)
+.claude/
