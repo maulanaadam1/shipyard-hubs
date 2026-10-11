@@ -296,60 +296,33 @@ export default function WorkOrderDashboard() {
     }
   }, [selectedRow]);
 
-  // Fetch Master Components on mount for a base map
-  useEffect(() => {
-    const fetchComponents = async () => {
-      try {
-        const { data, error } = await api.from('master_components').select();
-        if (!error && data) {
-          const map: Record<string, any> = {};
-          data.forEach((c: any) => {
-            const cleanId = c.id?.toString().replace(/\.0$/, '');
-            map[cleanId] = c;
-          });
-          setMasterComponentsMap(map);
-        }
-      } catch (err) {
-        console.error("Failed to load master components", err);
-      }
-    };
-    fetchComponents();
-  }, []);
-
-  // Dynamically fetch missing master components for the current detail view
+  // Master component names are needed only inside the detail modal, so fetch just
+  // the components the open WO references, in one request (the full table is
+  // ~12k rows / several MB and used to be downloaded on every page load).
+  const requestedComponentIdsRef = useRef<Set<string>>(new Set());
   useEffect(() => {
     if (!detailedRowData || !detailedRowData.t_requisition_details) return;
 
+    const cleanId = (id: any) => id?.toString().replace(/\.0$/, '');
+    const missingIds = Array.from(new Set<string>(
+      detailedRowData.t_requisition_details
+        .map((req: any) => cleanId(req.m_component_id))
+        .filter((id: string | undefined): id is string => !!id && !masterComponentsMap[id] && !requestedComponentIdsRef.current.has(id))
+    ));
+    if (missingIds.length === 0) return;
+    missingIds.forEach(id => requestedComponentIdsRef.current.add(id));
+
     const fetchMissing = async () => {
-      let missingIds: string[] = [];
-      detailedRowData.t_requisition_details.forEach((req: any) => {
-        if (req.m_component_id && !masterComponentsMap[req.m_component_id.toString()]) {
-          missingIds.push(req.m_component_id.toString());
-        }
-      });
-
-      // Deduplicate
-      missingIds = Array.from(new Set(missingIds));
-      if (missingIds.length === 0) return;
-
-      const newMap = { ...masterComponentsMap };
-      let updated = false;
-
-      // Fetch each missing ID individually (since bulk IN is not supported locally)
-      for (const id of missingIds) {
-        try {
-          const { data, error } = await api.from('master_components').eq('id', id).select();
-          if (!error && data && data.length > 0) {
-            newMap[id] = data[0];
-            updated = true;
-          }
-        } catch (e) {
-          console.error("Failed to fetch component ID", id, e);
-        }
-      }
-
-      if (updated) {
-        setMasterComponentsMap(newMap);
+      try {
+        const { data, error } = await api.from('master_components').in('id', missingIds).select();
+        if (error || !data || data.length === 0) return;
+        setMasterComponentsMap(prev => {
+          const next = { ...prev };
+          data.forEach((c: any) => { next[cleanId(c.id)] = c; });
+          return next;
+        });
+      } catch (e) {
+        console.error("Failed to fetch master components", e);
       }
     };
 

@@ -406,8 +406,21 @@ export function DataProvider({ children }: { children: ReactNode }) {
   // Ref to hold latest user ID — prevents stale closure inside fetchData useCallback
   const currentUserIdRef = React.useRef<string | null>(null);
 
+  // Concurrent callers (StrictMode's double effects, login + refresh) share one
+  // in-flight load instead of each downloading every master table again.
+  const inFlightFetchRef = React.useRef<Promise<void> | null>(null);
+
   // --- Fetch Initial Data ---
-  const fetchData = useCallback(async (isInitial = false) => {
+  const fetchData = useCallback((isInitial = false): Promise<void> => {
+    if (inFlightFetchRef.current) return inFlightFetchRef.current;
+    const load = loadAllData(isInitial).finally(() => {
+      inFlightFetchRef.current = null;
+    });
+    inFlightFetchRef.current = load;
+    return load;
+  }, []);
+
+  const loadAllData = async (isInitial: boolean) => {
     // Check if we have a session token before fetching
     const localToken = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null;
     let hasSession = !!localToken;
@@ -442,6 +455,14 @@ export function DataProvider({ children }: { children: ReactNode }) {
       ]);
       if (rolesRes.data) setRolesMaster(rolesRes.data as RoleMaster[]);
       if (permsRes.data) setRolePermissions(permsRes.data as RolePermission[]);
+
+      // Permissions are all the shell needs to render the menu and the current
+      // page; the master tables below fill in as they arrive instead of holding
+      // every page behind the loading screen.
+      if (isInitial) {
+        clearTimeout(timeoutId);
+        setIsLoading(false);
+      }
 
       // Priority 2: Everything else
       const results = await Promise.allSettled([
@@ -500,7 +521,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
       setHasInitialLoaded(true);
       console.log('Data fetch completed.');
     }
-  }, []);
+  };
 
   const markNotificationRead = async (id: string) => {
     try {
@@ -543,16 +564,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     setMounted(true);
-    fetchData(true);
   }, []);
-
-  // Fetch data immediately after login
-  useEffect(() => {
-    if (currentUser?.id) {
-      console.log('User logged in: ' + currentUser.name + '. Fetching data...');
-      fetchData(true); // Use true to show loading spinner during first fetch after login
-    }
-  }, [currentUser?.id, fetchData]);
 
   useEffect(() => {
     const updateActivity = () => {
@@ -636,14 +648,14 @@ export function DataProvider({ children }: { children: ReactNode }) {
         window.removeEventListener('scroll', throttledUpdateActivity);
       }
     };
-  }, [fetchData, currentUser?.id]);
+  }, []);
 
-  // Sync ref and re-fetch whenever user logs in/out (fixes stale closure in fetchData)
+  // Load everything once per signed-in user. The ref is set first so the same
+  // request also fetches that user's notifications (fixes stale closure in fetchData).
   useEffect(() => {
     currentUserIdRef.current = currentUser?.id ?? null;
     if (currentUser?.id) {
-      // Immediately fetch fresh data (including notifications) for this user
-      fetchData(false);
+      fetchData(true); // shows the loading screen until the first load finishes
     }
   }, [currentUser?.id, fetchData]);
 

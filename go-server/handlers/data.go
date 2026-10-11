@@ -283,7 +283,25 @@ func GetData(w http.ResponseWriter, r *http.Request) {
 		// Generic filter from query params (e.g. eq('column', 'value'))
 		filterCol := r.URL.Query().Get("filter_col")
 		filterVal := r.URL.Query().Get("filter_val")
-		if filterCol != "" && filterVal != "" {
+		inCol, inVals := r.URL.Query().Get("in_col"), r.URL.Query().Get("in")
+		if inCol != "" && inVals != "" {
+			// in('column', [...]) — e.g. fetch only the master components a WO uses.
+			if !sqlIdentifier.MatchString(inCol) {
+				writeJSON(w, 400, map[string]string{"error": "Invalid filter column"})
+				return
+			}
+			vals := strings.Split(inVals, ",")
+			if len(vals) > 1000 {
+				writeJSON(w, 400, map[string]string{"error": "Too many values in 'in' filter (max 1000)"})
+				return
+			}
+			marks := make([]string, 0, len(vals))
+			for _, v := range vals {
+				marks = append(marks, "?")
+				args = append(args, strings.TrimSpace(v))
+			}
+			query += fmt.Sprintf(" WHERE %s IN (%s)", inCol, strings.Join(marks, ", "))
+		} else if filterCol != "" && filterVal != "" {
 			if !sqlIdentifier.MatchString(filterCol) {
 				writeJSON(w, 400, map[string]string{"error": "Invalid filter column"})
 				return
@@ -293,7 +311,7 @@ func GetData(w http.ResponseWriter, r *http.Request) {
 		} else {
 			// Also check for direct column filters (e.g. ?unique_id=...)
 			for col, vals := range r.URL.Query() {
-				if col == "order" || col == "ascending" || col == "filter_col" || col == "filter_val" {
+				if col == "order" || col == "ascending" || col == "filter_col" || col == "filter_val" || col == "in_col" || col == "in" {
 					continue
 				}
 				// Basic whitelist for security

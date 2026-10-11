@@ -141,7 +141,11 @@ func upsertSummaryListFields(items []workOrderSummary) error {
 			return err
 		}
 	}
-	return tx.Commit()
+	if err := tx.Commit(); err != nil {
+		return err
+	}
+	InvalidateWorkOrderCache()
+	return nil
 }
 
 // ---------------------------------------------------------------------------
@@ -345,7 +349,11 @@ func writeDetailDerived(items []detailDerived) error {
 			return err
 		}
 	}
-	return tx.Commit()
+	if err := tx.Commit(); err != nil {
+		return err
+	}
+	InvalidateWorkOrderCache()
+	return nil
 }
 
 // ---------------------------------------------------------------------------
@@ -470,6 +478,7 @@ func rebuildWorkOrderDerived() error {
 	}
 	db.Exec("DELETE FROM app_meta WHERE key = 'wo_derived_version'")
 	db.Exec("INSERT INTO app_meta (key, value) VALUES ('wo_derived_version', ?)", derivedDataVersion)
+	InvalidateWorkOrderCache()
 	log.Printf("[WO DERIVED] rebuilt summary financials and daily costs for %d work orders in %s", total, time.Since(start).Round(time.Second))
 	return nil
 }
