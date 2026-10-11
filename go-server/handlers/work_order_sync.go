@@ -220,9 +220,8 @@ func fetchRemoteWorkOrderDetail(src detailSource, woID string) ([]byte, error) {
 }
 
 // storeWorkOrderDetail saves the raw detail and refreshes the summary
-// financials. The AI tables are refreshed synchronously when syncETL is set
-// (background worker) and in a goroutine otherwise (interactive request).
-func storeWorkOrderDetail(woID string, body []byte, syncETL bool) error {
+// financials and daily ledger.
+func storeWorkOrderDetail(woID string, body []byte) error {
 	if _, err := db.Exec(
 		"INSERT INTO work_order_details (wo_id, raw_json, last_sync) VALUES (?, ?, CURRENT_TIMESTAMP) ON CONFLICT(wo_id) DO UPDATE SET raw_json = excluded.raw_json, last_sync = CURRENT_TIMESTAMP",
 		woID, string(body),
@@ -231,13 +230,6 @@ func storeWorkOrderDetail(woID string, body []byte, syncETL bool) error {
 	}
 	if err := writeDetailDerived([]detailDerived{deriveFromDetail(woID, body)}); err != nil {
 		log.Printf("[WO SUMMARY ERROR] %s: %v", woID, err)
-	}
-	if syncETL {
-		if err := workers.ExtractToAITables(woID, body); err != nil {
-			log.Printf("[AI ETL ERROR] %s: %v", woID, err)
-		}
-	} else {
-		go workers.ExtractToAITables(woID, body)
 	}
 	return nil
 }
@@ -692,7 +684,7 @@ func runDetailBatch() {
 			}
 			body, err := fetchRemoteWorkOrderDetail(src, woID)
 			if err == nil {
-				err = storeWorkOrderDetail(woID, body, true)
+				err = storeWorkOrderDetail(woID, body)
 			}
 			detailWorker.Lock()
 			defer detailWorker.Unlock()

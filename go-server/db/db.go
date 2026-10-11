@@ -555,73 +555,11 @@ func createTables() {
 		}
 	}
 
-	// ---------------------------------------------------------
-	// AI-First LLM Flattened Tables (One Big Table Architecture)
-	// ---------------------------------------------------------
-	DB.Exec(`CREATE TABLE IF NOT EXISTS ai_work_orders (
-		wo_id TEXT PRIMARY KEY,
-		wo_code TEXT,
-		jo_id TEXT,
-		jo_code TEXT,
-		vendor_name TEXT,
-		ship_name TEXT,
-		total_cost_contract NUMERIC,
-		status_approval TEXT,
-		approval_date TEXT,
-		last_updated TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-		created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-	);`)
-
-	DB.Exec(`CREATE TABLE IF NOT EXISTS ai_wo_breakdowns (
-		id TEXT PRIMARY KEY,
-		wo_id TEXT,
-		jo_id TEXT,
-		vendor_name TEXT,
-		ship_name TEXT,
-		parent_id TEXT,
-		path TEXT,
-		label TEXT,
-		remark TEXT,
-		volume NUMERIC,
-		unit TEXT,
-		price NUMERIC,
-		total_price NUMERIC,
-		approved_level INTEGER,
-		status_approval TEXT,
-		approval_date TEXT,
-		last_updated TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-		created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-	);`)
-
-	DB.Exec(`CREATE TABLE IF NOT EXISTS ai_material_deliveries (
-		id TEXT PRIMARY KEY,
-		wo_id TEXT,
-		jo_id TEXT,
-		vendor_name TEXT,
-		ship_name TEXT,
-		requisition_id TEXT,
-		component_code TEXT,
-		component_name TEXT,
-		part_no TEXT,
-		qty_delivered NUMERIC,
-		unit TEXT,
-		unit_price NUMERIC,
-		total_price NUMERIC,
-		currency TEXT,
-		delivery_code TEXT,
-		delivery_date TEXT,
-		receiver_name TEXT,
-		receiver_vendor TEXT,
-		created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-	);`)
-
-	// Safe schema migrations for existing AI tables
-	DB.Exec("ALTER TABLE ai_work_orders RENAME COLUMN status_pekerjaan TO status_approval")
-	DB.Exec("ALTER TABLE ai_work_orders ADD COLUMN status_approval TEXT")
-	DB.Exec("ALTER TABLE ai_work_orders ADD COLUMN approval_date TEXT")
-	DB.Exec("ALTER TABLE ai_work_orders ADD COLUMN last_updated TIMESTAMP DEFAULT CURRENT_TIMESTAMP")
-	DB.Exec("ALTER TABLE ai_wo_breakdowns ADD COLUMN approval_date TEXT")
-	DB.Exec("ALTER TABLE ai_wo_breakdowns ADD COLUMN last_updated TIMESTAMP DEFAULT CURRENT_TIMESTAMP")
+	// The ai_* tables (a separate, inconsistent copy of WO data for the AI
+	// Analyzer) are retired; drop them wherever they still exist.
+	DB.Exec("DROP TABLE IF EXISTS ai_material_deliveries")
+	DB.Exec("DROP TABLE IF EXISTS ai_wo_breakdowns")
+	DB.Exec("DROP TABLE IF EXISTS ai_work_orders")
 }
 
 func seedMasterStatusDock() {

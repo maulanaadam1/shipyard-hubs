@@ -52,9 +52,6 @@ func main() {
 	} else {
 		workers.StartSyncWorker()
 		handlers.StartWorkOrderDetailWorker()
-
-		// Jalankan background AI ETL backfill secara otomatis
-		go workers.RunAIEtlBackfill()
 	}
 
 	r := chi.NewRouter()
@@ -71,10 +68,6 @@ func main() {
 	// Public routes (no auth required)
 	r.Post("/api/auth/login", handlers.Login)
 	r.Get("/api/auth/session", handlers.GetSession)
-
-	// AI Proxy Routes (with live PostgreSQL Database RAG)
-	r.Post("/api/chat/sumopod", handlers.PostSumopodProxy)
-	r.Post("/api/chat/ollama", handlers.PostOllamaProxy)
 
 	// Protected routes (require valid JWT)
 	r.Group(func(r chi.Router) {
@@ -108,7 +101,6 @@ func main() {
 
 		// System endpoints
 		// Heavy full-table jobs: Admin only.
-		r.With(appMiddleware.RequireRole("Admin")).Get("/api/system/run-ai-etl", handlers.RunAIEtl)
 		r.With(appMiddleware.RequireRole("Admin")).Post("/api/system/work-orders/backfill-summary", handlers.BackfillWorkOrderSummariesHandler)
 		r.With(appMiddleware.RequireRole("Admin")).Post("/api/system/work-orders/rebuild-derived", handlers.RebuildWorkOrderDerivedHandler)
 		r.With(appMiddleware.RequireRole("Admin")).Post("/api/system/work-orders/reprocess-list", handlers.ReprocessStoredWorkOrderListHandler)

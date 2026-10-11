@@ -89,7 +89,7 @@ func SyncWorkOrderDetail(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := storeWorkOrderDetail(woID, bodyBytes, false); err != nil {
+	if err := storeWorkOrderDetail(woID, bodyBytes); err != nil {
 		log.Printf("Database Insert Error: %v", err)
 		http.Error(w, `{"error": "Failed to save to database"}`, http.StatusInternalServerError)
 		return
@@ -507,7 +507,7 @@ func PostBulkPendingApprovals(w http.ResponseWriter, r *http.Request) {
 							resp.Body.Close()
 							rawJson = bodyBytes
 							// Saves the detail and summary; AI tables are refreshed in the background.
-							if err := storeWorkOrderDetail(id, bodyBytes, false); err != nil {
+							if err := storeWorkOrderDetail(id, bodyBytes); err != nil {
 								log.Printf("Database Insert Error for WO %s: %v", id, err)
 							}
 
@@ -757,33 +757,4 @@ func PostBulkPendingApprovals(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(result)
-}
-
-// RunAIEtl triggers the AI extractor for all existing Work Orders in the database.
-func RunAIEtl(w http.ResponseWriter, r *http.Request) {
-	rows, err := db.Query("SELECT wo_id, raw_json FROM work_order_details")
-	if err != nil {
-		http.Error(w, err.Error(), 500)
-		return
-	}
-	defer rows.Close()
-
-	count := 0
-	for rows.Next() {
-		var id, rawJson string
-		if err := rows.Scan(&id, &rawJson); err == nil {
-			err = workers.ExtractToAITables(id, []byte(rawJson))
-			if err != nil {
-				log.Printf("[AI ETL ERROR] WO %s: %v", id, err)
-			} else {
-				count++
-			}
-		}
-	}
-
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]interface{}{
-		"success": true,
-		"message": fmt.Sprintf("Berhasil mengekstrak %d Work Orders lama ke tabel AI", count),
-	})
 }
