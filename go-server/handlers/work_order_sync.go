@@ -340,6 +340,43 @@ func writeDetailDerived(items []detailDerived) error {
 		if err := flush(); err != nil {
 			return err
 		}
+
+		// Flattened leaf items, replaced per WO like the ledger.
+		if _, err := tx.Exec(db.FormatQuery("DELETE FROM wo_items WHERE wo_id IN ("+strings.Join(idMarks, ", ")+")"), idArgs...); err != nil {
+			return err
+		}
+		const itemBatch = 250
+		var itemRows []string
+		var itemArgs []interface{}
+		flushItems := func() error {
+			if len(itemRows) == 0 {
+				return nil
+			}
+			_, err := tx.Exec(db.FormatQuery(`INSERT INTO wo_items (wo_id, item_id, activity_path, activity_name, category, path, label, unit,
+				volume, unit_price, total_price, approved_level, status, approval_date) VALUES `+strings.Join(itemRows, ", ")+`
+				ON CONFLICT(wo_id, item_id) DO NOTHING`), itemArgs...)
+			itemRows, itemArgs = itemRows[:0], itemArgs[:0]
+			return err
+		}
+		for _, d := range chunk {
+			for i, it := range d.summary.Items {
+				id := it.ItemID
+				if id == "" {
+					id = fmt.Sprintf("%s#%d", it.Path, i) // items without an id still get a stable key
+				}
+				itemRows = append(itemRows, "(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")
+				itemArgs = append(itemArgs, d.summary.WOID, id, it.ActivityPath, it.ActivityName, it.Category, it.Path, it.Label, it.Unit,
+					it.Volume, it.UnitPrice, it.TotalPrice, it.Level, it.Status, it.ApprovalDate)
+				if len(itemRows) >= itemBatch {
+					if err := flushItems(); err != nil {
+						return err
+					}
+				}
+			}
+		}
+		if err := flushItems(); err != nil {
+			return err
+		}
 	}
 	if err := tx.Commit(); err != nil {
 		return err
@@ -354,7 +391,7 @@ func writeDetailDerived(items []detailDerived) error {
 
 // derivedDataVersion changes whenever the way summary financials or the daily
 // ledger are computed changes; a mismatch triggers a one-time local rebuild.
-const derivedDataVersion = "2026-10-11.daily-costs"
+const derivedDataVersion = "2026-10-12.wo-items"
 
 type rebuildProgress struct {
 	Running    bool   `json:"running"`

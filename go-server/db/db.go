@@ -480,6 +480,34 @@ func createTables() {
 	);`)
 	DB.Exec("CREATE INDEX IF NOT EXISTS idx_wo_daily_costs_date ON work_order_daily_costs(cost_date)")
 
+	// Leaf work items of every WO detail (flattened from repair_list), written
+	// in the same pass as the summary financials so they always add up.
+	DB.Exec(`CREATE TABLE IF NOT EXISTS wo_items (
+		wo_id TEXT NOT NULL,
+		item_id TEXT NOT NULL,
+		activity_path TEXT,
+		activity_name TEXT,
+		category TEXT,
+		path TEXT,
+		label TEXT,
+		unit TEXT,
+		volume NUMERIC DEFAULT 0,
+		unit_price NUMERIC DEFAULT 0,
+		total_price NUMERIC DEFAULT 0,
+		approved_level INTEGER DEFAULT 0,
+		status TEXT,
+		approval_date TEXT,
+		PRIMARY KEY (wo_id, item_id)
+	);`)
+	DB.Exec("CREATE INDEX IF NOT EXISTS idx_wo_items_category ON wo_items(category)")
+	DB.Exec("CREATE INDEX IF NOT EXISTS idx_wo_items_approval_date ON wo_items(approval_date)")
+	if os.Getenv("DB_CONNECTION") == "postgres" {
+		// Fast substring search on item / activity names (needs pg_trgm; skipped if unavailable).
+		DB.Exec("CREATE EXTENSION IF NOT EXISTS pg_trgm")
+		DB.Exec("CREATE INDEX IF NOT EXISTS idx_wo_items_label_trgm ON wo_items USING gin (lower(label) gin_trgm_ops)")
+		DB.Exec("CREATE INDEX IF NOT EXISTS idx_wo_items_activity_trgm ON wo_items USING gin (lower(activity_name) gin_trgm_ops)")
+	}
+
 	// Small key/value store for app-level markers (e.g. derived-data version).
 	DB.Exec(`CREATE TABLE IF NOT EXISTS app_meta (
 		key TEXT PRIMARY KEY,
