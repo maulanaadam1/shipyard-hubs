@@ -50,6 +50,9 @@ const STATUS_STYLE: Record<string, string> = {
 
 const PAGE_SIZES = [25, 50, 100];
 
+const FIELD_LABEL = 'block text-[11px] font-bold uppercase tracking-wide text-slate-500';
+const FIELD_INPUT = 'w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-sm outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500';
+
 export default function WorkOrderItems() {
   const [view, setView] = useState<View>('list');
   const [searchTerm, setSearchTerm] = useState('');
@@ -331,38 +334,49 @@ export default function WorkOrderItems() {
             ))}
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-            <div className="relative lg:col-span-2">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-              <input
-                type="text"
-                value={searchTerm}
-                onChange={e => setSearchTerm(e.target.value)}
-                placeholder="Cari item atau aktivitas (mis. cleaning, plat, sandblasting)…"
-                className="w-full pl-10 pr-4 py-2 bg-white border border-slate-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-indigo-200 focus:border-indigo-400"
-              />
+          {/* Every filter: a title above and the same width (one grid cell each). */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-x-4 gap-y-3">
+            <div className="space-y-1">
+              <label className={FIELD_LABEL}>Pencarian Item / Aktivitas</label>
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                <input
+                  type="text"
+                  value={searchTerm}
+                  onChange={e => setSearchTerm(e.target.value)}
+                  placeholder="mis. cleaning, plat, sandblasting"
+                  className={`${FIELD_INPUT} pl-9`}
+                />
+              </div>
             </div>
-            <SearchableSelect value={category} onChange={setCategory} options={facets?.categories || []} allLabel="Semua Kategori" />
-            <select
-              value={status}
-              onChange={e => setStatus(e.target.value)}
-              className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-sm outline-none"
-            >
-              <option value="All">Semua Status</option>
-              <option value="approved">Approved</option>
-              <option value="pending">Pending</option>
-              <option value="rejected">Rejected</option>
-            </select>
-            <div className="lg:col-span-2">
+            <div className="space-y-1">
+              <label className={FIELD_LABEL}>Kategori</label>
+              <SearchableSelect value={category} onChange={setCategory} options={facets?.categories || []} allLabel="Semua Kategori" />
+            </div>
+            <div className="space-y-1">
+              <label className={FIELD_LABEL}>Status Approval</label>
+              <select value={status} onChange={e => setStatus(e.target.value)} className={FIELD_INPUT}>
+                <option value="All">Semua Status</option>
+                <option value="approved">Approved</option>
+                <option value="pending">Pending</option>
+                <option value="rejected">Rejected</option>
+              </select>
+            </div>
+            <div className="space-y-1">
+              <label className={FIELD_LABEL}>Proyek</label>
               <SearchableSelect value={project} onChange={setProject} options={options.projects} allLabel="Semua Proyek" />
             </div>
-            <SearchableSelect value={vendor} onChange={setVendor} options={options.vendors} allLabel="Semua Vendor" />
-            <div className="flex items-center gap-2">
-              <input type="date" value={startDate} onChange={e => setStartDate(e.target.value)} title="Tanggal approval dari"
-                className="w-full px-2 py-2 bg-white border border-slate-200 rounded-xl text-xs outline-none" />
-              <span className="text-slate-400 text-xs">–</span>
-              <input type="date" value={endDate} onChange={e => setEndDate(e.target.value)} title="Tanggal approval sampai"
-                className="w-full px-2 py-2 bg-white border border-slate-200 rounded-xl text-xs outline-none" />
+            <div className="space-y-1">
+              <label className={FIELD_LABEL}>Vendor</label>
+              <SearchableSelect value={vendor} onChange={setVendor} options={options.vendors} allLabel="Semua Vendor" />
+            </div>
+            <div className="space-y-1">
+              <label className={FIELD_LABEL}>Tanggal Approval Dari</label>
+              <input type="date" value={startDate} onChange={e => setStartDate(e.target.value)} className={FIELD_INPUT} />
+            </div>
+            <div className="space-y-1">
+              <label className={FIELD_LABEL}>Tanggal Approval Sampai</label>
+              <input type="date" value={endDate} onChange={e => setEndDate(e.target.value)} className={FIELD_INPUT} />
             </div>
           </div>
           <p className="text-[11px] text-slate-400">Filter tanggal memakai tanggal approval item, jadi hanya item yang sudah approved yang ikut.</p>
