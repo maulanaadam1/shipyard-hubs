@@ -424,6 +424,13 @@ func applyFinancialsFromDetail(summary workOrderSummary, raw []byte) workOrderSu
 				processItems(children, act)
 				continue
 			}
+			if activity == nil {
+				// An activity with no work items under it carries only its
+				// "price", which is the activity / project contract value (e.g.
+				// a whole newbuilding repeated in several WOs), not a WO cost.
+				// WO costs come from work items only, as in lib/work-order-cost.ts.
+				continue
+			}
 
 			baseCost := parseFloatAny(item["volume_cost_final"])
 			if baseCost == 0 {

@@ -391,7 +391,7 @@ func writeDetailDerived(items []detailDerived) error {
 
 // derivedDataVersion changes whenever the way summary financials or the daily
 // ledger are computed changes; a mismatch triggers a one-time local rebuild.
-const derivedDataVersion = "2026-10-12.wo-items"
+const derivedDataVersion = "2026-10-12.work-items-only"
 
 type rebuildProgress struct {
 	Running    bool   `json:"running"`

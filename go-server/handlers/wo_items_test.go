@@ -105,3 +105,22 @@ func TestWorkOrderItemsAPI(t *testing.T) {
 		t.Errorf("category summary: %v", sum.Data)
 	}
 }
+
+func TestActivityWithoutItemsIsNotACost(t *testing.T) {
+	// A newbuilding activity carries the project contract value in "price" and
+	// has no work items; it must not count as WO cost (it repeats across WOs).
+	raw := []byte(`{"data": {"id": 500, "min_approval_level": 0, "updated_at": "2026-10-05 09:00:00", "total_cost": 0,
+		"repair_list": [
+			{"id": "act-nb", "path": "1", "parameter": {"path_name": "PEMBANGUNAN 1 UNIT KAPAL BARU"}, "unit": "Ls", "price": "73290000000.00", "material": []},
+			{"id": "act-2", "path": "2", "parameter": {"path_name": "LAMBUNG > Plat"}, "price": "999", "material": [
+				{"id": "it-9", "path": "2.1", "label": "Ganti plat", "unit": "kg", "volume": 10, "volume_cost_final": 15000, "approved_level": 0, "status_approval": "waiting"}
+			]}
+		]}}`)
+	s := applyFinancialsFromDetail(workOrderSummary{WOID: "500"}, raw)
+	if s.PendingCost != 150000 || s.FinalCost != 0 {
+		t.Errorf("pending=%v final=%v, want pending 150000 from the work item only", s.PendingCost, s.FinalCost)
+	}
+	if len(s.Items) != 1 || s.Items[0].Label != "Ganti plat" {
+		t.Errorf("items = %+v, want only the work item", s.Items)
+	}
+}
