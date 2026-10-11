@@ -1,10 +1,12 @@
 package handlers
 
 import (
+	"database/sql"
 	"encoding/json"
 	"fmt"
 	"log"
 	"net/http"
+	"regexp"
 	"strings"
 
 	"github.com/go-chi/chi/v5"
@@ -73,6 +75,97 @@ var tableToResource = map[string]string{
 	"master_services":    "Utility",
 	"master_employees":   "User Management",
 	"master_components":  "Master Component",
+}
+
+// sqlIdentifier matches a plain column name. Column names taken from the
+// request (filter_col, order) are interpolated into SQL, so anything else is
+// rejected to prevent SQL injection.
+var sqlIdentifier = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*$`)
+
+// invalidColumn returns the first key that isn't a plain column name, or "".
+// Request keys become column names in INSERT/UPDATE statements.
+func invalidColumn(row map[string]any) string {
+	for k := range row {
+		if !sqlIdentifier.MatchString(k) {
+			return k
+		}
+	}
+	return ""
+}
+
+// adminOnlyTables define who can do what; letting a non-Admin write them would
+// let any user with Role Management/import rights grant themselves everything.
+var adminOnlyTables = map[string]bool{"roles_master": true, "role_permissions": true}
+
+// privilegeFields on profiles decide a user's access; only Admins may set them.
+var privilegeFields = []string{"role", "roles", "extra_roles"}
+
+// privilegeChangeDenied reports why a non-Admin write must be refused, or "".
+// For profiles, userID identifies the row being written ("" for a new user):
+// unchanged privilege values pass (forms resend them), new users may only be
+// plain Staff, and any actual change needs an Admin.
+func privilegeChangeDenied(table string, row map[string]any, admin bool, userID string) string {
+	if admin {
+		return ""
+	}
+	if adminOnlyTables[table] {
+		return "Only Admins can change roles and permissions"
+	}
+	if table != "profiles" {
+		return ""
+	}
+	current := map[string]string{"role": "Staff", "roles": "", "extra_roles": ""}
+	if userID != "" {
+		var role, roles, extra sql.NullString
+		if err := db.QueryRow("SELECT role, roles, extra_roles FROM profiles WHERE id = ?", userID).Scan(&role, &roles, &extra); err == nil {
+			current = map[string]string{"role": role.String, "roles": roles.String, "extra_roles": extra.String}
+		}
+	}
+	for _, f := range privilegeFields {
+		v, ok := row[f]
+		if !ok {
+			continue
+		}
+		s := ""
+		if v != nil {
+			s = strings.TrimSpace(fmt.Sprint(v))
+		}
+		if s == current[f] || (f == "role" && s == "" && current[f] == "Staff") {
+			continue
+		}
+		if f == "roles" && userID == "" && (s == "" || s == "Staff") {
+			continue
+		}
+		return "Only Admins can change user roles"
+	}
+	return ""
+}
+
+// isAdminRequest reports whether the caller is an Admin (role re-read from the DB).
+func isAdminRequest(r *http.Request) bool {
+	claims, ok := middleware.GetUserClaims(r)
+	if !ok {
+		return false
+	}
+	var role string
+	if err := db.QueryRow("SELECT role FROM profiles WHERE id = ? OR email = ?", claims.ID, claims.Email).Scan(&role); err != nil {
+		role = claims.Role
+	}
+	return role == "Admin"
+}
+
+// redactRow strips secrets before a row leaves the API: password hashes are
+// never returned, and SIAGA credentials (sync_configs.headers) only to Admins.
+func redactRow(table string, row map[string]any, admin bool) {
+	switch table {
+	case "profiles":
+		delete(row, "password")
+	case "sync_configs":
+		delete(row, "last_response")
+		if !admin {
+			delete(row, "headers")
+		}
+	}
 }
 
 // CheckTablePermission verifies if the user from context has permission for table and action
@@ -191,6 +284,10 @@ func GetData(w http.ResponseWriter, r *http.Request) {
 		filterCol := r.URL.Query().Get("filter_col")
 		filterVal := r.URL.Query().Get("filter_val")
 		if filterCol != "" && filterVal != "" {
+			if !sqlIdentifier.MatchString(filterCol) {
+				writeJSON(w, 400, map[string]string{"error": "Invalid filter column"})
+				return
+			}
 			query += fmt.Sprintf(" WHERE %s = ?", filterCol)
 			args = append(args, filterVal)
 		} else {
@@ -221,6 +318,10 @@ func GetData(w http.ResponseWriter, r *http.Request) {
 		orderBy = defaultOrderCol(table)
 	}
 	if orderBy != "" {
+		if !sqlIdentifier.MatchString(orderBy) {
+			writeJSON(w, 400, map[string]string{"error": "Invalid order column"})
+			return
+		}
 		dir := "DESC"
 		if r.URL.Query().Get("ascending") == "true" {
 			dir = "ASC"
@@ -241,8 +342,10 @@ func GetData(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	admin := isAdminRequest(r)
 	for _, row := range results {
 		parseJSONFields(row)
+		redactRow(table, row, admin)
 	}
 
 	if results == nil {
@@ -297,7 +400,24 @@ func PostData(w http.ResponseWriter, r *http.Request) {
 
 	var resultData []map[string]any
 
+	admin := isAdminRequest(r)
 	for _, item := range items {
+		if bad := invalidColumn(item); bad != "" {
+			writeJSON(w, 400, map[string]string{"error": "Invalid column: " + bad})
+			return
+		}
+		if table == "sync_configs" && !admin {
+			delete(item, "headers")
+		}
+		existingID := ""
+		if v, ok := item[pkCol]; ok && v != nil {
+			existingID = fmt.Sprint(v)
+		}
+		if reason := privilegeChangeDenied(table, item, admin, existingID); reason != "" {
+			writeJSON(w, 403, map[string]string{"error": reason})
+			return
+		}
+
 		// Stringify JSON fields before storing
 		stringifyJSONFields(item)
 
@@ -383,10 +503,10 @@ func PostData(w http.ResponseWriter, r *http.Request) {
 		if err != nil || saved == nil {
 			// Fall back to returning the input item
 			parseJSONFields(item)
-			resultData = append(resultData, item)
-		} else {
-			resultData = append(resultData, saved)
+			saved = item
 		}
+		redactRow(table, saved, admin)
+		resultData = append(resultData, saved)
 	}
 
 	var returning any
@@ -454,6 +574,10 @@ func PutData(w http.ResponseWriter, r *http.Request) {
 	filterCol := q.Get("filter_col")
 	filterVal := q.Get("filter_val")
 	if filterCol != "" && filterVal != "" {
+		if !sqlIdentifier.MatchString(filterCol) {
+			writeJSON(w, 400, map[string]string{"error": "Invalid filter column"})
+			return
+		}
 		conditions = append(conditions, fmt.Sprintf("%s = ?", filterCol))
 		params = append(params, filterVal)
 	}
@@ -472,6 +596,19 @@ func PutData(w http.ResponseWriter, r *http.Request) {
 
 	if len(conditions) == 0 {
 		writeJSON(w, 400, map[string]string{"error": "ID or filter required for PUT"})
+		return
+	}
+
+	if bad := invalidColumn(body); bad != "" {
+		writeJSON(w, 400, map[string]string{"error": "Invalid column: " + bad})
+		return
+	}
+	putAdmin := isAdminRequest(r)
+	if table == "sync_configs" && !putAdmin {
+		delete(body, "headers")
+	}
+	if reason := privilegeChangeDenied(table, body, putAdmin, q.Get("id")); reason != "" {
+		writeJSON(w, 403, map[string]string{"error": reason})
 		return
 	}
 
@@ -519,6 +656,9 @@ func PutData(w http.ResponseWriter, r *http.Request) {
 	if id != "" {
 		result, err := fetchRow(table, pkCol, id)
 		if err == nil {
+			if result != nil {
+				redactRow(table, result, putAdmin)
+			}
 			writeJSON(w, 200, map[string]any{"data": result, "error": nil})
 			return
 		}
@@ -539,6 +679,10 @@ func DeleteData(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, 403, map[string]string{"error": "Forbidden: insufficient permissions for this resource"})
 		return
 	}
+	if adminOnlyTables[table] && !isAdminRequest(r) {
+		writeJSON(w, 403, map[string]string{"error": "Only Admins can change roles and permissions"})
+		return
+	}
 
 	pkCol := getPKCol(table)
 	q := r.URL.Query()
@@ -549,6 +693,10 @@ func DeleteData(w http.ResponseWriter, r *http.Request) {
 	for col, values := range q {
 		if col == "in" || col == "in_col" || col == "order" || col == "ascending" {
 			continue
+		}
+		if !sqlIdentifier.MatchString(col) {
+			writeJSON(w, 400, map[string]string{"error": "Invalid filter column"})
+			return
 		}
 		
 		if col == "id" && values[0] == "all" {

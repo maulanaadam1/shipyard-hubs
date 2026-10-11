@@ -33,3 +33,9 @@ go-server/*.sqlite-wal
 !.vscode/extensions.json
 !.vscode/settings.json
 Thumbs.db
+
+# Local API captures (may contain session cookies / tokens)
+curl.txt
+
+# Local scratch / build caches
+scratch/

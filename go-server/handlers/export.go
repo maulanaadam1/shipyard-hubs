@@ -10,15 +10,28 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
+	"golang.org/x/crypto/bcrypt"
 
 	"shipyard/db"
 )
 
 // ExportCSV handles GET /api/export/:table.csv
-func ExportCSV(w http.ResponseWriter, r *http.Request) {
-	table := chi.URLParam(r, "table")
+// exportAllowed blocks exporting tables that hold credentials to non-Admins.
+func exportAllowed(w http.ResponseWriter, r *http.Request, table string) bool {
 	if !allowedTables[table] {
 		writeJSON(w, 403, map[string]string{"error": "Table not allowed"})
+		return false
+	}
+	if (table == "profiles" || table == "sync_configs") && !isAdminRequest(r) {
+		writeJSON(w, 403, map[string]string{"error": "Admin only"})
+		return false
+	}
+	return true
+}
+
+func ExportCSV(w http.ResponseWriter, r *http.Request) {
+	table := chi.URLParam(r, "table")
+	if !exportAllowed(w, r, table) {
 		return
 	}
 
@@ -48,8 +61,20 @@ func ExportCSV(w http.ResponseWriter, r *http.Request) {
 	writer := csv.NewWriter(w)
 	defer writer.Flush()
 
+	// Columns never exported (password hashes, raw sync payloads).
+	keep := make([]int, 0, len(cols))
+	header := make([]string, 0, len(cols))
+	for i, c := range cols {
+		probe := map[string]any{c: true}
+		redactRow(table, probe, true)
+		if _, ok := probe[c]; ok {
+			keep = append(keep, i)
+			header = append(header, c)
+		}
+	}
+
 	// Write header row
-	if err := writer.Write(cols); err != nil {
+	if err := writer.Write(header); err != nil {
 		return
 	}
 
@@ -64,15 +89,15 @@ func ExportCSV(w http.ResponseWriter, r *http.Request) {
 			continue
 		}
 
-		row := make([]string, len(cols))
-		for i, val := range values {
-			switch v := val.(type) {
+		row := make([]string, 0, len(keep))
+		for _, i := range keep {
+			switch v := values[i].(type) {
 			case nil:
-				row[i] = ""
+				row = append(row, "")
 			case []byte:
-				row[i] = string(v)
+				row = append(row, string(v))
 			default:
-				row[i] = fmt.Sprintf("%v", v)
+				row = append(row, fmt.Sprintf("%v", v))
 			}
 		}
 		writer.Write(row)
@@ -82,8 +107,7 @@ func ExportCSV(w http.ResponseWriter, r *http.Request) {
 // ExportJSON handles GET /api/export/:table.json
 func ExportJSON(w http.ResponseWriter, r *http.Request) {
 	table := chi.URLParam(r, "table")
-	if !allowedTables[table] {
-		writeJSON(w, 403, map[string]string{"error": "Table not allowed"})
+	if !exportAllowed(w, r, table) {
 		return
 	}
 
@@ -108,6 +132,7 @@ func ExportJSON(w http.ResponseWriter, r *http.Request) {
 
 	for _, row := range results {
 		parseJSONFields(row)
+		redactRow(table, row, true)
 	}
 
 	if results == nil {
@@ -125,6 +150,15 @@ func ImportCSV(w http.ResponseWriter, r *http.Request) {
 	table := chi.URLParam(r, "table")
 	if !allowedTables[table] {
 		writeJSON(w, 403, map[string]string{"error": "Table not allowed"})
+		return
+	}
+	if !CheckTablePermission(r, table, "import") {
+		writeJSON(w, 403, map[string]string{"error": "Forbidden: insufficient permissions for this resource"})
+		return
+	}
+	// Bulk-importing users or permissions can grant Admin; keep it Admin-only.
+	if (table == "profiles" || adminOnlyTables[table]) && !isAdminRequest(r) {
+		writeJSON(w, 403, map[string]string{"error": "Only Admins can import users, roles or permissions"})
 		return
 	}
 
@@ -154,6 +188,13 @@ func ImportCSV(w http.ResponseWriter, r *http.Request) {
 	}
 
 	headers := records[0]
+	for _, h := range headers {
+		// Header names become column names in the INSERT statement.
+		if !sqlIdentifier.MatchString(strings.TrimSpace(h)) {
+			writeJSON(w, 400, map[string]string{"error": "Invalid column in CSV header: " + h})
+			return
+		}
+	}
 	pkCol := getPKCol(table)
 
 	tx, err := db.DB.Begin()
@@ -183,6 +224,11 @@ func ImportCSV(w http.ResponseWriter, r *http.Request) {
 		// Ensure PK exists
 		if pkVal, ok := row[pkCol]; !ok || pkVal == "" {
 			row[pkCol] = generateUUID()
+		}
+		// Never store imported passwords in plain text.
+		if pw, ok := row["password"].(string); ok && table == "profiles" && pw != "" && !strings.HasPrefix(pw, "$2a$") {
+			hashed, _ := bcrypt.GenerateFromPassword([]byte(pw), bcrypt.DefaultCost)
+			row["password"] = string(hashed)
 		}
 
 		keys := make([]string, 0, len(row))
