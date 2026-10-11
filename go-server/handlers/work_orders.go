@@ -174,8 +174,8 @@ type woItem struct {
 	Label        string
 	Unit         string
 	Volume       float64
-	UnitPrice    float64
-	TotalPrice   float64
+	UnitCost     float64 // volume_cost_final: cost per unit (SIAGA has no selling price here)
+	TotalCost    float64 // UnitCost x volume
 	Level        int
 	Status       string // approved | pending | rejected
 	ApprovalDate string // YYYY-MM-DD, approved items only
@@ -464,8 +464,8 @@ func applyFinancialsFromDetail(summary workOrderSummary, raw []byte) workOrderSu
 					Label:        label,
 					Unit:         firstString(item, "unit", "volume_unit"),
 					Volume:       parseFloatAny(item["volume"]),
-					UnitPrice:    baseCost,
-					TotalPrice:   costToAdd,
+					UnitCost:     baseCost,
+					TotalCost:    costToAdd,
 					Level:        int(approvedLevel),
 					Status:       status,
 					ApprovalDate: approvalDate,

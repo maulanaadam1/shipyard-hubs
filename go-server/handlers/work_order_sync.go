@@ -353,7 +353,7 @@ func writeDetailDerived(items []detailDerived) error {
 				return nil
 			}
 			_, err := tx.Exec(db.FormatQuery(`INSERT INTO wo_items (wo_id, item_id, activity_path, activity_name, category, path, label, unit,
-				volume, unit_price, total_price, approved_level, status, approval_date) VALUES `+strings.Join(itemRows, ", ")+`
+				volume, unit_cost, total_cost, approved_level, status, approval_date) VALUES `+strings.Join(itemRows, ", ")+`
 				ON CONFLICT(wo_id, item_id) DO NOTHING`), itemArgs...)
 			itemRows, itemArgs = itemRows[:0], itemArgs[:0]
 			return err
@@ -366,7 +366,7 @@ func writeDetailDerived(items []detailDerived) error {
 				}
 				itemRows = append(itemRows, "(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")
 				itemArgs = append(itemArgs, d.summary.WOID, id, it.ActivityPath, it.ActivityName, it.Category, it.Path, it.Label, it.Unit,
-					it.Volume, it.UnitPrice, it.TotalPrice, it.Level, it.Status, it.ApprovalDate)
+					it.Volume, it.UnitCost, it.TotalCost, it.Level, it.Status, it.ApprovalDate)
 				if len(itemRows) >= itemBatch {
 					if err := flushItems(); err != nil {
 						return err

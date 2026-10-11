@@ -77,8 +77,8 @@ func GetWorkOrderItems(w http.ResponseWriter, r *http.Request) {
 	where, args := woItemFilters(q)
 	page, limit := pageParams(q, 25, 200)
 	sortCols := map[string]string{
-		"total_price":   "i.total_price",
-		"unit_price":    "i.unit_price",
+		"total_cost":    "i.total_cost",
+		"unit_cost":     "i.unit_cost",
 		"volume":        "i.volume",
 		"approval_date": "i.approval_date",
 		"label":         "i.label",
@@ -87,16 +87,16 @@ func GetWorkOrderItems(w http.ResponseWriter, r *http.Request) {
 	}
 	sortCol := sortCols[q.Get("sort")]
 	if sortCol == "" {
-		sortCol = "i.total_price"
+		sortCol = "i.total_cost"
 	}
 
 	from := ` FROM wo_items i JOIN work_order_summary s ON s.wo_id = i.wo_id WHERE ` + where
 	var total int
-	var totalValue, totalVolume float64
-	db.QueryRow("SELECT COUNT(*), COALESCE(SUM(i.total_price), 0), COALESCE(SUM(i.volume), 0)"+from, args...).Scan(&total, &totalValue, &totalVolume)
+	var totalCost, totalVolume float64
+	db.QueryRow("SELECT COUNT(*), COALESCE(SUM(i.total_cost), 0), COALESCE(SUM(i.volume), 0)"+from, args...).Scan(&total, &totalCost, &totalVolume)
 
 	rows, err := db.Query(`SELECT i.wo_id, i.item_id, COALESCE(i.category, ''), COALESCE(i.activity_name, ''), COALESCE(i.path, ''),
-			COALESCE(i.label, ''), COALESCE(i.unit, ''), COALESCE(i.volume, 0), COALESCE(i.unit_price, 0), COALESCE(i.total_price, 0),
+			COALESCE(i.label, ''), COALESCE(i.unit, ''), COALESCE(i.volume, 0), COALESCE(i.unit_cost, 0), COALESCE(i.total_cost, 0),
 			COALESCE(i.approved_level, 0), COALESCE(i.status, ''), COALESCE(i.approval_date, ''),
 			COALESCE(s.wo_code, ''), COALESCE(s.jo_code, ''), COALESCE(s.project_name, ''), COALESCE(s.vendor_name, ''),
 			COALESCE(s.ship_name, ''), COALESCE(s.project_type, 'external')`+from+`
@@ -116,8 +116,8 @@ func GetWorkOrderItems(w http.ResponseWriter, r *http.Request) {
 		Label        string  `json:"label"`
 		Unit         string  `json:"unit"`
 		Volume       float64 `json:"volume"`
-		UnitPrice    float64 `json:"unit_price"`
-		TotalPrice   float64 `json:"total_price"`
+		UnitCost     float64 `json:"unit_cost"`
+		TotalCost    float64 `json:"total_cost"`
 		Level        int     `json:"approved_level"`
 		Status       string  `json:"status"`
 		ApprovalDate string  `json:"approval_date"`
@@ -131,8 +131,8 @@ func GetWorkOrderItems(w http.ResponseWriter, r *http.Request) {
 	data := []itemRow{}
 	for rows.Next() {
 		var it itemRow
-		if rows.Scan(&it.WOID, &it.ItemID, &it.Category, &it.ActivityName, &it.Path, &it.Label, &it.Unit, &it.Volume, &it.UnitPrice,
-			&it.TotalPrice, &it.Level, &it.Status, &it.ApprovalDate, &it.WOCode, &it.JOCode, &it.ProjectName, &it.VendorName,
+		if rows.Scan(&it.WOID, &it.ItemID, &it.Category, &it.ActivityName, &it.Path, &it.Label, &it.Unit, &it.Volume, &it.UnitCost,
+			&it.TotalCost, &it.Level, &it.Status, &it.ApprovalDate, &it.WOCode, &it.JOCode, &it.ProjectName, &it.VendorName,
 			&it.ShipName, &it.ProjectType) == nil {
 			data = append(data, it)
 		}
@@ -141,7 +141,7 @@ func GetWorkOrderItems(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]interface{}{
 		"data": data, "total": total, "page": page, "limit": limit,
-		"totalValue": totalValue, "totalVolume": totalVolume,
+		"totalCost": totalCost, "totalVolume": totalVolume,
 	})
 }
 
@@ -162,7 +162,7 @@ var woItemGroups = map[string]struct {
 }
 
 // GetWorkOrderItemSummary aggregates items by the requested group: item and WO
-// counts, total volume and value, and min / weighted-average / max unit price.
+// counts, total volume and cost, and min / volume-weighted average / max unit cost.
 func GetWorkOrderItemSummary(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
 	group, ok := woItemGroups[q.Get("group")]
@@ -172,12 +172,12 @@ func GetWorkOrderItemSummary(w http.ResponseWriter, r *http.Request) {
 	where, args := woItemFilters(q)
 	page, limit := pageParams(q, 25, 200)
 	sortCols := map[string]string{
-		"total_value": "total_value", "item_count": "item_count", "wo_count": "wo_count",
-		"total_volume": "total_volume", "avg_price": "avg_price", "max_price": "max_price", "min_price": "min_price",
+		"total_cost": "total_cost", "item_count": "item_count", "wo_count": "wo_count",
+		"total_volume": "total_volume", "avg_cost": "avg_cost", "max_cost": "max_cost", "min_cost": "min_cost",
 	}
 	sortCol := sortCols[q.Get("sort")]
 	if sortCol == "" {
-		sortCol = "total_value"
+		sortCol = "total_cost"
 	}
 
 	keyList := strings.Join(group.keys, ", ")
@@ -189,12 +189,12 @@ func GetWorkOrderItemSummary(w http.ResponseWriter, r *http.Request) {
 			COUNT(*) AS item_count,
 			COUNT(DISTINCT i.wo_id) AS wo_count,
 			COALESCE(SUM(i.volume), 0) AS total_volume,
-			COALESCE(SUM(i.total_price), 0) AS total_value,
-			COALESCE(MIN(CASE WHEN i.unit_price > 0 THEN i.unit_price END), 0) AS min_price,
-			CASE WHEN SUM(CASE WHEN i.unit_price > 0 THEN i.volume ELSE 0 END) > 0
-				THEN SUM(CASE WHEN i.unit_price > 0 THEN i.total_price ELSE 0 END) / SUM(CASE WHEN i.unit_price > 0 THEN i.volume ELSE 0 END)
-				ELSE 0 END AS avg_price,
-			COALESCE(MAX(i.unit_price), 0) AS max_price`+from+`
+			COALESCE(SUM(i.total_cost), 0) AS total_cost,
+			COALESCE(MIN(CASE WHEN i.unit_cost > 0 THEN i.unit_cost END), 0) AS min_cost,
+			CASE WHEN SUM(CASE WHEN i.unit_cost > 0 THEN i.volume ELSE 0 END) > 0
+				THEN SUM(CASE WHEN i.unit_cost > 0 THEN i.total_cost ELSE 0 END) / SUM(CASE WHEN i.unit_cost > 0 THEN i.volume ELSE 0 END)
+				ELSE 0 END AS avg_cost,
+			COALESCE(MAX(i.unit_cost), 0) AS max_cost`+from+`
 		GROUP BY `+keyList+`
 		ORDER BY `+sortCol+` `+sortDir(q)+`
 		LIMIT ? OFFSET ?`, append(args, limit, (page-1)*limit)...)
@@ -208,18 +208,18 @@ func GetWorkOrderItemSummary(w http.ResponseWriter, r *http.Request) {
 	for rows.Next() {
 		keys := make([]string, len(group.keys))
 		var itemCount, woCount int
-		var volume, value, minPrice, avgPrice, maxPrice float64
+		var volume, cost, minCost, avgCost, maxCost float64
 		dest := make([]interface{}, 0, len(keys)+7)
 		for i := range keys {
 			dest = append(dest, &keys[i])
 		}
-		dest = append(dest, &itemCount, &woCount, &volume, &value, &minPrice, &avgPrice, &maxPrice)
+		dest = append(dest, &itemCount, &woCount, &volume, &cost, &minCost, &avgCost, &maxCost)
 		if rows.Scan(dest...) != nil {
 			continue
 		}
 		row := map[string]interface{}{
-			"item_count": itemCount, "wo_count": woCount, "total_volume": volume, "total_value": value,
-			"min_price": minPrice, "avg_price": avgPrice, "max_price": maxPrice,
+			"item_count": itemCount, "wo_count": woCount, "total_volume": volume, "total_cost": cost,
+			"min_cost": minCost, "avg_cost": avgCost, "max_cost": maxCost,
 		}
 		for i, name := range group.labels {
 			row[name] = keys[i]

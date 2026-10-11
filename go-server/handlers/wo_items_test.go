@@ -29,7 +29,7 @@ func TestFlattenItemsMatchFinancials(t *testing.T) {
 	}
 	sums := map[string]float64{}
 	for _, it := range s.Items {
-		sums[it.Status] += it.TotalPrice
+		sums[it.Status] += it.TotalCost
 		if it.Category != "TANKI-TANKI" || it.ActivityName != "TANKI-TANKI > Cleaning > Buang lumpur" || it.ActivityPath != "4.2" {
 			t.Errorf("activity context missing on %+v", it)
 		}
@@ -77,7 +77,7 @@ func TestWorkOrderItemsAPI(t *testing.T) {
 	var list struct {
 		Data       []map[string]interface{} `json:"data"`
 		Total      int                      `json:"total"`
-		TotalValue float64                  `json:"totalValue"`
+		TotalCost  float64                  `json:"totalCost"`
 	}
 	// Search matches the item label or its activity name.
 	get("/api/wo-items?search=lumpur", &list)
@@ -89,19 +89,19 @@ func TestWorkOrderItemsAPI(t *testing.T) {
 		t.Errorf("search 'kuras': total=%d first=%v", list.Total, list.Data)
 	}
 	get("/api/wo-items?status=approved", &list)
-	if list.Total != 1 || list.TotalValue != 1500000 {
-		t.Errorf("approved items: total=%d value=%v", list.Total, list.TotalValue)
+	if list.Total != 1 || list.TotalCost != 1500000 {
+		t.Errorf("approved items: total=%d value=%v", list.Total, list.TotalCost)
 	}
 
 	var sum struct {
 		Data []map[string]interface{} `json:"data"`
 	}
-	get("/api/wo-items/summary?group=project_item&sort=total_value", &sum)
-	if len(sum.Data) != 3 || sum.Data[0]["label"] != "Cleaning lumpur tanki 3P" || sum.Data[0]["avg_price"] != float64(500000) {
+	get("/api/wo-items/summary?group=project_item&sort=total_cost", &sum)
+	if len(sum.Data) != 3 || sum.Data[0]["label"] != "Cleaning lumpur tanki 3P" || sum.Data[0]["avg_cost"] != float64(500000) {
 		t.Errorf("project_item summary: %v", sum.Data)
 	}
 	get("/api/wo-items/summary?group=category", &sum)
-	if len(sum.Data) != 1 || sum.Data[0]["category"] != "TANKI-TANKI" || sum.Data[0]["total_value"] != float64(1750000) {
+	if len(sum.Data) != 1 || sum.Data[0]["category"] != "TANKI-TANKI" || sum.Data[0]["total_cost"] != float64(1750000) {
 		t.Errorf("category summary: %v", sum.Data)
 	}
 }

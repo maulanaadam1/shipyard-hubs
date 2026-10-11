@@ -4,7 +4,7 @@ import { getHeaders } from '@/lib/api-client';
 import { SearchableSelect } from './SearchableSelect';
 
 // Work items flattened from every WO detail (wo_items), searchable by item,
-// price, project, vendor or activity, with per-group price summaries.
+// cost, project, vendor or activity, with per-group cost summaries.
 
 type View = 'list' | 'project_item' | 'project_activity' | 'activity' | 'category' | 'item' | 'vendor_activity';
 
@@ -13,7 +13,7 @@ const VIEWS: { key: View; label: string }[] = [
   { key: 'project_item', label: 'Per Proyek per Item' },
   { key: 'project_activity', label: 'Per Proyek per Aktivitas' },
   { key: 'activity', label: 'Per Aktivitas' },
-  { key: 'item', label: 'Per Item (Harga)' },
+  { key: 'item', label: 'Per Item (Biaya)' },
   { key: 'category', label: 'Per Kategori' },
   { key: 'vendor_activity', label: 'Per Vendor per Aktivitas' },
 ];
@@ -48,11 +48,11 @@ export default function WorkOrderItems() {
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
   const [page, setPage] = useState(1);
-  const [sort, setSort] = useState('total_price');
+  const [sort, setSort] = useState('total_cost');
   const [dir, setDir] = useState<'asc' | 'desc'>('desc');
   const [rows, setRows] = useState<any[]>([]);
   const [total, setTotal] = useState(0);
-  const [totalValue, setTotalValue] = useState(0);
+  const [totalCost, setTotalCost] = useState(0);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [facets, setFacets] = useState<{ categories: string[]; itemCount: number; woCount: number } | null>(null);
@@ -95,7 +95,7 @@ export default function WorkOrderItems() {
   // Reset paging and sorting when the question changes.
   useEffect(() => { setPage(1); }, [debouncedSearch, projectType, status, category, project, vendor, startDate, endDate, view]);
   useEffect(() => {
-    setSort(view === 'list' ? 'total_price' : 'total_value');
+    setSort('total_cost');
     setDir('desc');
   }, [view]);
 
@@ -123,7 +123,7 @@ export default function WorkOrderItems() {
         if (controller.signal.aborted) return;
         setRows(json.data || []);
         setTotal(json.total || 0);
-        setTotalValue(view === 'list' ? json.totalValue || 0 : 0);
+        setTotalCost(view === 'list' ? json.totalCost || 0 : 0);
       } catch (e: any) {
         if (!controller.signal.aborted) setError('Gagal memuat data item.');
       } finally {
@@ -153,9 +153,9 @@ export default function WorkOrderItems() {
 
   const groupColumns = view === 'list' ? [] : GROUP_COLUMNS[view];
   const summaryCaption = useMemo(() => {
-    if (view === 'list') return `${total.toLocaleString('id-ID')} item · total ${formatIDR(totalValue)}`;
+    if (view === 'list') return `${total.toLocaleString('id-ID')} item · total biaya ${formatIDR(totalCost)}`;
     return `${total.toLocaleString('id-ID')} grup`;
-  }, [view, total, totalValue, isNominalHidden]);
+  }, [view, total, totalCost, isNominalHidden]);
 
   return (
     <div className="min-h-screen bg-slate-50">
@@ -165,7 +165,7 @@ export default function WorkOrderItems() {
             <ListChecks className="text-indigo-500" size={22} /> Item Pekerjaan WO
           </h2>
           <p className="text-xs md:text-sm text-slate-500 mt-1">
-            Cari item pekerjaan, bandingkan harga, dan lihat ringkasan per proyek
+            Cari item pekerjaan, bandingkan biaya, dan lihat ringkasan per proyek
             {facets ? ` · ${facets.itemCount.toLocaleString('id-ID')} item dari ${facets.woCount.toLocaleString('id-ID')} WO` : ''}
           </p>
         </div>
@@ -260,8 +260,8 @@ export default function WorkOrderItems() {
                       <SortHead column="wo_code" align="left">WO / Proyek</SortHead>
                       <th className="py-3 px-4 text-left">Vendor</th>
                       <SortHead column="volume">Volume</SortHead>
-                      <SortHead column="unit_price">Harga Satuan</SortHead>
-                      <SortHead column="total_price">Total</SortHead>
+                      <SortHead column="unit_cost">Biaya Satuan</SortHead>
+                      <SortHead column="total_cost">Total Biaya</SortHead>
                       <th className="py-3 px-4 text-left">Status</th>
                       <SortHead column="approval_date" align="left">Tgl Approval</SortHead>
                     </tr>
@@ -271,10 +271,10 @@ export default function WorkOrderItems() {
                       <SortHead column="item_count">Item</SortHead>
                       <SortHead column="wo_count">WO</SortHead>
                       <SortHead column="total_volume">Total Volume</SortHead>
-                      <SortHead column="min_price">Harga Min</SortHead>
-                      <SortHead column="avg_price">Harga Rata²</SortHead>
-                      <SortHead column="max_price">Harga Maks</SortHead>
-                      <SortHead column="total_value">Total Nilai</SortHead>
+                      <SortHead column="min_cost">Biaya Min</SortHead>
+                      <SortHead column="avg_cost">Biaya Rata²</SortHead>
+                      <SortHead column="max_cost">Biaya Maks</SortHead>
+                      <SortHead column="total_cost">Total Biaya</SortHead>
                     </tr>
                   )}
                 </thead>
@@ -303,8 +303,8 @@ export default function WorkOrderItems() {
                         </td>
                         <td className="py-2.5 px-4 text-slate-600">{r.vendor_name || '-'}</td>
                         <td className="py-2.5 px-4 text-right font-mono whitespace-nowrap">{formatNum(r.volume)} {r.unit}</td>
-                        <td className="py-2.5 px-4 text-right font-mono whitespace-nowrap">{formatIDR(r.unit_price)}</td>
-                        <td className="py-2.5 px-4 text-right font-mono font-semibold whitespace-nowrap">{formatIDR(r.total_price)}</td>
+                        <td className="py-2.5 px-4 text-right font-mono whitespace-nowrap">{formatIDR(r.unit_cost)}</td>
+                        <td className="py-2.5 px-4 text-right font-mono font-semibold whitespace-nowrap">{formatIDR(r.total_cost)}</td>
                         <td className="py-2.5 px-4">
                           <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold capitalize ${STATUS_STYLE[r.status] || 'bg-slate-100 text-slate-600'}`}>{r.status}</span>
                         </td>
@@ -323,10 +323,10 @@ export default function WorkOrderItems() {
                         <td className="py-2.5 px-4 text-right font-mono">{formatNum(r.item_count)}</td>
                         <td className="py-2.5 px-4 text-right font-mono">{formatNum(r.wo_count)}</td>
                         <td className="py-2.5 px-4 text-right font-mono">{formatNum(r.total_volume)}</td>
-                        <td className="py-2.5 px-4 text-right font-mono whitespace-nowrap">{formatIDR(r.min_price)}</td>
-                        <td className="py-2.5 px-4 text-right font-mono whitespace-nowrap">{formatIDR(r.avg_price)}</td>
-                        <td className="py-2.5 px-4 text-right font-mono whitespace-nowrap">{formatIDR(r.max_price)}</td>
-                        <td className="py-2.5 px-4 text-right font-mono font-semibold whitespace-nowrap">{formatIDR(r.total_value)}</td>
+                        <td className="py-2.5 px-4 text-right font-mono whitespace-nowrap">{formatIDR(r.min_cost)}</td>
+                        <td className="py-2.5 px-4 text-right font-mono whitespace-nowrap">{formatIDR(r.avg_cost)}</td>
+                        <td className="py-2.5 px-4 text-right font-mono whitespace-nowrap">{formatIDR(r.max_cost)}</td>
+                        <td className="py-2.5 px-4 text-right font-mono font-semibold whitespace-nowrap">{formatIDR(r.total_cost)}</td>
                       </tr>
                     ))}
                 </tbody>
@@ -346,7 +346,8 @@ export default function WorkOrderItems() {
         </section>
 
         <p className="text-[11px] text-slate-400">
-          Harga rata² = total nilai ÷ total volume (tertimbang volume). Item dihitung dengan aturan yang sama dengan angka dashboard,
+          Nilai adalah biaya dari SIAGA (biaya per satuan × volume), bukan harga jual. Biaya rata² = total biaya ÷ total volume
+          (tertimbang volume); item tanpa biaya per satuan tidak ikut dalam min/rata²/maks. Aturannya sama dengan angka dashboard,
           jadi total per WO selalu cocok.
         </p>
       </main>

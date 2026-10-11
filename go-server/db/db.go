@@ -492,13 +492,16 @@ func createTables() {
 		label TEXT,
 		unit TEXT,
 		volume NUMERIC DEFAULT 0,
-		unit_price NUMERIC DEFAULT 0,
-		total_price NUMERIC DEFAULT 0,
+		unit_cost NUMERIC DEFAULT 0,
+		total_cost NUMERIC DEFAULT 0,
 		approved_level INTEGER DEFAULT 0,
 		status TEXT,
 		approval_date TEXT,
 		PRIMARY KEY (wo_id, item_id)
 	);`)
+	// Values are SIAGA costs (volume_cost_final x volume), not selling prices.
+	DB.Exec("ALTER TABLE wo_items RENAME COLUMN unit_price TO unit_cost")
+	DB.Exec("ALTER TABLE wo_items RENAME COLUMN total_price TO total_cost")
 	DB.Exec("CREATE INDEX IF NOT EXISTS idx_wo_items_category ON wo_items(category)")
 	DB.Exec("CREATE INDEX IF NOT EXISTS idx_wo_items_approval_date ON wo_items(approval_date)")
 	if os.Getenv("DB_CONNECTION") == "postgres" {
