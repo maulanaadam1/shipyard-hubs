@@ -26,7 +26,7 @@ import (
 
 // summaryListColumns are the summary fields owned by the WO list. Financial
 // columns are owned by the detail and are never touched here.
-const summaryListColumns = "wo_id, wo_code, jo_code, project_name, vendor_name, ship_name, status_approval, derived_status, total_cost, created_source_at, updated_source_at, latest_date"
+const summaryListColumns = "wo_id, wo_code, jo_code, project_name, vendor_name, ship_name, status_approval, derived_status, total_cost, created_source_at, updated_source_at, latest_date, project_type"
 
 // ProcessWorkOrderList upserts the list fields of every WO whose list data
 // changed. Registered as the "WorkOrders" list processor in main.
@@ -49,14 +49,14 @@ func ProcessWorkOrderList(body []byte) error {
 	existing := map[string]workOrderSummary{}
 	rows, err := db.Query(`SELECT wo_id, COALESCE(wo_code, ''), COALESCE(jo_code, ''), COALESCE(project_name, ''), COALESCE(vendor_name, ''),
 		COALESCE(ship_name, ''), COALESCE(status_approval, ''), COALESCE(derived_status, ''), COALESCE(total_cost, 0),
-		COALESCE(created_source_at, ''), COALESCE(updated_source_at, '') FROM work_order_summary`)
+		COALESCE(created_source_at, ''), COALESCE(updated_source_at, ''), COALESCE(project_type, '') FROM work_order_summary`)
 	if err != nil {
 		return err
 	}
 	for rows.Next() {
 		var s workOrderSummary
 		if rows.Scan(&s.WOID, &s.WOCode, &s.JOCode, &s.ProjectName, &s.VendorName, &s.ShipName, &s.StatusApproval,
-			&s.DerivedStatus, &s.TotalCost, &s.CreatedSourceAt, &s.UpdatedSourceAt) == nil {
+			&s.DerivedStatus, &s.TotalCost, &s.CreatedSourceAt, &s.UpdatedSourceAt, &s.ProjectType) == nil {
 			existing[s.WOID] = s
 		}
 	}
@@ -93,7 +93,10 @@ func sameListFields(a, b workOrderSummary) bool {
 	return a.WOCode == b.WOCode && a.JOCode == b.JOCode && a.ProjectName == b.ProjectName &&
 		a.VendorName == b.VendorName && a.ShipName == b.ShipName && a.StatusApproval == b.StatusApproval &&
 		a.DerivedStatus == b.DerivedStatus && math.Abs(a.TotalCost-b.TotalCost) < 0.005 &&
-		a.CreatedSourceAt == b.CreatedSourceAt && a.UpdatedSourceAt == b.UpdatedSourceAt
+		a.CreatedSourceAt == b.CreatedSourceAt && a.UpdatedSourceAt == b.UpdatedSourceAt &&
+		// internal is sticky: a list fetched without the internal URL (e.g. by an
+		// older server) must not flip it back to external.
+		(a.ProjectType == b.ProjectType || a.ProjectType == "internal")
 }
 
 // upsertSummaryListFields writes list-owned columns in multi-row batches inside
@@ -115,9 +118,9 @@ func upsertSummaryListFields(items []workOrderSummary) error {
 		placeholders := make([]string, 0, end-start)
 		args := make([]interface{}, 0, (end-start)*12)
 		for _, s := range items[start:end] {
-			placeholders = append(placeholders, "(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")
+			placeholders = append(placeholders, "(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")
 			args = append(args, s.WOID, s.WOCode, s.JOCode, s.ProjectName, s.VendorName, s.ShipName,
-				s.StatusApproval, s.DerivedStatus, s.TotalCost, s.CreatedSourceAt, s.UpdatedSourceAt, s.LatestDate)
+				s.StatusApproval, s.DerivedStatus, s.TotalCost, s.CreatedSourceAt, s.UpdatedSourceAt, s.LatestDate, s.ProjectType)
 		}
 		query := `INSERT INTO work_order_summary (` + summaryListColumns + `) VALUES ` + strings.Join(placeholders, ", ") + `
 			ON CONFLICT(wo_id) DO UPDATE SET
@@ -132,6 +135,7 @@ func upsertSummaryListFields(items []workOrderSummary) error {
 				created_source_at = excluded.created_source_at,
 				updated_source_at = excluded.updated_source_at,
 				latest_date = CASE WHEN COALESCE(work_order_summary.latest_date, '') = '' THEN excluded.latest_date ELSE work_order_summary.latest_date END,
+				project_type = CASE WHEN work_order_summary.project_type = 'internal' THEN 'internal' ELSE excluded.project_type END,
 				updated_at = CURRENT_TIMESTAMP`
 		if _, err := tx.Exec(db.FormatQuery(query), args...); err != nil {
 			return err

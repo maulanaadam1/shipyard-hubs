@@ -14,6 +14,18 @@ import (
 	"shipyard/db"
 )
 
+// projectTypeClause filters on project type ("internal" / "external"); prefix
+// is the table alias with dot ("s.") or "". Rows without a type are external.
+func projectTypeClause(prefix, projectType string) string {
+	switch strings.ToLower(strings.TrimSpace(projectType)) {
+	case "internal":
+		return prefix + "project_type = 'internal'"
+	case "external":
+		return "COALESCE(" + prefix + "project_type, 'external') <> 'internal'"
+	}
+	return ""
+}
+
 // trendBucketClause matches column (a YYYY-MM-DD string) against a trend bucket
 // key as produced by timelineKey for day, week (Monday) or month grouping.
 func trendBucketClause(column, trend, group string) (string, []interface{}) {
@@ -62,6 +74,9 @@ func workOrderSummaryFiltersFromQuery(q url.Values) (string, []interface{}, stri
 	if project := strings.TrimSpace(q.Get("project")); project != "" && project != "All" {
 		where = append(where, "project_name = ?")
 		args = append(args, project)
+	}
+	if clause := projectTypeClause("", q.Get("project_type")); clause != "" {
+		where = append(where, clause)
 	}
 	if start := strings.TrimSpace(q.Get("start_date")); start != "" {
 		where = append(where, "latest_date >= ?")
@@ -114,7 +129,7 @@ func scanWorkOrderSummaryRows(rows *sql.Rows) []workOrderSummary {
 		var item workOrderSummary
 		if rows.Scan(&item.WOID, &item.WOCode, &item.JOCode, &item.ProjectName, &item.VendorName, &item.ShipName, &item.StatusApproval, &item.DerivedStatus,
 			&item.LatestDate, &item.PendingCost, &item.FinalCost, &item.LatestCost, &item.PreviousCost, &item.RejectedCost, &item.TotalCost,
-			&item.CreatedSourceAt, &item.UpdatedSourceAt) == nil {
+			&item.CreatedSourceAt, &item.UpdatedSourceAt, &item.ProjectType) == nil {
 			items = append(items, item)
 		}
 	}
@@ -139,6 +154,7 @@ type workOrderSummary struct {
 	TotalCost       float64 `json:"total_cost"`
 	CreatedSourceAt string  `json:"created_at"`
 	UpdatedSourceAt string  `json:"updated_at"`
+	ProjectType     string  `json:"project_type"`
 	// DailyCosts is the approved cost per approval date (YYYY-MM-DD) derived
 	// from the detail; it sums to FinalCost. Not part of the API payload.
 	DailyCosts map[string]float64 `json:"-"`
@@ -255,7 +271,18 @@ func summaryFromWorkOrderListItem(item map[string]interface{}) workOrderSummary 
 		TotalCost:       totalCost,
 		CreatedSourceAt: createdAt,
 		UpdatedSourceAt: updatedAt,
+		ProjectType:     workOrderProjectType(item),
 	}
+}
+
+// workOrderProjectType classifies a WO list item as internal or external:
+// internal when it came from the project=internal list (see
+// workers.mergeSyncResponses) or SIAGA flags it internal.
+func workOrderProjectType(item map[string]interface{}) string {
+	if strings.EqualFold(firstString(item, "_project_scope"), "internal") || strings.EqualFold(firstString(item, "project"), "internal") {
+		return "internal"
+	}
+	return "external"
 }
 
 func applyFinancialsFromDetail(summary workOrderSummary, raw []byte) workOrderSummary {
@@ -575,7 +602,7 @@ func GetWorkOrders(w http.ResponseWriter, r *http.Request) {
 	rows, err := db.Query(`
 		SELECT wo_id, wo_code, jo_code, project_name, vendor_name, ship_name, status_approval, derived_status,
 			COALESCE(latest_date, ''), pending_cost, final_cost, latest_cost, previous_cost, rejected_cost, total_cost,
-			COALESCE(created_source_at, ''), COALESCE(updated_source_at, '')
+			COALESCE(created_source_at, ''), COALESCE(updated_source_at, ''), COALESCE(project_type, 'external')
 		FROM work_order_summary
 		WHERE `+whereSQL+`
 		ORDER BY `+sortCol+` `+dir+`
@@ -596,7 +623,7 @@ func GetWorkOrdersExport(w http.ResponseWriter, r *http.Request) {
 	rows, err := db.Query(`
 		SELECT wo_id, wo_code, jo_code, project_name, vendor_name, ship_name, status_approval, derived_status,
 			COALESCE(latest_date, ''), pending_cost, final_cost, latest_cost, previous_cost, rejected_cost, total_cost,
-			COALESCE(created_source_at, ''), COALESCE(updated_source_at, '')
+			COALESCE(created_source_at, ''), COALESCE(updated_source_at, ''), COALESCE(project_type, 'external')
 		FROM work_order_summary
 		WHERE `+whereSQL+`
 		ORDER BY `+sortCol+` `+dir+`
@@ -609,10 +636,10 @@ func GetWorkOrdersExport(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "text/csv; charset=utf-8")
 	w.Header().Set("Content-Disposition", `attachment; filename="Export_WorkOrder.csv"`)
-	w.Write([]byte("No;Kode WO;Kode JO;Proyek (Kapal);Vendor Rekanan;Nilai Total;Nilai Sebelumnya;Nilai Saat Ini;Pending Approval;Terakhir Diperbarui;Status Approval\n"))
+	w.Write([]byte("No;Kode WO;Kode JO;Proyek (Kapal);Vendor Rekanan;Nilai Total;Nilai Sebelumnya;Nilai Saat Ini;Pending Approval;Terakhir Diperbarui;Status Approval;Jenis Project\n"))
 
 	for idx, item := range scanWorkOrderSummaryRows(rows) {
-		line := fmt.Sprintf("%d;%s;%s;%s;%s;%.0f;%.0f;%.0f;%.0f;%s;%s\n",
+		line := fmt.Sprintf("%d;%s;%s;%s;%s;%.0f;%.0f;%.0f;%.0f;%s;%s;%s\n",
 			idx+1,
 			csvCell(item.WOCode),
 			csvCell(item.JOCode),
@@ -624,6 +651,7 @@ func GetWorkOrdersExport(w http.ResponseWriter, r *http.Request) {
 			item.PendingCost,
 			csvCell(item.UpdatedSourceAt),
 			csvCell(item.DerivedStatus),
+			csvCell(item.ProjectType),
 		)
 		w.Write([]byte(line))
 	}
@@ -670,6 +698,9 @@ func GetWorkOrderTimeline(w http.ResponseWriter, r *http.Request) {
 	if project := strings.TrimSpace(q.Get("project")); project != "" && project != "All" {
 		where = append(where, "s.project_name = ?")
 		args = append(args, project)
+	}
+	if clause := projectTypeClause("s.", q.Get("project_type")); clause != "" {
+		where = append(where, clause)
 	}
 	if status := strings.TrimSpace(q.Get("status")); status != "" && status != "All" {
 		where = append(where, "(s.derived_status = ? OR s.status_approval = ?)")
@@ -737,7 +768,7 @@ func GetWorkOrderStats(w http.ResponseWriter, r *http.Request) {
 	rows, err := db.Query(`
 		SELECT wo_id, wo_code, jo_code, project_name, vendor_name, ship_name, status_approval, derived_status,
 			COALESCE(latest_date, ''), pending_cost, final_cost, latest_cost, previous_cost, rejected_cost, total_cost,
-			COALESCE(created_source_at, ''), COALESCE(updated_source_at, '')
+			COALESCE(created_source_at, ''), COALESCE(updated_source_at, ''), COALESCE(project_type, 'external')
 		FROM work_order_summary
 		WHERE `+whereSQL+`
 	`, args...)
@@ -867,7 +898,7 @@ func GetProjectWorkOrderDetail(w http.ResponseWriter, r *http.Request) {
 	rows, err := db.Query(`
 		SELECT wo_id, wo_code, jo_code, project_name, vendor_name, ship_name, status_approval, derived_status,
 			COALESCE(latest_date, ''), pending_cost, final_cost, latest_cost, previous_cost, rejected_cost, total_cost,
-			COALESCE(created_source_at, ''), COALESCE(updated_source_at, '')
+			COALESCE(created_source_at, ''), COALESCE(updated_source_at, ''), COALESCE(project_type, 'external')
 		FROM work_order_summary
 		WHERE `+whereSQL+`
 		ORDER BY latest_date DESC

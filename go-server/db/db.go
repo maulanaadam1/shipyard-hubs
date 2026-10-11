@@ -467,6 +467,8 @@ func createTables() {
 	// updated_at (from SIAGA) of the detail we last stored; when it differs from
 	// updated_source_at (from the WO list) the detail is stale and gets re-fetched.
 	DB.Exec("ALTER TABLE work_order_summary ADD COLUMN detail_updated_at TEXT")
+	// 'internal' for WOs of internal (facility) Job Orders, else external/NULL.
+	DB.Exec("ALTER TABLE work_order_summary ADD COLUMN project_type TEXT")
 
 	// Approved cost per WO per approval date, derived from work_order_details.
 	// Drives the cost trend so approvals on earlier days aren't lost.

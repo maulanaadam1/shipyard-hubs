@@ -56,6 +56,7 @@ const mapSummaryWorkOrder = (item: any) => ({
   created_at: item.created_at || '',
   updated_at: item.updated_at || '',
   latest_date: item.latest_date || '',
+  project_type: item.project_type || 'external',
   __summaryFinancial: {
     pending: item.pending_cost || 0,
     final_cost: item.final_cost || 0,
@@ -95,6 +96,8 @@ export default function WorkOrderDashboard() {
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [selectedProject, setSelectedProject] = useState("All");
   const [selectedStatus, setSelectedStatus] = useState("All");
+  // Internal (facility) vs external (ship) Job Orders.
+  const [selectedProjectType, setSelectedProjectType] = useState<'All' | 'external' | 'internal'>("All");
   const [selectedVendor, setSelectedVendor] = useState<string>("All");
   
   const [isAIModalOpen, setIsAIModalOpen] = useState(false);
@@ -502,7 +505,7 @@ export default function WorkOrderDashboard() {
     setProjectPage(1);
     setVendorPage(1);
     setCurrentPage(1);
-  }, [datePreset, customStartDate, customEndDate, debouncedSearch, selectedProject, selectedStatus, selectedVendor]);
+  }, [datePreset, customStartDate, customEndDate, debouncedSearch, selectedProject, selectedProjectType, selectedStatus, selectedVendor]);
 
   // Kalkulasi Chart Modal Header
   const detailChartConfig = useMemo(() => {
@@ -788,6 +791,7 @@ export default function WorkOrderDashboard() {
         if (selectedStatus !== 'All') params.set('status', selectedStatus);
         if (selectedVendor !== 'All') params.set('vendor', selectedVendor);
         if (selectedProject !== 'All') params.set('project', selectedProject);
+      if (selectedProjectType !== 'All') params.set('project_type', selectedProjectType);
         if (effectiveDateRange.start) params.set('start_date', effectiveDateRange.start.toISOString().split('T')[0]);
         if (effectiveDateRange.end) params.set('end_date', effectiveDateRange.end.toISOString().split('T')[0]);
         if (selectedTrendDate) {
@@ -825,7 +829,7 @@ export default function WorkOrderDashboard() {
 
     loadOptimizedWorkOrders();
     return () => controller.abort();
-  }, [isSummarySource, reloadKey, currentPage, debouncedSearch, selectedStatus, selectedVendor, selectedProject, selectedTrendDate, trendGroupingMode, sortColumn, sortDirection, effectiveDateRange.start?.getTime(), effectiveDateRange.end?.getTime()]);
+  }, [isSummarySource, reloadKey, currentPage, debouncedSearch, selectedStatus, selectedVendor, selectedProject, selectedProjectType, selectedTrendDate, trendGroupingMode, sortColumn, sortDirection, effectiveDateRange.start?.getTime(), effectiveDateRange.end?.getTime()]);
 
   // Project / vendor cards, aggregated server-side over every matching WO (not just this page).
   useEffect(() => {
@@ -839,6 +843,7 @@ export default function WorkOrderDashboard() {
         if (selectedStatus !== 'All') params.set('status', selectedStatus);
         if (selectedVendor !== 'All') params.set('vendor', selectedVendor);
         if (selectedProject !== 'All') params.set('project', selectedProject);
+      if (selectedProjectType !== 'All') params.set('project_type', selectedProjectType);
         if (effectiveDateRange.start) params.set('start_date', effectiveDateRange.start.toISOString().split('T')[0]);
         if (effectiveDateRange.end) params.set('end_date', effectiveDateRange.end.toISOString().split('T')[0]);
         const res = await fetch(`/api/work-orders/facets?${params.toString()}`, { headers, signal: controller.signal });
@@ -851,7 +856,7 @@ export default function WorkOrderDashboard() {
     };
     loadCardFacets();
     return () => controller.abort();
-  }, [isSummarySource, reloadKey, debouncedSearch, selectedStatus, selectedVendor, selectedProject, effectiveDateRange.start?.getTime(), effectiveDateRange.end?.getTime()]);
+  }, [isSummarySource, reloadKey, debouncedSearch, selectedStatus, selectedVendor, selectedProject, selectedProjectType, effectiveDateRange.start?.getTime(), effectiveDateRange.end?.getTime()]);
 
   // 1.1. Unsur filter list yang unik (filterOptions) - DIURUTKAN SECARA KRONOLOGIS (TERBARU DI ATAS)
   const filterOptions = useMemo(() => {
@@ -1252,6 +1257,7 @@ export default function WorkOrderDashboard() {
         if (selectedStatus !== 'All') params.set('status', selectedStatus);
         if (selectedVendor !== 'All') params.set('vendor', selectedVendor);
         if (selectedProject !== 'All') params.set('project', selectedProject);
+      if (selectedProjectType !== 'All') params.set('project_type', selectedProjectType);
         if (effectiveDateRange.start) params.set('start_date', effectiveDateRange.start.toISOString().split('T')[0]);
         if (effectiveDateRange.end) params.set('end_date', effectiveDateRange.end.toISOString().split('T')[0]);
         if (selectedTrendDate) params.set('trend_date', selectedTrendDate);
@@ -1265,7 +1271,7 @@ export default function WorkOrderDashboard() {
     };
     loadStats();
     return () => controller.abort();
-  }, [isSummarySource, reloadKey, debouncedSearch, selectedStatus, selectedVendor, selectedProject, selectedTrendDate, trendGroupingMode, effectiveDateRange.start?.getTime(), effectiveDateRange.end?.getTime()]);
+  }, [isSummarySource, reloadKey, debouncedSearch, selectedStatus, selectedVendor, selectedProject, selectedProjectType, selectedTrendDate, trendGroupingMode, effectiveDateRange.start?.getTime(), effectiveDateRange.end?.getTime()]);
 
   useEffect(() => {
     if (!isSummarySource) return;
@@ -1281,6 +1287,7 @@ export default function WorkOrderDashboard() {
         if (selectedStatus !== 'All') params.set('status', selectedStatus);
         if (selectedVendor !== 'All') params.set('vendor', selectedVendor);
         if (selectedProject !== 'All') params.set('project', selectedProject);
+      if (selectedProjectType !== 'All') params.set('project_type', selectedProjectType);
         const res = await fetch(`/api/work-orders/timeline?${params.toString()}`, { headers, signal: controller.signal });
         if (!res.ok) return;
         const result = await res.json();
@@ -1293,7 +1300,7 @@ export default function WorkOrderDashboard() {
     };
     loadTimeline();
     return () => controller.abort();
-  }, [isSummarySource, reloadKey, trendGroupingMode, selectedStatus, selectedVendor, selectedProject, effectiveDateRange.start?.getTime(), effectiveDateRange.end?.getTime()]);
+  }, [isSummarySource, reloadKey, trendGroupingMode, selectedStatus, selectedVendor, selectedProject, selectedProjectType, effectiveDateRange.start?.getTime(), effectiveDateRange.end?.getTime()]);
 
   // Kalkulasi Tren Finansial Mingguan / Harian / Bulanan secara Kronologis
   const weeklyCostTrend = useMemo(() => {
@@ -1564,6 +1571,7 @@ export default function WorkOrderDashboard() {
       if (selectedStatus !== 'All') params.set('status', selectedStatus);
       if (selectedVendor !== 'All') params.set('vendor', selectedVendor);
       if (selectedProject !== 'All') params.set('project', selectedProject);
+      if (selectedProjectType !== 'All') params.set('project_type', selectedProjectType);
       if (effectiveDateRange.start) params.set('start_date', effectiveDateRange.start.toISOString().split('T')[0]);
       if (effectiveDateRange.end) params.set('end_date', effectiveDateRange.end.toISOString().split('T')[0]);
       if (selectedTrendDate) {
@@ -2384,6 +2392,7 @@ export default function WorkOrderDashboard() {
               onClick={() => {
                 setSearchTerm("");
                 setSelectedProject("All");
+                setSelectedProjectType("All");
                 setSelectedStatus("All");
                 setSelectedVendor("All");
                 setDatePreset("week");
@@ -2394,6 +2403,27 @@ export default function WorkOrderDashboard() {
             >
               Reset Semua Filter
             </button>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2 mb-4">
+            <span className="text-[11px] font-bold uppercase tracking-wide text-slate-400">Jenis Project</span>
+            {([
+              { key: 'All', label: 'Semua' },
+              { key: 'external', label: 'External (Kapal)' },
+              { key: 'internal', label: 'Internal (Fasilitas)' },
+            ] as const).map(opt => {
+              const counts = globalFacets?.projectTypeCounts;
+              const count = !counts ? null : opt.key === 'All' ? (counts.internal || 0) + (counts.external || 0) : counts[opt.key];
+              return (
+                <button
+                  key={opt.key}
+                  onClick={() => setSelectedProjectType(opt.key)}
+                  className={`px-3 py-1 rounded-lg text-[11px] font-bold transition-all ${selectedProjectType === opt.key ? 'bg-indigo-600 text-white shadow-sm' : 'bg-slate-500/5 hover:bg-slate-500/10 text-slate-500'}`}
+                >
+                  {opt.label}{count !== null && count !== undefined ? ` (${count.toLocaleString('id-ID')})` : ''}
+                </button>
+              );
+            })}
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -2539,6 +2569,9 @@ export default function WorkOrderDashboard() {
                           {item.woCode}
                           <ExternalLink size={12} className="opacity-70" />
                         </a>
+                        {item.project_type === 'internal' && (
+                          <span className="ml-1.5 align-middle px-1.5 py-0.5 rounded bg-amber-100 text-amber-700 text-[9px] font-bold uppercase tracking-wider">Internal</span>
+                        )}
                       </td>
 
                       <td className="py-3.5 px-6 font-mono text-slate-900 font-semibold text-xs">

@@ -168,3 +168,56 @@ func TestRebuildFromStoredDetailsAndTimeline(t *testing.T) {
 		t.Errorf("stats for 2026-08 bucket: %v", stats)
 	}
 }
+
+func TestInternalProjectTypeAndFilter(t *testing.T) {
+	resetWorkOrderTables(t)
+	list := []byte(`{"data": [
+		{"id": 200, "code": "WO-EXT", "jo_code": "DRP26X/YWTS", "m_ship_name": "Kapal A", "m_vendor_name": "V1", "min_approval_level": 5, "total_cost": 1000, "project": "external", "updated_at": "2026-10-05 09:00:00"},
+		{"id": 201, "code": "WO-INT", "jo_code": "FSP21FS/YWTS", "m_ship_name": "PERAWATAN SLIPWAY", "m_vendor_name": "V2", "min_approval_level": 5, "total_cost": 300, "project": "external", "_project_scope": "internal", "updated_at": "2026-10-05 09:00:00"}
+	]}`)
+	if err := ProcessWorkOrderList(list); err != nil {
+		t.Fatal(err)
+	}
+	var pt string
+	db.QueryRow("SELECT COALESCE(project_type, '') FROM work_order_summary WHERE wo_id = '201'").Scan(&pt)
+	if pt != "internal" {
+		t.Fatalf("WO from the internal list stored as %q", pt)
+	}
+
+	// A later list without the internal URL (e.g. an older server) must not flip it back.
+	older := []byte(`{"data": [{"id": 201, "code": "WO-INT", "jo_code": "FSP21FS/YWTS", "m_ship_name": "PERAWATAN SLIPWAY", "m_vendor_name": "V2", "min_approval_level": 5, "total_cost": 300, "project": "external", "updated_at": "2026-10-06 09:00:00"}]}`)
+	if err := ProcessWorkOrderList(older); err != nil {
+		t.Fatal(err)
+	}
+	db.QueryRow("SELECT COALESCE(project_type, '') FROM work_order_summary WHERE wo_id = '201'").Scan(&pt)
+	if pt != "internal" {
+		t.Errorf("internal flag lost after a list without scope: %q", pt)
+	}
+
+	stats := func(query string) map[string]interface{} {
+		rec := httptest.NewRecorder()
+		GetWorkOrderStats(rec, httptest.NewRequest("GET", "/api/work-orders/stats"+query, nil))
+		var out map[string]interface{}
+		json.Unmarshal(rec.Body.Bytes(), &out)
+		return out
+	}
+	if s := stats(""); s["totalWOs"] != float64(2) || s["sumTotal"] != float64(1300) {
+		t.Errorf("all: %v", s)
+	}
+	if s := stats("?project_type=internal"); s["totalWOs"] != float64(1) || s["sumTotal"] != float64(300) {
+		t.Errorf("internal: %v", s)
+	}
+	if s := stats("?project_type=external"); s["totalWOs"] != float64(1) || s["sumTotal"] != float64(1000) {
+		t.Errorf("external: %v", s)
+	}
+
+	rec := httptest.NewRecorder()
+	GetWorkOrders(rec, httptest.NewRequest("GET", "/api/work-orders?project_type=internal", nil))
+	var page struct {
+		Data []map[string]interface{} `json:"data"`
+	}
+	json.Unmarshal(rec.Body.Bytes(), &page)
+	if len(page.Data) != 1 || page.Data[0]["project_type"] != "internal" {
+		t.Errorf("list filtered by internal: %v", page.Data)
+	}
+}

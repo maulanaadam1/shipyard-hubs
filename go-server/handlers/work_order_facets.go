@@ -235,6 +235,19 @@ func addGlobalFacets(result map[string]interface{}) error {
 	}
 	rows.Close()
 
+	projectTypeCounts := map[string]int{"internal": 0, "external": 0}
+	if rows, err := db.Query(`SELECT CASE WHEN project_type = 'internal' THEN 'internal' ELSE 'external' END, COUNT(*) FROM work_order_summary GROUP BY 1`); err == nil {
+		for rows.Next() {
+			var t string
+			var n int
+			if rows.Scan(&t, &n) == nil {
+				projectTypeCounts[t] = n
+			}
+		}
+		rows.Close()
+	}
+	result["projectTypeCounts"] = projectTypeCounts
+
 	result["projectOptions"] = projectOptions
 	result["vendorOptions"] = vendorOptions
 	result["globalStats"] = map[string]interface{}{
