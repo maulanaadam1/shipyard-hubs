@@ -457,12 +457,6 @@ func upsertWorkOrderSummary(summary workOrderSummary) error {
 	return err
 }
 
-func UpsertWorkOrderSummaryFromDetail(woID string, raw []byte) error {
-	summary := workOrderSummary{WOID: woID}
-	summary = applyFinancialsFromDetail(summary, raw)
-	return upsertWorkOrderSummary(summary)
-}
-
 func BackfillWorkOrderSummaries() (int, error) {
 	summaries := map[string]workOrderSummary{}
 

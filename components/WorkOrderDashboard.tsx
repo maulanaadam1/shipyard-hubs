@@ -79,6 +79,8 @@ export default function WorkOrderDashboard() {
   const [globalFacets, setGlobalFacets] = useState<any | null | undefined>(undefined);
   const [cardFacets, setCardFacets] = useState<any | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
+  // Health of the SIAGA list/detail sync (expired token, errors, detail queue).
+  const [syncStatus, setSyncStatus] = useState<any | null>(null);
   const [isUsingMock, setIsUsingMock] = useState(!syncCache['WorkOrders']);
   const [fileName, setFileName] = useState(syncDates['WorkOrders'] ? `Auto-Synced (${syncDates['WorkOrders']})` : "Data Contoh (Demo)");
   const [lastSyncDate, setLastSyncDate] = useState<string>(syncDates['WorkOrders'] || '');
@@ -435,16 +437,48 @@ export default function WorkOrderDashboard() {
       const headers = await getHeaders();
       const body = JSON.stringify({ id: 'WorkOrders' });
       const res = await fetch('/api/sync/trigger', { method: 'POST', headers, body });
-      if (!res.ok) throw new Error("Gagal");
-      
-      // Re-run every summary query without reloading the window
+      if (!res.ok) {
+        const errObj = await res.json().catch(() => ({}));
+        throw new Error(errObj.error || "Gagal melakukan sinkronisasi. Cek log server atau pastikan URL API valid di menu API Sync Config.");
+      }
+    } catch (e: any) {
+      alert(e?.message || "Gagal melakukan sinkronisasi.");
+    } finally {
+      // Re-run every summary query (and the sync status) without reloading the window
       setReloadKey(k => k + 1);
-      setIsSyncing(false);
-    } catch (e) {
-      alert("Gagal melakukan sinkronisasi. Cek log server atau pastikan URL API valid di menu API Sync Config.");
       setIsSyncing(false);
     }
   };
+
+  useEffect(() => {
+    const controller = new AbortController();
+    const loadSyncStatus = async () => {
+      try {
+        const headers = await getHeaders();
+        const res = await fetch('/api/work-orders/sync-status', { headers, signal: controller.signal });
+        if (res.ok && !controller.signal.aborted) setSyncStatus(await res.json());
+      } catch (error) {
+        // Status is informational only; keep the dashboard usable without it.
+      }
+    };
+    loadSyncStatus();
+    return () => controller.abort();
+  }, [reloadKey]);
+
+  const syncProblem = useMemo(() => {
+    if (!syncStatus) return null;
+    const list = syncStatus.list;
+    const detail = syncStatus.detail;
+    if (list?.last_status === 'auth_expired' || detail?.last_status === 'auth_expired' || syncStatus.detailPaused) {
+      return { level: 'auth', message: 'Token/cookie SIAGA di menu API Sync Config sudah kedaluwarsa. Data Work Order tidak diperbarui sampai token diganti.' };
+    }
+    if (list?.last_status === 'error') return { level: 'error', message: `Sinkronisasi daftar WO gagal: ${list.last_error}` };
+    if (detail?.last_status === 'error') return { level: 'error', message: `Sinkronisasi detail WO gagal: ${detail.last_error}` };
+    return null;
+  }, [syncStatus]);
+  const detailQueueCount = syncStatus?.queue
+    ? (syncStatus.queue.missing || 0) + (syncStatus.queue.changed || 0) + (syncStatus.queue.staleOpen || 0)
+    : 0;
 
   useEffect(() => {
     const timer = setTimeout(() => setDebouncedSearch(searchTerm), 300);
@@ -1692,10 +1726,23 @@ export default function WorkOrderDashboard() {
               <span>{lastSyncDate}</span>
             </div>
           )}
-          <span className="inline-flex items-center gap-1 px-3 py-1.5 rounded-full text-xs font-semibold bg-emerald-500/10 text-emerald-500 border border-emerald-500/20">
-            <span className="h-1.5 w-1.5 rounded-full bg-emerald-500"></span>
-            Terhubung
-          </span>
+          {syncProblem ? (
+            <span
+              title={syncProblem.message}
+              className="inline-flex items-center gap-1 px-3 py-1.5 rounded-full text-xs font-semibold bg-amber-500/10 text-amber-600 border border-amber-500/30"
+            >
+              <span className="h-1.5 w-1.5 rounded-full bg-amber-500"></span>
+              {syncProblem.level === 'auth' ? 'Token SIAGA kedaluwarsa' : 'Sync gagal'}
+            </span>
+          ) : (
+            <span
+              title={detailQueueCount > 0 ? `${detailQueueCount} detail WO menunggu diperbarui` : 'Data detail WO sudah terbaru'}
+              className="inline-flex items-center gap-1 px-3 py-1.5 rounded-full text-xs font-semibold bg-emerald-500/10 text-emerald-500 border border-emerald-500/20"
+            >
+              <span className="h-1.5 w-1.5 rounded-full bg-emerald-500"></span>
+              Terhubung
+            </span>
+          )}
 
           <button
             onClick={() => { setShowFloatingAI(true); setIsAIModalOpen(prev => !prev); }}
@@ -1725,6 +1772,19 @@ export default function WorkOrderDashboard() {
           </button>
         </div>
       </header>
+
+      {syncProblem && (
+        <div className="mx-6 mt-4 flex items-start gap-3 rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+          <AlertCircle size={18} className="mt-0.5 shrink-0" />
+          <div>
+            <p className="font-semibold">Sinkronisasi SIAGA bermasalah</p>
+            <p className="text-xs mt-0.5">
+              {syncProblem.message}
+              {detailQueueCount > 0 && ` ${detailQueueCount.toLocaleString('id-ID')} detail WO menunggu diperbarui.`}
+            </p>
+          </div>
+        </div>
+      )}
 
       <main className="w-full p-4 md:p-8 space-y-6">
 

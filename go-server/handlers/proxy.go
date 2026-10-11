@@ -3,6 +3,7 @@ package handlers
 import (
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log"
@@ -61,65 +62,25 @@ func SyncWorkOrderDetail(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Try to get WorkOrderDetails config first, fallback to WorkOrders if not found
-	var urlStr, headersStr string
-	err := db.QueryRow("SELECT url, headers FROM sync_configs WHERE id = 'WorkOrderDetails'").Scan(&urlStr, &headersStr)
+	src, err := loadDetailSource()
 	if err != nil {
-		// Fallback
-		err = db.QueryRow("SELECT url, headers FROM sync_configs WHERE id = 'WorkOrders'").Scan(&urlStr, &headersStr)
-		if err != nil {
-			http.Error(w, `{"error": "API Config not found"}`, http.StatusInternalServerError)
-			return
+		http.Error(w, `{"error": "API Config not found"}`, http.StatusInternalServerError)
+		return
+	}
+
+	bodyBytes, err := fetchRemoteWorkOrderDetail(src, woID)
+	if err != nil {
+		// Don't overwrite a good local copy (or the summary) with an error body,
+		// e.g. {"message":"Unauthenticated."} when the remote token has expired.
+		log.Printf("Remote API error for WO %s: %v", woID, err)
+		msg := "Gagal mengambil data dari API Samudera."
+		var statusErr *workers.HTTPStatusError
+		if errors.As(err, &statusErr) {
+			msg = fmt.Sprintf("API Samudera mengembalikan status %d.", statusErr.Code)
 		}
-	}
-
-	// Build the fetch URL. If urlStr contains {{id}}, replace it. Otherwise append it.
-	fetchUrl := urlStr
-	if strings.Contains(urlStr, "{{id}}") {
-		fetchUrl = strings.ReplaceAll(urlStr, "{{id}}", woID)
-	} else if strings.Contains(urlStr, "{{WO_ID}}") {
-		fetchUrl = strings.ReplaceAll(urlStr, "{{WO_ID}}", woID)
-	} else if !strings.HasSuffix(urlStr, woID) {
-		fetchUrl = fmt.Sprintf("%s/%s", strings.TrimRight(urlStr, "/"), woID)
-	}
-
-	var headers map[string]string
-	if headersStr != "" {
-		json.Unmarshal([]byte(headersStr), &headers)
-	}
-
-	req, err := http.NewRequest("GET", fetchUrl, nil)
-	if err != nil {
-		http.Error(w, `{"error": "Failed to create request"}`, http.StatusInternalServerError)
-		return
-	}
-
-	for k, v := range headers {
-		req.Header.Set(k, v)
-	}
-
-	client := &http.Client{}
-	resp, err := client.Do(req)
-	if err != nil {
-		log.Printf("Proxy Error fetching WO %s: %v", woID, err)
-		http.Error(w, `{"error": "Failed to fetch from remote API"}`, http.StatusBadGateway)
-		return
-	}
-	defer resp.Body.Close()
-
-	bodyBytes, err := io.ReadAll(resp.Body)
-	if err != nil {
-		http.Error(w, `{"error": "Failed to read response"}`, http.StatusInternalServerError)
-		return
-	}
-
-	// Don't overwrite a good local copy (or the summary) with an error body,
-	// e.g. {"message":"Unauthenticated."} when the remote token has expired.
-	if resp.StatusCode != http.StatusOK {
-		log.Printf("Remote API returned %d for WO %s", resp.StatusCode, woID)
-		msg := fmt.Sprintf("API Samudera mengembalikan status %d.", resp.StatusCode)
-		if resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden {
+		if workers.IsAuthError(err) {
 			msg += " Token/cookie di menu API Sync Config kemungkinan sudah kedaluwarsa."
+			workers.SetSyncStatus(src.configID, err)
 		}
 		errBody, _ := json.Marshal(map[string]string{"error": msg})
 		w.Header().Set("Content-Type", "application/json")
@@ -128,24 +89,11 @@ func SyncWorkOrderDetail(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Save to Database
-	_, err = db.Exec(
-		"INSERT INTO work_order_details (wo_id, raw_json, last_sync) VALUES (?, ?, CURRENT_TIMESTAMP) ON CONFLICT(wo_id) DO UPDATE SET raw_json = excluded.raw_json, last_sync = CURRENT_TIMESTAMP",
-		woID, string(bodyBytes),
-	)
-	if err != nil {
+	if err := storeWorkOrderDetail(woID, bodyBytes, false); err != nil {
 		log.Printf("Database Insert Error: %v", err)
 		http.Error(w, `{"error": "Failed to save to database"}`, http.StatusInternalServerError)
 		return
 	}
-
-	// Real-time AI ETL trigger: immediately re-flatten updated WO (even if created years ago)
-	go workers.ExtractToAITables(woID, bodyBytes)
-	go func() {
-		if err := UpsertWorkOrderSummaryFromDetail(woID, bodyBytes); err != nil {
-			log.Printf("[WO SUMMARY ERROR] %s: %v", woID, err)
-		}
-	}()
 
 	w.Header().Set("Content-Type", "application/json")
 	w.Write(bodyBytes)
@@ -558,15 +506,10 @@ func PostBulkPendingApprovals(w http.ResponseWriter, r *http.Request) {
 							bodyBytes, _ := io.ReadAll(resp.Body)
 							resp.Body.Close()
 							rawJson = bodyBytes
-							db.Exec("INSERT INTO work_order_details (wo_id, raw_json, last_sync) VALUES (?, ?, CURRENT_TIMESTAMP) ON CONFLICT(wo_id) DO UPDATE SET raw_json = excluded.raw_json, last_sync = CURRENT_TIMESTAMP", id, string(bodyBytes))
-
-							// [AI ETL Pipeline] Jalankan ekstraksi JSON ke Tabel LLM di background agar tidak membebani frontend!
-							go func(woID string, data []byte) {
-								workers.ExtractToAITables(woID, data)
-								if err := UpsertWorkOrderSummaryFromDetail(woID, data); err != nil {
-									log.Printf("[WO SUMMARY ERROR] %s: %v", woID, err)
-								}
-							}(id, bodyBytes)
+							// Saves the detail and summary; AI tables are refreshed in the background.
+							if err := storeWorkOrderDetail(id, bodyBytes, false); err != nil {
+								log.Printf("Database Insert Error for WO %s: %v", id, err)
+							}
 
 							break
 						}

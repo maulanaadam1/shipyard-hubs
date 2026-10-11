@@ -25,10 +25,21 @@ func main() {
 
 	db.Init()
 	db.InitRedis()
-	workers.StartSyncWorker()
 
-	// Jalankan background AI ETL backfill secara otomatis
-	go workers.RunAIEtlBackfill()
+	// Each WO list sync (scheduled or manual) upserts the changed summary rows.
+	workers.ListProcessors["WorkOrders"] = handlers.ProcessWorkOrderList
+
+	// DISABLE_WORKERS=true runs only the API, e.g. a dev machine pointed at the
+	// production database while the production server runs the workers.
+	if os.Getenv("DISABLE_WORKERS") == "true" {
+		log.Println("Background workers disabled (DISABLE_WORKERS=true)")
+	} else {
+		workers.StartSyncWorker()
+		handlers.StartWorkOrderDetailWorker()
+
+		// Jalankan background AI ETL backfill secara otomatis
+		go workers.RunAIEtlBackfill()
+	}
 
 	r := chi.NewRouter()
 	r.Use(chiMiddleware.Recoverer)
@@ -86,6 +97,7 @@ func main() {
 		r.Get("/api/work-orders/stats", handlers.GetWorkOrderStats)
 		r.Get("/api/work-orders/timeline", handlers.GetWorkOrderTimeline)
 		r.Get("/api/work-orders/facets", handlers.GetWorkOrderFacets)
+		r.Get("/api/work-orders/sync-status", handlers.GetWorkOrderSyncStatus)
 		r.Get("/api/work-orders/{id}/detail", handlers.GetWorkOrderDetail)
 		r.Post("/api/work-orders/{id}/sync", handlers.SyncWorkOrderDetail)
 		r.Get("/api/local-wo-history/{id}", handlers.GetLocalWorkOrderHistory)
@@ -107,15 +119,19 @@ func main() {
 			}
 			json.NewDecoder(req.Body).Decode(&body)
 
-			workers.RunSyncJob(true, body.ID)
-			if body.ID == "WorkOrders" {
-				if count, err := handlers.BackfillWorkOrderSummaries(); err != nil {
-					log.Printf("WorkOrders summary backfill after sync failed: %v", err)
-				} else {
-					log.Printf("WorkOrders summary backfill after sync completed: %d rows", count)
-				}
-			}
+			// The WorkOrders list processor upserts changed summary rows as part of
+			// RunSyncJob; the full rebuild stays available at /api/system/work-orders/backfill-summary.
+			syncErr := workers.RunSyncJob(true, body.ID)
 			w.Header().Set("Content-Type", "application/json")
+			if syncErr != nil {
+				msg := "Sinkronisasi gagal: " + syncErr.Error()
+				if workers.IsAuthError(syncErr) {
+					msg = "Sinkronisasi gagal: token/cookie SIAGA di menu API Sync Config sudah kedaluwarsa."
+				}
+				w.WriteHeader(http.StatusBadGateway)
+				json.NewEncoder(w).Encode(map[string]interface{}{"success": false, "error": msg})
+				return
+			}
 			w.Write([]byte(`{"success": true, "message": "Sync triggered successfully"}`))
 		})
 
