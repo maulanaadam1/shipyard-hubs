@@ -15,12 +15,12 @@ type contextKey string
 
 const UserClaimsKey contextKey = "userClaims"
 
-var secretKey = func() string {
-	if k := os.Getenv("NEXTAUTH_SECRET"); k != "" {
-		return k
-	}
-	return "vivo1234"
-}()
+// JWTSecret returns the HMAC key for session tokens. It is read on every call
+// (not at package init) so values loaded from .env by godotenv in main are
+// seen; main refuses to start when it is empty.
+func JWTSecret() []byte {
+	return []byte(os.Getenv("NEXTAUTH_SECRET"))
+}
 
 // UserClaims holds the parsed JWT claims for the current request
 type UserClaims struct {
@@ -44,7 +44,7 @@ func RequireAuth(next http.Handler) http.Handler {
 			if _, ok := t.Method.(*jwt.SigningMethodHMAC); !ok {
 				return nil, fmt.Errorf("unexpected signing method: %v", t.Header["alg"])
 			}
-			return []byte(secretKey), nil
+			return JWTSecret(), nil
 		})
 
 		if err != nil || !token.Valid {

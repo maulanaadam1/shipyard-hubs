@@ -12,14 +12,9 @@ import (
 	"golang.org/x/crypto/bcrypt"
 
 	"shipyard/db"
+	"shipyard/middleware"
 )
 
-var secretKey = func() string {
-	if k := os.Getenv("NEXTAUTH_SECRET"); k != "" {
-		return k
-	}
-	return "vivo1234"
-}()
 
 // Login handles POST /api/auth/login
 func Login(w http.ResponseWriter, r *http.Request) {
@@ -60,7 +55,7 @@ func Login(w http.ResponseWriter, r *http.Request) {
 		"exp":      time.Now().Add(7 * 24 * time.Hour).Unix(),
 	})
 
-	tokenStr, err := token.SignedString([]byte(secretKey))
+	tokenStr, err := token.SignedString(middleware.JWTSecret())
 	if err != nil {
 		writeJSON(w, 500, map[string]string{"error": "Failed to generate token"})
 		return
@@ -93,7 +88,7 @@ func GetSession(w http.ResponseWriter, r *http.Request) {
 	}
 
 	supabaseSecret := os.Getenv("SUPABASE_JWT_SECRET")
-	key := []byte(secretKey)
+	key := middleware.JWTSecret()
 	
 	token, err := jwt.Parse(tokenStr, func(t *jwt.Token) (any, error) {
 		if _, ok := t.Method.(*jwt.SigningMethodHMAC); !ok {
