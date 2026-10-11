@@ -23,6 +23,11 @@ func main() {
 	// Attempt to load .env file, ignore if not found
 	_ = godotenv.Load()
 
+	// Session tokens are signed with this; never fall back to a built-in value.
+	if os.Getenv("NEXTAUTH_SECRET") == "" {
+		log.Fatal("NEXTAUTH_SECRET is not set. Set it to a long random string (e.g. `openssl rand -hex 32`).")
+	}
+
 	db.Init()
 	db.InitRedis()
 	workers.StartSyncWorker()
@@ -48,22 +53,6 @@ func main() {
 	// AI Proxy Routes (with live PostgreSQL Database RAG)
 	r.Post("/api/chat/sumopod", handlers.PostSumopodProxy)
 	r.Post("/api/chat/ollama", handlers.PostOllamaProxy)
-
-	// TEMPORARY DEBUG ROUTE
-	r.Get("/api/debug/users", func(w http.ResponseWriter, r *http.Request) {
-		query := "SELECT id, email, username, password, name, role, jabatan, city, branch, department, whatsapp, avatar_url, roles, extra_roles FROM profiles WHERE email = 'admin@shipyard.local'"
-		var id, emailVal, password, name, role string
-		var username, jabatan, city, branch, department, whatsapp, avatarURL, roles, extraRoles *string
-
-		err := db.QueryRow(query).Scan(&id, &emailVal, &username, &password, &name, &role, &jabatan, &city, &branch, &department, &whatsapp, &avatarURL, &roles, &extraRoles)
-
-		if err != nil {
-			w.Write([]byte(`{"scan_error_full": "` + err.Error() + `"}`))
-			return
-		}
-
-		w.Write([]byte(`{"success": "Query worked perfectly. User exists and scan succeeded."}`))
-	})
 
 	// Protected routes (require valid JWT)
 	r.Group(func(r chi.Router) {
@@ -92,8 +81,9 @@ func main() {
 		r.Post("/api/work-orders/bulk-pending-approvals", handlers.PostBulkPendingApprovals)
 
 		// System endpoints
-		r.Get("/api/system/run-ai-etl", handlers.RunAIEtl)
-		r.Post("/api/system/work-orders/backfill-summary", handlers.BackfillWorkOrderSummariesHandler)
+		// Heavy full-table jobs: Admin only.
+		r.With(appMiddleware.RequireRole("Admin")).Get("/api/system/run-ai-etl", handlers.RunAIEtl)
+		r.With(appMiddleware.RequireRole("Admin")).Post("/api/system/work-orders/backfill-summary", handlers.BackfillWorkOrderSummariesHandler)
 
 		// Export (all authenticated roles)
 		r.Get("/api/export/{table}/csv", handlers.ExportCSV)
@@ -125,7 +115,7 @@ func main() {
 			r.Put("/api/data/{table}", handlers.PutData)
 			r.Delete("/api/data/{table}", handlers.DeleteData)
 
-			// Bulk import — Admin/Manager only
+			// Bulk import — requires the table's "import" permission (checked in the handler)
 			r.Post("/api/import/{table}/csv", handlers.ImportCSV)
 		})
 	})
