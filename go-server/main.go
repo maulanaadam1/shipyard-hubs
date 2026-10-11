@@ -107,6 +107,7 @@ func main() {
 		// System endpoints
 		r.Get("/api/system/run-ai-etl", handlers.RunAIEtl)
 		r.Post("/api/system/work-orders/backfill-summary", handlers.BackfillWorkOrderSummariesHandler)
+		r.With(appMiddleware.RequireRole("Admin")).Post("/api/system/work-orders/rebuild-derived", handlers.RebuildWorkOrderDerivedHandler)
 
 		// Export (all authenticated roles)
 		r.Get("/api/export/{table}/csv", handlers.ExportCSV)

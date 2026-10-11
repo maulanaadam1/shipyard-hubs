@@ -81,6 +81,7 @@ export default function WorkOrderDashboard() {
   const [reloadKey, setReloadKey] = useState(0);
   // Health of the SIAGA list/detail sync (expired token, errors, detail queue).
   const [syncStatus, setSyncStatus] = useState<any | null>(null);
+  const [statusTick, setStatusTick] = useState(0);
   const [isUsingMock, setIsUsingMock] = useState(!syncCache['WorkOrders']);
   const [fileName, setFileName] = useState(syncDates['WorkOrders'] ? `Auto-Synced (${syncDates['WorkOrders']})` : "Data Contoh (Demo)");
   const [lastSyncDate, setLastSyncDate] = useState<string>(syncDates['WorkOrders'] || '');
@@ -463,7 +464,18 @@ export default function WorkOrderDashboard() {
     };
     loadSyncStatus();
     return () => controller.abort();
-  }, [reloadKey]);
+  }, [reloadKey, statusTick]);
+
+  // Poll while the server rebuilds derived data, then reload the dashboard once it finishes.
+  const wasRebuildingRef = useRef(false);
+  useEffect(() => {
+    const running = !!syncStatus?.rebuild?.running;
+    if (wasRebuildingRef.current && !running) setReloadKey(k => k + 1);
+    wasRebuildingRef.current = running;
+    if (!running) return;
+    const timer = setTimeout(() => setStatusTick(t => t + 1), 5000);
+    return () => clearTimeout(timer);
+  }, [syncStatus]);
 
   const syncProblem = useMemo(() => {
     if (!syncStatus) return null;
@@ -1786,6 +1798,18 @@ export default function WorkOrderDashboard() {
         </div>
       )}
 
+      {syncStatus?.rebuild?.running && (
+        <div className="mx-6 mt-4 flex items-start gap-3 rounded-xl border border-indigo-200 bg-indigo-50 px-4 py-3 text-sm text-indigo-800">
+          <RefreshCw size={18} className="mt-0.5 shrink-0 animate-spin" />
+          <div>
+            <p className="font-semibold">Menyusun ulang data dari detail WO yang tersimpan</p>
+            <p className="text-xs mt-0.5">
+              {(syncStatus.rebuild.done || 0).toLocaleString('id-ID')} dari {(syncStatus.rebuild.total || 0).toLocaleString('id-ID')} WO diproses. Grafik tren lengkap setelah selesai; tidak ada request ke SIAGA.
+            </p>
+          </div>
+        </div>
+      )}
+
       <main className="w-full p-4 md:p-8 space-y-6">
 
         {/* SECTION 2: SUMMARY METRICS STATS */}
@@ -1905,6 +1929,7 @@ export default function WorkOrderDashboard() {
                     <Calendar size={16} className="text-indigo-500" />
                     Tren Biaya Operasional
                   </h3>
+                  <p className="text-[10px] text-slate-400 mt-0.5">Nilai approved per tanggal approval item, termasuk approval bertahap di hari-hari sebelumnya.</p>
                   <div className="flex flex-wrap items-center gap-1.5 mt-2">
                     <button 
                       onClick={() => setTrendGroupingMode('daily')} 

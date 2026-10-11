@@ -465,6 +465,22 @@ func createTables() {
 	// updated_at (from SIAGA) of the detail we last stored; when it differs from
 	// updated_source_at (from the WO list) the detail is stale and gets re-fetched.
 	DB.Exec("ALTER TABLE work_order_summary ADD COLUMN detail_updated_at TEXT")
+
+	// Approved cost per WO per approval date, derived from work_order_details.
+	// Drives the cost trend so approvals on earlier days aren't lost.
+	DB.Exec(`CREATE TABLE IF NOT EXISTS work_order_daily_costs (
+		wo_id TEXT NOT NULL,
+		cost_date TEXT NOT NULL,
+		approved_cost NUMERIC DEFAULT 0,
+		PRIMARY KEY (wo_id, cost_date)
+	);`)
+	DB.Exec("CREATE INDEX IF NOT EXISTS idx_wo_daily_costs_date ON work_order_daily_costs(cost_date)")
+
+	// Small key/value store for app-level markers (e.g. derived-data version).
+	DB.Exec(`CREATE TABLE IF NOT EXISTS app_meta (
+		key TEXT PRIMARY KEY,
+		value TEXT
+	);`)
 	DB.Exec("CREATE INDEX IF NOT EXISTS idx_wo_summary_latest_date ON work_order_summary(latest_date)")
 	DB.Exec("CREATE INDEX IF NOT EXISTS idx_wo_summary_vendor_date ON work_order_summary(vendor_name, latest_date)")
 	DB.Exec("CREATE INDEX IF NOT EXISTS idx_wo_summary_project_date ON work_order_summary(project_name, latest_date)")

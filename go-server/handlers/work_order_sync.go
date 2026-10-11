@@ -221,7 +221,7 @@ func storeWorkOrderDetail(woID string, body []byte, syncETL bool) error {
 	); err != nil {
 		return err
 	}
-	if err := upsertSummaryFromDetail(woID, body); err != nil {
+	if err := writeDetailDerived([]detailDerived{deriveFromDetail(woID, body)}); err != nil {
 		log.Printf("[WO SUMMARY ERROR] %s: %v", woID, err)
 	}
 	if syncETL {
@@ -234,44 +234,242 @@ func storeWorkOrderDetail(woID string, body []byte, syncETL bool) error {
 	return nil
 }
 
-// upsertSummaryFromDetail writes detail-owned columns (financials, latest_date,
-// detail_updated_at). List-owned columns are only filled when still empty, so a
-// detail never blanks out vendor/status/codes that came from the list.
-func upsertSummaryFromDetail(woID string, raw []byte) error {
-	s := applyFinancialsFromDetail(workOrderSummary{WOID: woID}, raw)
-	detailUpdatedAt := ""
+// detailDerived is everything the dashboard needs from one stored detail.
+type detailDerived struct {
+	summary         workOrderSummary
+	detailUpdatedAt string
+}
+
+func deriveFromDetail(woID string, raw []byte) detailDerived {
+	d := detailDerived{summary: applyFinancialsFromDetail(workOrderSummary{WOID: woID}, raw)}
 	if data, err := dataObject(raw); err == nil {
-		detailUpdatedAt = firstString(data, "updated_at", "last_updated")
+		d.detailUpdatedAt = firstString(data, "updated_at", "last_updated")
 	}
-	_, err := db.Exec(`
-		INSERT INTO work_order_summary (
-			wo_id, wo_code, jo_code, project_name, vendor_name, ship_name, status_approval, derived_status,
-			latest_date, pending_cost, final_cost, latest_cost, previous_cost, rejected_cost, total_cost,
-			created_source_at, updated_source_at, detail_updated_at, updated_at
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
-		ON CONFLICT(wo_id) DO UPDATE SET
-			wo_code = COALESCE(NULLIF(work_order_summary.wo_code, ''), excluded.wo_code),
-			jo_code = CASE WHEN COALESCE(work_order_summary.jo_code, '') IN ('', 'N/A') THEN excluded.jo_code ELSE work_order_summary.jo_code END,
-			project_name = CASE WHEN COALESCE(work_order_summary.project_name, '') IN ('', 'N/A - N/A') THEN excluded.project_name ELSE work_order_summary.project_name END,
-			vendor_name = COALESCE(NULLIF(work_order_summary.vendor_name, ''), excluded.vendor_name),
-			ship_name = CASE WHEN COALESCE(work_order_summary.ship_name, '') IN ('', 'N/A') THEN excluded.ship_name ELSE work_order_summary.ship_name END,
-			status_approval = COALESCE(NULLIF(excluded.status_approval, ''), work_order_summary.status_approval),
-			derived_status = COALESCE(NULLIF(excluded.derived_status, ''), work_order_summary.derived_status),
-			latest_date = COALESCE(NULLIF(excluded.latest_date, ''), work_order_summary.latest_date),
-			pending_cost = excluded.pending_cost,
-			final_cost = excluded.final_cost,
-			latest_cost = excluded.latest_cost,
-			previous_cost = excluded.previous_cost,
-			rejected_cost = excluded.rejected_cost,
-			total_cost = CASE WHEN excluded.total_cost > 0 THEN excluded.total_cost ELSE work_order_summary.total_cost END,
-			created_source_at = COALESCE(NULLIF(work_order_summary.created_source_at, ''), excluded.created_source_at),
-			updated_source_at = COALESCE(NULLIF(excluded.updated_source_at, ''), work_order_summary.updated_source_at),
-			detail_updated_at = excluded.detail_updated_at,
-			updated_at = CURRENT_TIMESTAMP
-	`, s.WOID, s.WOCode, s.JOCode, s.ProjectName, s.VendorName, s.ShipName, s.StatusApproval, s.DerivedStatus,
-		s.LatestDate, s.PendingCost, s.FinalCost, s.LatestCost, s.PreviousCost, s.RejectedCost, s.TotalCost,
-		s.CreatedSourceAt, s.UpdatedSourceAt, detailUpdatedAt)
+	return d
+}
+
+// writeDetailDerived writes detail-owned summary columns (financials,
+// latest_date, detail_updated_at) and replaces each WO's per-day ledger, in one
+// transaction with multi-row statements. List-owned columns (codes, vendor,
+// status, updated_source_at, total_cost) are only filled when still empty: the
+// list is authoritative for them, and leaving updated_source_at alone is what
+// lets a stale stored detail still be detected as changed.
+func writeDetailDerived(items []detailDerived) error {
+	if len(items) == 0 {
+		return nil
+	}
+	tx, err := db.DB.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	const summaryBatch = 200
+	for start := 0; start < len(items); start += summaryBatch {
+		chunk := items[start:min(start+summaryBatch, len(items))]
+		placeholders := make([]string, 0, len(chunk))
+		idMarks := make([]string, 0, len(chunk))
+		idArgs := make([]interface{}, 0, len(chunk))
+		args := make([]interface{}, 0, len(chunk)*18)
+		for _, d := range chunk {
+			s := d.summary
+			placeholders = append(placeholders, "(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)")
+			idMarks = append(idMarks, "?")
+			idArgs = append(idArgs, s.WOID)
+			args = append(args, s.WOID, s.WOCode, s.JOCode, s.ProjectName, s.VendorName, s.ShipName, s.StatusApproval, s.DerivedStatus,
+				s.LatestDate, s.PendingCost, s.FinalCost, s.LatestCost, s.PreviousCost, s.RejectedCost, s.TotalCost,
+				s.CreatedSourceAt, s.UpdatedSourceAt, d.detailUpdatedAt)
+		}
+		if _, err := tx.Exec(db.FormatQuery(`
+			INSERT INTO work_order_summary (
+				wo_id, wo_code, jo_code, project_name, vendor_name, ship_name, status_approval, derived_status,
+				latest_date, pending_cost, final_cost, latest_cost, previous_cost, rejected_cost, total_cost,
+				created_source_at, updated_source_at, detail_updated_at, updated_at
+			) VALUES `+strings.Join(placeholders, ", ")+`
+			ON CONFLICT(wo_id) DO UPDATE SET
+				wo_code = COALESCE(NULLIF(work_order_summary.wo_code, ''), excluded.wo_code),
+				jo_code = CASE WHEN COALESCE(work_order_summary.jo_code, '') IN ('', 'N/A') THEN excluded.jo_code ELSE work_order_summary.jo_code END,
+				project_name = CASE WHEN COALESCE(work_order_summary.project_name, '') IN ('', 'N/A - N/A') THEN excluded.project_name ELSE work_order_summary.project_name END,
+				vendor_name = COALESCE(NULLIF(work_order_summary.vendor_name, ''), excluded.vendor_name),
+				ship_name = CASE WHEN COALESCE(work_order_summary.ship_name, '') IN ('', 'N/A') THEN excluded.ship_name ELSE work_order_summary.ship_name END,
+				status_approval = COALESCE(NULLIF(work_order_summary.status_approval, ''), excluded.status_approval),
+				derived_status = COALESCE(NULLIF(work_order_summary.derived_status, ''), excluded.derived_status),
+				latest_date = COALESCE(NULLIF(excluded.latest_date, ''), work_order_summary.latest_date),
+				pending_cost = excluded.pending_cost,
+				final_cost = excluded.final_cost,
+				latest_cost = excluded.latest_cost,
+				previous_cost = excluded.previous_cost,
+				rejected_cost = excluded.rejected_cost,
+				total_cost = CASE WHEN COALESCE(work_order_summary.total_cost, 0) > 0 THEN work_order_summary.total_cost ELSE excluded.total_cost END,
+				created_source_at = COALESCE(NULLIF(work_order_summary.created_source_at, ''), excluded.created_source_at),
+				updated_source_at = COALESCE(NULLIF(work_order_summary.updated_source_at, ''), excluded.updated_source_at),
+				detail_updated_at = excluded.detail_updated_at,
+				updated_at = CURRENT_TIMESTAMP`), args...); err != nil {
+			return err
+		}
+
+		if _, err := tx.Exec(db.FormatQuery("DELETE FROM work_order_daily_costs WHERE wo_id IN ("+strings.Join(idMarks, ", ")+")"), idArgs...); err != nil {
+			return err
+		}
+
+		const ledgerBatch = 500
+		var rows []string
+		var rowArgs []interface{}
+		flush := func() error {
+			if len(rows) == 0 {
+				return nil
+			}
+			_, err := tx.Exec(db.FormatQuery("INSERT INTO work_order_daily_costs (wo_id, cost_date, approved_cost) VALUES "+strings.Join(rows, ", ")), rowArgs...)
+			rows, rowArgs = rows[:0], rowArgs[:0]
+			return err
+		}
+		for _, d := range chunk {
+			for date, cost := range d.summary.DailyCosts {
+				if cost == 0 || date == "" {
+					continue
+				}
+				rows = append(rows, "(?, ?, ?)")
+				rowArgs = append(rowArgs, d.summary.WOID, date, cost)
+				if len(rows) >= ledgerBatch {
+					if err := flush(); err != nil {
+						return err
+					}
+				}
+			}
+		}
+		if err := flush(); err != nil {
+			return err
+		}
+	}
+	return tx.Commit()
+}
+
+// ---------------------------------------------------------------------------
+// Rebuild derived data from stored details (no SIAGA calls)
+// ---------------------------------------------------------------------------
+
+// derivedDataVersion changes whenever the way summary financials or the daily
+// ledger are computed changes; a mismatch triggers a one-time local rebuild.
+const derivedDataVersion = "2026-10-11.daily-costs"
+
+type rebuildProgress struct {
+	Running    bool   `json:"running"`
+	Done       int    `json:"done"`
+	Total      int    `json:"total"`
+	StartedAt  string `json:"started_at"`
+	FinishedAt string `json:"finished_at"`
+	Error      string `json:"error"`
+}
+
+var rebuildState = struct {
+	sync.Mutex
+	rebuildProgress
+}{}
+
+func rebuildSnapshot() rebuildProgress {
+	rebuildState.Lock()
+	defer rebuildState.Unlock()
+	return rebuildState.rebuildProgress
+}
+
+// RebuildWorkOrderDerived recomputes summary financials and the daily ledger
+// for every stored detail, reading work_order_details in batches by wo_id.
+func RebuildWorkOrderDerived() error {
+	rebuildState.Lock()
+	if rebuildState.Running {
+		rebuildState.Unlock()
+		return fmt.Errorf("rebuild already running")
+	}
+	rebuildState.rebuildProgress = rebuildProgress{Running: true, StartedAt: time.Now().Format("2006-01-02 15:04:05")}
+	rebuildState.Unlock()
+
+	err := rebuildWorkOrderDerived()
+
+	rebuildState.Lock()
+	rebuildState.Running = false
+	rebuildState.FinishedAt = time.Now().Format("2006-01-02 15:04:05")
+	if err != nil {
+		rebuildState.Error = err.Error()
+	}
+	rebuildState.Unlock()
 	return err
+}
+
+func rebuildWorkOrderDerived() error {
+	var total int
+	db.QueryRow("SELECT COUNT(*) FROM work_order_details").Scan(&total)
+	rebuildState.Lock()
+	rebuildState.Total = total
+	rebuildState.Unlock()
+
+	start := time.Now()
+	last := ""
+	for {
+		rows, err := db.Query("SELECT wo_id, raw_json FROM work_order_details WHERE wo_id > ? ORDER BY wo_id LIMIT 200", last)
+		if err != nil {
+			return err
+		}
+		read := 0
+		batch := make([]detailDerived, 0, 200)
+		for rows.Next() {
+			var id string
+			var raw []byte
+			if err := rows.Scan(&id, &raw); err != nil {
+				rows.Close()
+				return err
+			}
+			read++
+			last = id
+			if _, err := dataObject(raw); err != nil {
+				continue // error bodies etc.; the detail worker re-fetches those
+			}
+			batch = append(batch, deriveFromDetail(id, raw))
+		}
+		rows.Close()
+		if read == 0 {
+			break
+		}
+		if err := writeDetailDerived(batch); err != nil {
+			return err
+		}
+		rebuildState.Lock()
+		rebuildState.Done += read
+		rebuildState.Unlock()
+	}
+	db.Exec("DELETE FROM app_meta WHERE key = 'wo_derived_version'")
+	db.Exec("INSERT INTO app_meta (key, value) VALUES ('wo_derived_version', ?)", derivedDataVersion)
+	log.Printf("[WO DERIVED] rebuilt summary financials and daily costs for %d work orders in %s", total, time.Since(start).Round(time.Second))
+	return nil
+}
+
+// maybeRebuildDerived runs the local rebuild once per derivedDataVersion.
+func maybeRebuildDerived() {
+	var version string
+	db.QueryRow("SELECT COALESCE(value, '') FROM app_meta WHERE key = 'wo_derived_version'").Scan(&version)
+	if version == derivedDataVersion {
+		return
+	}
+	log.Printf("[WO DERIVED] version %q -> %q: rebuilding from stored details (no SIAGA calls)", version, derivedDataVersion)
+	if err := RebuildWorkOrderDerived(); err != nil {
+		log.Printf("[WO DERIVED] rebuild failed: %v", err)
+	}
+}
+
+// RebuildWorkOrderDerivedHandler starts a local rebuild in the background.
+func RebuildWorkOrderDerivedHandler(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+	if rebuildSnapshot().Running {
+		w.WriteHeader(http.StatusConflict)
+		w.Write([]byte(`{"error": "Rebuild sedang berjalan"}`))
+		return
+	}
+	go func() {
+		if err := RebuildWorkOrderDerived(); err != nil {
+			log.Printf("[WO DERIVED] rebuild failed: %v", err)
+		}
+	}()
+	w.WriteHeader(http.StatusAccepted)
+	w.Write([]byte(`{"success": true, "message": "Rebuild dimulai"}`))
 }
 
 // ---------------------------------------------------------------------------
@@ -298,9 +496,22 @@ func headersHash(raw string) string {
 	return fmt.Sprintf("%x", sum[:8])
 }
 
+// openResyncHours is the optional periodic re-check window for open WOs. Off (0)
+// by default: change detection via updated_at already catches WO changes, so
+// this only adds SIAGA traffic. Set WO_OPEN_RESYNC_HOURS to enable it.
+func openResyncHours() int {
+	if v, err := strconv.Atoi(os.Getenv("WO_OPEN_RESYNC_HOURS")); err == nil && v > 0 {
+		return v
+	}
+	return 0
+}
+
 // staleOpenClause matches open (not Level 5) WOs whose detail is older than the
-// re-check window; the timestamp arithmetic differs per dialect.
+// re-check window (never, when hours is 0); timestamp arithmetic differs per dialect.
 func staleOpenClause(hours int) string {
+	if hours <= 0 {
+		return "(1 = 0)"
+	}
 	if os.Getenv("DB_CONNECTION") == "postgres" {
 		return fmt.Sprintf("(COALESCE(s.derived_status, '') <> 'Approval Level 5' AND d.last_sync < LOCALTIMESTAMP - INTERVAL '%d hours')", hours)
 	}
@@ -348,13 +559,16 @@ func initDetailUpdatedAt() {
 //  1. WOs with no stored detail,
 //  2. WOs whose list updated_at differs from the stored detail's updated_at
 //     (catches changes on WOs of any age),
-//  3. open (not Level 5) WOs not re-checked within WO_OPEN_RESYNC_HOURS, as a
-//     safety net.
+//  3. only if WO_OPEN_RESYNC_HOURS is set: open (not Level 5) WOs not
+//     re-checked within that window, as an extra safety net.
 //
 // It pauses on 401/403 until the config headers change (or 30 min pass).
 func StartWorkOrderDetailWorker() {
 	interval := time.Duration(envInt("WO_DETAIL_INTERVAL_SECONDS", 60)) * time.Second
 	go func() {
+		// Derived data first, from what's already stored; SIAGA is only asked
+		// for details that are missing or changed afterwards.
+		maybeRebuildDerived()
 		ticker := time.NewTicker(interval)
 		defer ticker.Stop()
 		for {
@@ -369,7 +583,7 @@ func StartWorkOrderDetailWorker() {
 func runDetailBatch() {
 	batch := envInt("WO_DETAIL_BATCH", 20)
 	concurrency := envInt("WO_DETAIL_CONCURRENCY", 3)
-	openHours := envInt("WO_OPEN_RESYNC_HOURS", 72)
+	openHours := openResyncHours()
 
 	src, err := loadDetailSource()
 	if err != nil || !src.active || src.url == "" {
@@ -510,7 +724,7 @@ func readSyncConfigStatus(id string) *syncConfigStatus {
 // GetWorkOrderSyncStatus reports list/detail sync health and the detail queue,
 // so the dashboard can warn when SIAGA credentials have expired.
 func GetWorkOrderSyncStatus(w http.ResponseWriter, r *http.Request) {
-	openHours := envInt("WO_OPEN_RESYNC_HOURS", 72)
+	openHours := openResyncHours()
 	var missing, changed, staleOpen int
 	db.QueryRow(`
 		SELECT
@@ -533,6 +747,7 @@ func GetWorkOrderSyncStatus(w http.ResponseWriter, r *http.Request) {
 		"detail":       detailStatus,
 		"detailPaused": paused,
 		"workersOn":    os.Getenv("DISABLE_WORKERS") != "true",
+		"rebuild":      rebuildSnapshot(),
 		"queue": map[string]int{
 			"missing":   missing,
 			"changed":   changed,

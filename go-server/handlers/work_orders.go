@@ -14,6 +14,29 @@ import (
 	"shipyard/db"
 )
 
+// trendBucketClause matches column (a YYYY-MM-DD string) against a trend bucket
+// key as produced by timelineKey for day, week (Monday) or month grouping.
+func trendBucketClause(column, trend, group string) (string, []interface{}) {
+	switch group {
+	case "day", "daily":
+		return column + " = ?", []interface{}{trend}
+	case "week", "weekly":
+		if start, err := time.Parse("2006-01-02", trend); err == nil {
+			return column + " >= ? AND " + column + " < ?", []interface{}{start.Format("2006-01-02"), start.AddDate(0, 0, 7).Format("2006-01-02")}
+		}
+		return column + " = ?", []interface{}{trend}
+	default:
+		return column + " LIKE ?", []interface{}{trend + "%"}
+	}
+}
+
+// dailyLedgerAvailable reports whether work_order_daily_costs has been built.
+func dailyLedgerAvailable() bool {
+	var n int
+	db.QueryRow("SELECT COUNT(*) FROM (SELECT 1 FROM work_order_daily_costs LIMIT 1) t").Scan(&n)
+	return n > 0
+}
+
 func workOrderSummaryFilters(r *http.Request) (string, []interface{}, string, string) {
 	return workOrderSummaryFiltersFromQuery(r.URL.Query())
 }
@@ -49,23 +72,15 @@ func workOrderSummaryFiltersFromQuery(q url.Values) (string, []interface{}, stri
 		args = append(args, end)
 	}
 	if trend := strings.TrimSpace(q.Get("trend_date")); trend != "" {
-		group := strings.TrimSpace(q.Get("group"))
-		switch group {
-		case "day", "daily":
-			where = append(where, "latest_date = ?")
-			args = append(args, trend)
-		case "week", "weekly":
-			where = append(where, "latest_date >= ? AND latest_date < ?")
-			start, err := time.Parse("2006-01-02", trend)
-			if err == nil {
-				args = append(args, start.Format("2006-01-02"), start.AddDate(0, 0, 7).Format("2006-01-02"))
-			} else {
-				args = append(args, trend, trend)
-			}
-		default:
-			where = append(where, "latest_date LIKE ?")
-			args = append(args, trend+"%")
+		clause, trendArgs := trendBucketClause("latest_date", trend, strings.TrimSpace(q.Get("group")))
+		if dailyLedgerAvailable() {
+			// The trend chart plots approved cost per approval day, so a bucket
+			// selects every WO with approvals in it, not only its latest one.
+			clause, trendArgs = trendBucketClause("cost_date", trend, strings.TrimSpace(q.Get("group")))
+			clause = "wo_id IN (SELECT wo_id FROM work_order_daily_costs WHERE " + clause + ")"
 		}
+		where = append(where, clause)
+		args = append(args, trendArgs...)
 	}
 
 	sortColumns := map[string]string{
@@ -124,6 +139,9 @@ type workOrderSummary struct {
 	TotalCost       float64 `json:"total_cost"`
 	CreatedSourceAt string  `json:"created_at"`
 	UpdatedSourceAt string  `json:"updated_at"`
+	// DailyCosts is the approved cost per approval date (YYYY-MM-DD) derived
+	// from the detail; it sums to FinalCost. Not part of the API payload.
+	DailyCosts map[string]float64 `json:"-"`
 }
 
 func approvalStatusText(level float64, status string) string {
@@ -412,6 +430,17 @@ func applyFinancialsFromDetail(summary workOrderSummary, raw []byte) workOrderSu
 		previousCost = finalCostSum
 	}
 
+	// Keep the per-day ledger summing to FinalCost: approved value without an
+	// item-level date (e.g. root total of a globally approved WO) goes on latestDate.
+	var dailySum float64
+	for _, cost := range dailyCosts {
+		dailySum += cost
+	}
+	if rest := finalCostSum - dailySum; rest > 0.5 && latestDate != "" {
+		dailyCosts[latestDate] += rest
+	}
+	summary.DailyCosts = dailyCosts
+
 	summary.PendingCost = pendingSum
 	summary.FinalCost = finalCostSum
 	summary.LatestCost = latestCost
@@ -605,6 +634,9 @@ func csvCell(value string) string {
 	return `"` + escaped + `"`
 }
 
+// GetWorkOrderTimeline returns approved cost per period. With the daily ledger
+// it sums every approval day of every WO (count = distinct WOs with approvals
+// in the period); without it, it falls back to each WO's latest approval day.
 func GetWorkOrderTimeline(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
 	start := strings.TrimSpace(q.Get("start"))
@@ -613,37 +645,45 @@ func GetWorkOrderTimeline(w http.ResponseWriter, r *http.Request) {
 	if group == "" {
 		group = "month"
 	}
+	ledger := dailyLedgerAvailable()
+	dateCol := "s.latest_date"
+	if ledger {
+		dateCol = "c.cost_date"
+	}
 
-	where := []string{"latest_date IS NOT NULL", "latest_date <> ''"}
+	where := []string{dateCol + " IS NOT NULL", dateCol + " <> ''"}
 	args := []interface{}{}
 	if start != "" {
-		where = append(where, "latest_date >= ?")
+		where = append(where, dateCol+" >= ?")
 		args = append(args, start)
 	}
 	if end != "" {
-		where = append(where, "latest_date <= ?")
+		where = append(where, dateCol+" <= ?")
 		args = append(args, end)
 	}
 	if vendor := strings.TrimSpace(q.Get("vendor")); vendor == noVendorLabel {
-		where = append(where, "COALESCE(vendor_name, '') = ''")
+		where = append(where, "COALESCE(s.vendor_name, '') = ''")
 	} else if vendor != "" && vendor != "All" {
-		where = append(where, "vendor_name = ?")
+		where = append(where, "s.vendor_name = ?")
 		args = append(args, vendor)
 	}
 	if project := strings.TrimSpace(q.Get("project")); project != "" && project != "All" {
-		where = append(where, "project_name = ?")
+		where = append(where, "s.project_name = ?")
 		args = append(args, project)
 	}
 	if status := strings.TrimSpace(q.Get("status")); status != "" && status != "All" {
-		where = append(where, "(derived_status = ? OR status_approval = ?)")
+		where = append(where, "(s.derived_status = ? OR s.status_approval = ?)")
 		args = append(args, status, status)
 	}
 
-	rows, err := db.Query(`
-		SELECT latest_date, latest_cost, final_cost
-		FROM work_order_summary
-		WHERE `+strings.Join(where, " AND ")+`
-	`, args...)
+	query := `SELECT s.wo_id, s.latest_date, CASE WHEN COALESCE(s.latest_cost, 0) <> 0 THEN s.latest_cost ELSE COALESCE(s.final_cost, 0) END
+		FROM work_order_summary s WHERE ` + strings.Join(where, " AND ")
+	if ledger {
+		query = `SELECT c.wo_id, c.cost_date, c.approved_cost
+			FROM work_order_daily_costs c JOIN work_order_summary s ON s.wo_id = c.wo_id
+			WHERE ` + strings.Join(where, " AND ")
+	}
+	rows, err := db.Query(query, args...)
 	if err != nil {
 		http.Error(w, `{"error": "`+err.Error()+`"}`, http.StatusInternalServerError)
 		return
@@ -654,27 +694,26 @@ func GetWorkOrderTimeline(w http.ResponseWriter, r *http.Request) {
 		Period string  `json:"period"`
 		Cost   float64 `json:"cost"`
 		Count  int     `json:"count"`
+		wos    map[string]bool
 	}
 	buckets := map[string]*bucket{}
 	for rows.Next() {
-		var date string
-		var latestCost, finalCost float64
-		if rows.Scan(&date, &latestCost, &finalCost) != nil {
+		var woID, date string
+		var cost float64
+		if rows.Scan(&woID, &date, &cost) != nil {
 			continue
 		}
 		key := timelineKey(date, group)
 		if key == "" {
 			continue
 		}
-		if buckets[key] == nil {
-			buckets[key] = &bucket{Period: key}
+		b := buckets[key]
+		if b == nil {
+			b = &bucket{Period: key, wos: map[string]bool{}}
+			buckets[key] = b
 		}
-		cost := latestCost
-		if cost == 0 {
-			cost = finalCost
-		}
-		buckets[key].Cost += cost
-		buckets[key].Count++
+		b.Cost += cost
+		b.wos[woID] = true
 	}
 
 	keys := make([]string, 0, len(buckets))
@@ -684,7 +723,9 @@ func GetWorkOrderTimeline(w http.ResponseWriter, r *http.Request) {
 	sort.Strings(keys)
 	result := make([]bucket, 0, len(keys))
 	for _, key := range keys {
-		result = append(result, *buckets[key])
+		b := buckets[key]
+		b.Count = len(b.wos)
+		result = append(result, *b)
 	}
 
 	w.Header().Set("Content-Type", "application/json")
@@ -693,31 +734,6 @@ func GetWorkOrderTimeline(w http.ResponseWriter, r *http.Request) {
 
 func GetWorkOrderStats(w http.ResponseWriter, r *http.Request) {
 	whereSQL, args, _, _ := workOrderSummaryFilters(r)
-	if trend := strings.TrimSpace(r.URL.Query().Get("trend_date")); trend != "" {
-		group := strings.TrimSpace(r.URL.Query().Get("group"))
-		rows, err := db.Query(`
-			SELECT wo_id, wo_code, jo_code, project_name, vendor_name, ship_name, status_approval, derived_status,
-				COALESCE(latest_date, ''), pending_cost, final_cost, latest_cost, previous_cost, rejected_cost, total_cost,
-				COALESCE(created_source_at, ''), COALESCE(updated_source_at, '')
-			FROM work_order_summary
-			WHERE `+whereSQL+`
-		`, args...)
-		if err != nil {
-			http.Error(w, `{"error": "`+err.Error()+`"}`, http.StatusInternalServerError)
-			return
-		}
-		items := scanWorkOrderSummaryRows(rows)
-		rows.Close()
-		filtered := make([]workOrderSummary, 0, len(items))
-		for _, item := range items {
-			if timelineKey(item.LatestDate, group) == trend {
-				filtered = append(filtered, item)
-			}
-		}
-		writeWorkOrderStats(w, filtered)
-		return
-	}
-
 	rows, err := db.Query(`
 		SELECT wo_id, wo_code, jo_code, project_name, vendor_name, ship_name, status_approval, derived_status,
 			COALESCE(latest_date, ''), pending_cost, final_cost, latest_cost, previous_cost, rejected_cost, total_cost,
