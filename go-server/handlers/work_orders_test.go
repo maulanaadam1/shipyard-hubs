@@ -75,11 +75,11 @@ func TestApplyFinancialsFromDetail(t *testing.T) {
 	raw := []byte(`{"data": {
 		"id": 1, "code": "WO-1", "min_approval_level": 2,
 		"created_at": "2026-09-01 08:00:00", "updated_at": "2026-10-01 10:00:00",
-		"repair_list": [
-			{"price": "1000", "volume": 2, "approved_level": 5, "status_approval": "approved", "date_approval": "2026-10-01 10:00:00"},
-			{"price": "500", "volume": 1, "approved_level": 0, "status_approval": "waiting", "date_approval": "2026-09-20 10:00:00"},
-			{"total_price": 300, "approved_level": 0, "status_approval": "rejected", "date_approval": "2026-09-21 10:00:00"}
-		]
+		"repair_list": [{"id": "act-test", "path": "1", "parameter": {"path_name": "TEST > Activity"}, "material": [
+			{"volume_cost_final": 1000, "volume": 2, "approved_level": 5, "status_approval": "approved", "date_approval": "2026-10-01 10:00:00"},
+			{"volume_cost_final": 500, "volume": 1, "approved_level": 0, "status_approval": "waiting", "date_approval": "2026-09-20 10:00:00"},
+			{"volume_cost_final": 300, "volume": 1, "approved_level": 0, "status_approval": "rejected", "date_approval": "2026-09-21 10:00:00"}
+		]}]
 	}}`)
 	s := applyFinancialsFromDetail(workOrderSummary{WOID: "1"}, raw)
 	if s.FinalCost != 2000 {

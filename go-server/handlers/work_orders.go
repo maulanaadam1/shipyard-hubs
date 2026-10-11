@@ -158,6 +158,44 @@ type workOrderSummary struct {
 	// DailyCosts is the approved cost per approval date (YYYY-MM-DD) derived
 	// from the detail; it sums to FinalCost. Not part of the API payload.
 	DailyCosts map[string]float64 `json:"-"`
+	// Items are the leaf work items behind the financials (one row per
+	// item in wo_items). Not part of the API payload.
+	Items []woItem `json:"-"`
+}
+
+// woItem is one leaf work item of a WO detail, classified with the same rules
+// as the summary financials so the item totals always add up to them.
+type woItem struct {
+	ItemID       string
+	ActivityPath string
+	ActivityName string
+	Category     string
+	Path         string
+	Label        string
+	Unit         string
+	Volume       float64
+	UnitCost     float64 // volume_cost_final: cost per unit (SIAGA has no selling price here)
+	TotalCost    float64 // UnitCost x volume
+	Level        int
+	Status       string // approved | pending | rejected
+	ApprovalDate string // YYYY-MM-DD, approved items only
+}
+
+// activityNames returns the activity's full name (e.g. "TANKI-TANKI > Cleaning >
+// Buang lumpur") and its top-level category ("TANKI-TANKI").
+func activityNames(activity map[string]interface{}) (string, string) {
+	name := ""
+	if param, ok := activity["parameter"].(map[string]interface{}); ok {
+		name = strings.TrimSpace(firstString(param, "path_name"))
+	}
+	if name == "" {
+		name = strings.TrimSpace(firstString(activity, "description", "label"))
+	}
+	category := name
+	if i := strings.Index(name, ">"); i >= 0 {
+		category = strings.TrimSpace(name[:i])
+	}
+	return name, category
 }
 
 func approvalStatusText(level float64, status string) string {
@@ -370,33 +408,39 @@ func applyFinancialsFromDetail(summary workOrderSummary, raw []byte) workOrderSu
 	dailyCosts := make(map[string]float64)
 	var pendingSum, finalCostSum, rejectedSum float64
 
-	var processItems func(items []interface{})
-	processItems = func(items []interface{}) {
-		for _, itemRaw := range items {
+	var items []woItem
+	var processItems func(list []interface{}, activity map[string]interface{})
+	processItems = func(list []interface{}, activity map[string]interface{}) {
+		for _, itemRaw := range list {
 			item, ok := itemRaw.(map[string]interface{})
 			if !ok {
 				continue
 			}
+			act := activity
+			if act == nil {
+				act = item // top level of repair_list is the activity
+			}
 			if children, ok := item["material"].([]interface{}); ok && len(children) > 0 {
-				processItems(children)
+				processItems(children, act)
+				continue
+			}
+			if activity == nil {
+				// An activity with no work items under it carries only its
+				// "price", which is the activity / project contract value (e.g.
+				// a whole newbuilding repeated in several WOs), not a WO cost.
+				// WO costs come from work items only, as in lib/work-order-cost.ts.
 				continue
 			}
 
+			// Cost = volume_cost_final x volume only (same as lib/work-order-cost.ts).
+			// "price", "act_price" and "total_price" are contract/selling values,
+			// never WO costs, so there is no fallback to them.
 			baseCost := parseFloatAny(item["volume_cost_final"])
-			if baseCost == 0 {
-				baseCost = parseFloatAny(item["price"])
+			vol := float64(1) // a missing volume counts as 1; an explicit 0 stays 0
+			if v, ok := item["volume"]; ok && v != nil {
+				vol = parseFloatAny(v)
 			}
-			costToAdd := float64(0)
-			if baseCost > 0 {
-				vol := parseFloatAny(item["volume"])
-				if vol == 0 {
-					vol = 1
-				}
-				costToAdd = baseCost * vol
-			}
-			if costToAdd == 0 {
-				costToAdd = parseFloatAny(item["total_price"])
-			}
+			costToAdd := baseCost * vol
 
 			approvedLevel := parseFloatAny(item["approved_level"])
 			statusAppr := strings.ToLower(strings.TrimSpace(firstString(item, "status_approval")))
@@ -405,12 +449,38 @@ func applyFinancialsFromDetail(summary workOrderSummary, raw []byte) workOrderSu
 			isLevel1To4 := !isRejected && ((approvedLevel >= 1 && approvedLevel <= 4) || strings.HasPrefix(statusAppr, "level") || strings.HasPrefix(statusAppr, "approved level"))
 			isAppr := isAppr5 || (allowLevel1To4 && isLevel1To4)
 
+			label := strings.TrimSpace(firstString(item, "label", "description"))
+			isGroup := item["group_flag"] == true || strings.EqualFold(label, "grup")
+			record := func(status, approvalDate string) {
+				if isGroup && costToAdd == 0 {
+					return // empty grouping rows carry no work
+				}
+				actName, category := activityNames(act)
+				items = append(items, woItem{
+					ItemID:       firstString(item, "id", "uniqcode"),
+					ActivityPath: firstString(act, "path"),
+					ActivityName: actName,
+					Category:     category,
+					Path:         firstString(item, "path"),
+					Label:        label,
+					Unit:         firstString(item, "unit", "volume_unit"),
+					Volume:       parseFloatAny(item["volume"]),
+					UnitCost:     baseCost,
+					TotalCost:    costToAdd,
+					Level:        int(approvedLevel),
+					Status:       status,
+					ApprovalDate: approvalDate,
+				})
+			}
+
 			if isRejected {
 				rejectedSum += costToAdd
+				record("rejected", "")
 				continue
 			}
 			if !isAppr {
 				pendingSum += costToAdd
+				record("pending", "")
 				continue
 			}
 
@@ -425,9 +495,10 @@ func applyFinancialsFromDetail(summary workOrderSummary, raw []byte) workOrderSu
 				dailyCosts[d] += costToAdd
 			}
 			finalCostSum += costToAdd
+			record("approved", dateOnly(dateToUse))
 		}
 	}
-	processItems(repairList)
+	processItems(repairList, nil)
 
 	if isGlobalApproved {
 		if finalCostSum == 0 && rootTotalCost > 0 {
@@ -467,6 +538,7 @@ func applyFinancialsFromDetail(summary workOrderSummary, raw []byte) workOrderSu
 		dailyCosts[latestDate] += rest
 	}
 	summary.DailyCosts = dailyCosts
+	summary.Items = items
 
 	summary.PendingCost = pendingSum
 	summary.FinalCost = finalCostSum
