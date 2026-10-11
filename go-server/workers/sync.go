@@ -8,6 +8,7 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 
@@ -137,13 +138,30 @@ func fetchSyncURLs(urlStr string, headers map[string]string) ([]byte, error) {
 	if len(responses) == 1 {
 		return responses[0], nil
 	}
-	return mergeSyncResponses(responses)
+	return mergeSyncResponses(responses, urls)
 }
 
-func mergeSyncResponses(responses [][]byte) ([]byte, error) {
+// projectScope returns the value of the URL's "project" query parameter
+// (e.g. "internal"), which SIAGA uses to select internal vs external WOs.
+func projectScope(rawURL string) string {
+	if u, err := url.Parse(rawURL); err == nil {
+		return strings.ToLower(strings.TrimSpace(u.Query().Get("project")))
+	}
+	return ""
+}
+
+// mergeSyncResponses concatenates list responses, dropping duplicate ids. Items
+// from a URL with a project=... filter are tagged with "_project_scope" so the
+// WO processor knows which list they came from (SIAGA's own "project" field is
+// unreliable on older internal WOs).
+func mergeSyncResponses(responses [][]byte, urls []string) ([]byte, error) {
 	merged := make([]interface{}, 0)
-	seen := map[string]bool{}
-	for _, body := range responses {
+	seen := map[string]int{}
+	for i, body := range responses {
+		scope := ""
+		if i < len(urls) {
+			scope = projectScope(urls[i])
+		}
 		var parsed interface{}
 		if err := json.Unmarshal(body, &parsed); err != nil {
 			return nil, err
@@ -164,6 +182,9 @@ func mergeSyncResponses(responses [][]byte) ([]byte, error) {
 		for _, item := range list {
 			key := ""
 			if row, ok := item.(map[string]interface{}); ok {
+				if scope != "" {
+					row["_project_scope"] = scope
+				}
 				if id, ok := row["id"]; ok && id != nil {
 					key = fmt.Sprint(id)
 				} else if code, ok := row["code"]; ok && code != nil {
@@ -171,10 +192,14 @@ func mergeSyncResponses(responses [][]byte) ([]byte, error) {
 				}
 			}
 			if key != "" {
-				if seen[key] {
+				if at, dup := seen[key]; dup {
+					// Keep the first copy but don't lose an "internal" tag.
+					if prev, ok := merged[at].(map[string]interface{}); ok && scope == "internal" {
+						prev["_project_scope"] = scope
+					}
 					continue
 				}
-				seen[key] = true
+				seen[key] = len(merged)
 			}
 			merged = append(merged, item)
 		}
