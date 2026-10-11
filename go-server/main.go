@@ -1,6 +1,8 @@
 package main
 
 import (
+	"crypto/rand"
+	"encoding/hex"
 	"encoding/json"
 	"log"
 	"net/http"
@@ -24,8 +26,16 @@ func main() {
 	_ = godotenv.Load()
 
 	// Session tokens are signed with this; never fall back to a built-in value.
+	// If it is missing, use a random per-process secret instead of refusing to
+	// start: still unforgeable, but every restart signs all users out.
 	if os.Getenv("NEXTAUTH_SECRET") == "" {
-		log.Fatal("NEXTAUTH_SECRET is not set. Set it to a long random string (e.g. `openssl rand -hex 32`).")
+		buf := make([]byte, 32)
+		if _, err := rand.Read(buf); err != nil {
+			log.Fatalf("NEXTAUTH_SECRET is not set and no random secret could be generated: %v", err)
+		}
+		os.Setenv("NEXTAUTH_SECRET", hex.EncodeToString(buf))
+		log.Println("WARNING: NEXTAUTH_SECRET is not set; using a random secret for this process. " +
+			"Users are signed out on every restart. Set NEXTAUTH_SECRET (e.g. `openssl rand -hex 32`).")
 	}
 
 	db.Init()
