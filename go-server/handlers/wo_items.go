@@ -26,7 +26,7 @@ func woItemFilters(q url.Values) (string, []interface{}) {
 		where = append(where, "LOWER(s.wo_code) LIKE ?")
 		args = append(args, "%"+wo+"%")
 	}
-	for param, column := range map[string]string{"project": "s.project_name", "category": "i.category", "activity": "i.activity_name", "status": "i.status", "unit": "i.unit"} {
+	for param, column := range map[string]string{"project": "s.project_name", "category": "i.category", "activity": "i.activity_name", "label": "i.label", "status": "i.status", "unit": "i.unit"} {
 		if v := strings.TrimSpace(q.Get(param)); v != "" && v != "All" {
 			where = append(where, column+" = ?")
 			args = append(args, v)

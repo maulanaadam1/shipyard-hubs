@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Search, ListChecks, ChevronLeft, ChevronRight, ArrowDown, ArrowUp, Eye, EyeOff, Layers } from 'lucide-react';
+import { Search, ListChecks, ChevronLeft, ChevronRight, ChevronDown, ArrowDown, ArrowUp, Eye, EyeOff, Layers } from 'lucide-react';
 import { getHeaders } from '@/lib/api-client';
 import { SearchableSelect } from './SearchableSelect';
 
@@ -27,6 +27,20 @@ const GROUP_COLUMNS: Record<Exclude<View, 'list'>, { key: string; label: string 
   category: [{ key: 'category', label: 'Kategori' }],
   vendor_activity: [{ key: 'vendor_name', label: 'Vendor' }, { key: 'activity_name', label: 'Aktivitas' }],
 };
+
+// Summary group column -> /api/wo-items filter used to list that group's items.
+const GROUP_FILTER_PARAM: Record<string, string> = {
+  project_name: 'project',
+  vendor_name: 'vendor',
+  activity_name: 'activity',
+  category: 'category',
+  label: 'label',
+  unit: 'unit',
+};
+
+const DETAIL_PAGE_SIZE = 20;
+
+type GroupDetail = { loading: boolean; rows: any[]; total: number; limit: number; error?: string };
 
 const STATUS_STYLE: Record<string, string> = {
   approved: 'bg-emerald-100 text-emerald-700',
@@ -56,6 +70,9 @@ export default function WorkOrderItems() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [facets, setFacets] = useState<{ categories: string[]; itemCount: number; woCount: number } | null>(null);
+  // Per-group item details in the summary views, keyed by the group's values.
+  const [details, setDetails] = useState<Record<string, GroupDetail>>({});
+  const [showAllDetails, setShowAllDetails] = useState(false);
   const [options, setOptions] = useState<{ projects: string[]; vendors: string[] }>({ projects: [], vendors: [] });
   const [isNominalHidden, setIsNominalHidden] = useState(() => {
     try { return localStorage.getItem('hideNominal_WO') !== 'false'; } catch { return true; }
@@ -71,6 +88,63 @@ export default function WorkOrderItems() {
     ? 'Rp ****'
     : new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', minimumFractionDigits: 0, maximumFractionDigits: 0 }).format(value || 0);
   const formatNum = (value: number) => new Intl.NumberFormat('id-ID', { maximumFractionDigits: 2 }).format(value || 0);
+
+  // Filters shared by the list, the summaries and the per-group details.
+  const baseParams = () => {
+    const params = new URLSearchParams();
+    if (debouncedSearch.trim()) params.set('search', debouncedSearch.trim());
+    if (projectType !== 'All') params.set('project_type', projectType);
+    if (status !== 'All') params.set('status', status);
+    if (category !== 'All') params.set('category', category);
+    if (project !== 'All') params.set('project', project);
+    if (vendor !== 'All') params.set('vendor', vendor);
+    if (startDate) params.set('start_date', startDate);
+    if (endDate) params.set('end_date', endDate);
+    return params;
+  };
+
+  const groupKey = (row: any) => JSON.stringify((view === 'list' ? [] : GROUP_COLUMNS[view]).map(c => row[c.key] ?? ''));
+
+  const loadGroupDetail = async (row: any, limit = DETAIL_PAGE_SIZE) => {
+    if (view === 'list') return;
+    const key = groupKey(row);
+    setDetails(prev => ({ ...prev, [key]: { ...(prev[key] || { rows: [], total: 0 }), loading: true, limit } }));
+    try {
+      const headers = await getHeaders();
+      const params = baseParams();
+      GROUP_COLUMNS[view].forEach(c => {
+        const param = GROUP_FILTER_PARAM[c.key];
+        const value = row[c.key] ?? '';
+        if (!param) return;
+        // An empty vendor group is the "no vendor" bucket.
+        if (param === 'vendor' && value === '') params.set('vendor', 'Tanpa Vendor');
+        else params.set(param, value);
+      });
+      params.set('page', '1');
+      params.set('limit', String(limit));
+      params.set('sort', 'total_cost');
+      params.set('dir', 'desc');
+      const res = await fetch(`/api/wo-items?${params}`, { headers });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const json = await res.json();
+      setDetails(prev => ({ ...prev, [key]: { loading: false, rows: json.data || [], total: json.total || 0, limit } }));
+    } catch {
+      setDetails(prev => ({ ...prev, [key]: { loading: false, rows: [], total: 0, limit, error: 'Gagal memuat detail.' } }));
+    }
+  };
+
+  const toggleGroup = (row: any) => {
+    const key = groupKey(row);
+    if (details[key]) {
+      setDetails(prev => {
+        const next = { ...prev };
+        delete next[key];
+        return next;
+      });
+    } else {
+      loadGroupDetail(row);
+    }
+  };
 
   useEffect(() => {
     const timer = setTimeout(() => setDebouncedSearch(searchTerm), 300);
@@ -91,6 +165,14 @@ export default function WorkOrderItems() {
       } catch { /* options are optional */ }
     })();
   }, []);
+
+  // Opened group details belong to the rows they were opened on.
+  useEffect(() => { setDetails({}); }, [rows]);
+  // "Show all details": open every group on the current page.
+  useEffect(() => {
+    if (view === 'list' || !showAllDetails) return;
+    rows.forEach(r => loadGroupDetail(r));
+  }, [rows, showAllDetails]);
 
   // Reset paging and sorting when the question changes.
   useEffect(() => { setPage(1); }, [debouncedSearch, projectType, status, category, project, vendor, startDate, endDate, view]);
@@ -245,7 +327,23 @@ export default function WorkOrderItems() {
         <section className="rounded-2xl border bg-white border-slate-200 shadow-sm overflow-hidden">
           <div className="px-5 py-3 border-b border-slate-100 flex flex-wrap items-center justify-between gap-2">
             <p className="text-sm font-semibold text-slate-700">{VIEWS.find(v => v.key === view)?.label}</p>
-            <p className="text-xs text-slate-500">{loading ? 'Memuat…' : summaryCaption}</p>
+            <div className="flex items-center gap-4">
+              {view !== 'list' && (
+                <label className="inline-flex items-center gap-2 text-xs font-semibold text-slate-600 cursor-pointer select-none">
+                  <input
+                    type="checkbox"
+                    checked={showAllDetails}
+                    onChange={e => {
+                      setShowAllDetails(e.target.checked);
+                      if (!e.target.checked) setDetails({});
+                    }}
+                    className="accent-indigo-600"
+                  />
+                  Tampilkan semua detail
+                </label>
+              )}
+              <p className="text-xs text-slate-500">{loading ? 'Memuat…' : summaryCaption}</p>
+            </div>
           </div>
 
           {error ? (
@@ -267,6 +365,7 @@ export default function WorkOrderItems() {
                     </tr>
                   ) : (
                     <tr>
+                      <th className="py-3 pl-4 w-8" aria-label="Detail"></th>
                       {groupColumns.map(c => <th key={c.key} className="py-3 px-4 text-left">{c.label}</th>)}
                       <SortHead column="item_count">Item</SortHead>
                       <SortHead column="wo_count">WO</SortHead>
@@ -311,8 +410,15 @@ export default function WorkOrderItems() {
                         <td className="py-2.5 px-4 font-mono text-slate-500 whitespace-nowrap">{r.approval_date || '-'}</td>
                       </tr>
                     ))
-                    : rows.map((r, idx) => (
-                      <tr key={idx} className="hover:bg-slate-50 align-top">
+                    : rows.map((r, idx) => {
+                      const key = groupKey(r);
+                      const detail = details[key];
+                      return (
+                      <React.Fragment key={idx}>
+                      <tr className={`hover:bg-slate-50 align-top cursor-pointer ${detail ? 'bg-indigo-50/40' : ''}`} onClick={() => toggleGroup(r)}>
+                        <td className="py-2.5 pl-4 text-slate-400">
+                          <ChevronDown size={14} className={`transition-transform ${detail ? '' : '-rotate-90'}`} />
+                        </td>
                         {groupColumns.map(c => (
                           <td key={c.key} className={`py-2.5 px-4 ${c.key === 'unit' ? 'whitespace-nowrap' : 'max-w-md'}`}>
                             <span className={c.key === groupColumns[groupColumns.length - 1].key && c.key !== 'unit' ? 'font-semibold text-slate-800' : 'text-slate-600'}>
@@ -328,7 +434,75 @@ export default function WorkOrderItems() {
                         <td className="py-2.5 px-4 text-right font-mono whitespace-nowrap">{formatIDR(r.max_cost)}</td>
                         <td className="py-2.5 px-4 text-right font-mono font-semibold whitespace-nowrap">{formatIDR(r.total_cost)}</td>
                       </tr>
-                    ))}
+                      {detail && (
+                        <tr className="bg-slate-50/60">
+                          <td colSpan={groupColumns.length + 8} className="px-4 pb-4 pt-1">
+                            {detail.error ? (
+                              <p className="text-xs text-rose-600 py-2">{detail.error}</p>
+                            ) : (
+                              <div className="rounded-xl border border-slate-200 bg-white overflow-x-auto">
+                                <table className="w-full text-[11px]">
+                                  <thead className="bg-slate-50 text-slate-400 uppercase tracking-wide text-[9px]">
+                                    <tr>
+                                      <th className="py-2 px-3 text-left">Item / Aktivitas</th>
+                                      <th className="py-2 px-3 text-left">WO / Proyek</th>
+                                      <th className="py-2 px-3 text-left">Vendor</th>
+                                      <th className="py-2 px-3 text-right">Volume</th>
+                                      <th className="py-2 px-3 text-right">Biaya Satuan</th>
+                                      <th className="py-2 px-3 text-right">Total Biaya</th>
+                                      <th className="py-2 px-3 text-left">Status</th>
+                                      <th className="py-2 px-3 text-left">Tgl Approval</th>
+                                    </tr>
+                                  </thead>
+                                  <tbody className="divide-y divide-slate-100">
+                                    {detail.rows.map(it => (
+                                      <tr key={`${it.wo_id}-${it.item_id}`} className="align-top">
+                                        <td className="py-1.5 px-3 max-w-md">
+                                          <p className="font-medium text-slate-700">{it.label || '-'}</p>
+                                          <p className="text-[10px] text-slate-400">{it.activity_name}</p>
+                                        </td>
+                                        <td className="py-1.5 px-3">
+                                          <a href={`https://shipyard-siaga.samudera.id/v2/work-orders/progress/${it.wo_id}`} target="_blank" rel="noopener noreferrer"
+                                            onClick={e => e.stopPropagation()} className="font-mono font-semibold text-indigo-500 hover:underline">{it.wo_code}</a>
+                                          <p className="text-[10px] text-slate-500">{it.project_name}</p>
+                                        </td>
+                                        <td className="py-1.5 px-3 text-slate-600">{it.vendor_name || '-'}</td>
+                                        <td className="py-1.5 px-3 text-right font-mono whitespace-nowrap">{formatNum(it.volume)} {it.unit}</td>
+                                        <td className="py-1.5 px-3 text-right font-mono whitespace-nowrap">{formatIDR(it.unit_cost)}</td>
+                                        <td className="py-1.5 px-3 text-right font-mono font-semibold whitespace-nowrap">{formatIDR(it.total_cost)}</td>
+                                        <td className="py-1.5 px-3">
+                                          <span className={`px-1.5 py-0.5 rounded-full text-[9px] font-bold capitalize ${STATUS_STYLE[it.status] || 'bg-slate-100 text-slate-600'}`}>{it.status}</span>
+                                        </td>
+                                        <td className="py-1.5 px-3 font-mono text-slate-500 whitespace-nowrap">{it.approval_date || '-'}</td>
+                                      </tr>
+                                    ))}
+                                    {detail.loading && (
+                                      <tr><td colSpan={8} className="py-3 text-center text-slate-400">Memuat detail…</td></tr>
+                                    )}
+                                    {!detail.loading && detail.rows.length === 0 && (
+                                      <tr><td colSpan={8} className="py-3 text-center text-slate-400">Tidak ada item.</td></tr>
+                                    )}
+                                  </tbody>
+                                </table>
+                                {!detail.loading && detail.total > detail.rows.length && (
+                                  <div className="px-3 py-2 border-t border-slate-100 flex items-center justify-between text-[11px] text-slate-500">
+                                    <span>Menampilkan {detail.rows.length} dari {detail.total.toLocaleString('id-ID')} item</span>
+                                    <button
+                                      onClick={e => { e.stopPropagation(); loadGroupDetail(r, detail.limit + 50); }}
+                                      className="font-semibold text-indigo-600 hover:text-indigo-700"
+                                    >
+                                      Muat 50 lagi
+                                    </button>
+                                  </div>
+                                )}
+                              </div>
+                            )}
+                          </td>
+                        </tr>
+                      )}
+                      </React.Fragment>
+                      );
+                    })}
                 </tbody>
               </table>
             </div>

@@ -88,6 +88,11 @@ func TestWorkOrderItemsAPI(t *testing.T) {
 	if list.Total != 1 || list.Data[0]["label"] != "Kuras air tanki 3P" || list.Data[0]["project_name"] != "DRP26X/YWTS - KAPAL A" || list.Data[0]["vendor_name"] != "Vendor X" {
 		t.Errorf("search 'kuras': total=%d first=%v", list.Total, list.Data)
 	}
+	// Opening a per-item group lists items by their exact label.
+	get("/api/wo-items?label=Kuras%20air%20tanki%203P&vendor=Vendor%20X", &list)
+	if list.Total != 1 || list.Data[0]["item_id"] != "it-2" {
+		t.Errorf("exact label filter: total=%d data=%v", list.Total, list.Data)
+	}
 	get("/api/wo-items?status=approved", &list)
 	if list.Total != 1 || list.TotalCost != 1500000 {
 		t.Errorf("approved items: total=%d value=%v", list.Total, list.TotalCost)
