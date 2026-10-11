@@ -1,7 +1,9 @@
 package db
 
 import (
+	"crypto/rand"
 	"database/sql"
+	"encoding/base64"
 	"fmt"
 	"log"
 	"os"
@@ -740,39 +742,84 @@ func seedApprovalWorkflows() {
 	}
 }
 
+// seedAdmin bootstraps the first Admin account and otherwise leaves existing
+// accounts alone (it used to reset admin@shipyard.local to "admin123" on every
+// start). Configure with DEFAULT_ADMIN_EMAIL / DEFAULT_ADMIN_PASSWORD;
+// DEFAULT_ADMIN_RESET=true resets that account's password once for recovery.
 func seedAdmin() {
-	// Hardcode for foolproof login
-	defaultEmail := "admin@shipyard.local"
-	defaultPwd := "admin123"
-
-	hashed, err := bcrypt.GenerateFromPassword([]byte(defaultPwd), bcrypt.DefaultCost)
-	if err != nil {
-		log.Printf("Warning: failed to hash default admin password: %v", err)
-		return
+	email := strings.TrimSpace(os.Getenv("DEFAULT_ADMIN_EMAIL"))
+	if email == "" {
+		email = "admin@shipyard.local"
 	}
+	password := os.Getenv("DEFAULT_ADMIN_PASSWORD")
 
 	var existingID string
-	err = DB.QueryRow(FormatQuery("SELECT id FROM profiles WHERE email = ?"), defaultEmail).Scan(&existingID)
-
+	err := DB.QueryRow(FormatQuery("SELECT id FROM profiles WHERE email = ?"), email).Scan(&existingID)
 	if err == nil {
-		// Admin exists, FORCE RESET the password and role to ensure it works
-		_, _ = DB.Exec(FormatQuery("UPDATE profiles SET password = ?, role = 'Admin', jabatan = 'System Administrator' WHERE id = ?"),
-			string(hashed), existingID,
-		)
-		log.Printf("Admin account reset guaranteed: %s", defaultEmail)
+		if os.Getenv("DEFAULT_ADMIN_RESET") != "true" {
+			return
+		}
+		if !strongAdminPassword(password) {
+			log.Printf("DEFAULT_ADMIN_RESET ignored: DEFAULT_ADMIN_PASSWORD must be at least 12 characters and not a known default")
+			return
+		}
+		hashed, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
+		if err != nil {
+			log.Printf("Warning: failed to hash admin password: %v", err)
+			return
+		}
+		DB.Exec(FormatQuery("UPDATE profiles SET password = ?, role = 'Admin' WHERE id = ?"), string(hashed), existingID)
+		log.Printf("Admin password for %s reset from DEFAULT_ADMIN_PASSWORD. Remove DEFAULT_ADMIN_RESET now.", email)
 		return
 	}
 
-	// Admin does not exist, create it
+	// Only bootstrap when there is no Admin at all.
+	var admins int
+	DB.QueryRow("SELECT COUNT(*) FROM profiles WHERE role = 'Admin'").Scan(&admins)
+	if admins > 0 {
+		return
+	}
+
+	generated := false
+	if !strongAdminPassword(password) {
+		password = randomPassword()
+		generated = true
+	}
+	hashed, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
+	if err != nil {
+		log.Printf("Warning: failed to hash admin password: %v", err)
+		return
+	}
 	id := uuid.New().String()
 	_, err = DB.Exec(FormatQuery("INSERT INTO profiles (id, email, password, name, role, jabatan) VALUES (?, ?, ?, ?, ?, ?)"),
-		id, defaultEmail, string(hashed), "Super Admin", "Admin", "System Administrator",
+		id, email, string(hashed), "Super Admin", "Admin", "System Administrator",
 	)
 	if err != nil {
 		log.Printf("Warning: failed to seed admin: %v", err)
 		return
 	}
-	log.Printf("Default Super Admin created: %s", defaultEmail)
+	if generated {
+		// Shown once, on first start only; change it after logging in.
+		log.Printf("Initial Admin created: %s / %s (change this password after logging in)", email, password)
+	} else {
+		log.Printf("Initial Admin created: %s", email)
+	}
+}
+
+func strongAdminPassword(p string) bool {
+	switch strings.ToLower(p) {
+	case "", "admin", "admin123", "password", "changeme":
+		return false
+	}
+	return len(p) >= 12
+}
+
+func randomPassword() string {
+	buf := make([]byte, 12)
+	if _, err := rand.Read(buf); err != nil {
+		panic(err)
+	}
+	return base64.RawURLEncoding.EncodeToString(buf)
 }
 
 // GetUserByIdentifier returns a user row including the password hash (for auth)
