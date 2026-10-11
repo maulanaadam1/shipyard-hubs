@@ -1,10 +1,15 @@
 import json
+import os
+import sys
 import psycopg2
 import psycopg2.extras
 from concurrent.futures import ThreadPoolExecutor
 
 # Konfigurasi koneksi langsung ke PostgreSQL Easypanel
-DB_URL = "postgres://postgres:ofv17qs766typz8dig9y@43.157.204.11:5432/stage1?sslmode=disable"
+# Read from the environment (same variable as the Go server); never hard-code credentials.
+DB_URL = os.environ.get("POSTGRES_URL")
+if not DB_URL:
+    sys.exit("Set POSTGRES_URL before running this script.")
 
 def process_wo(row):
     wo_id, raw_json_str = row
