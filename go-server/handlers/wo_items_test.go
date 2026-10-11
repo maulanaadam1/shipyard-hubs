@@ -109,6 +109,18 @@ func TestWorkOrderItemsAPI(t *testing.T) {
 	if len(sum.Data) != 1 || sum.Data[0]["category"] != "TANKI-TANKI" || sum.Data[0]["total_cost"] != float64(1750000) {
 		t.Errorf("category summary: %v", sum.Data)
 	}
+
+	// Newest first by default: approved items by approval date, the rest by the
+	// WO's last update (2026-10-05), ties broken by cost.
+	get("/api/wo-items", &list)
+	if len(list.Data) != 3 || list.Data[0]["item_id"] != "it-2" || list.Data[0]["item_date"] != "2026-10-05" ||
+		list.Data[2]["item_id"] != "it-1" || list.Data[2]["item_date"] != "2026-09-10" {
+		t.Errorf("default list order: %v", list.Data)
+	}
+	get("/api/wo-items/summary?group=project_item", &sum)
+	if len(sum.Data) != 3 || sum.Data[0]["latest_date"] != "2026-10-05" || sum.Data[2]["label"] != "Cleaning lumpur tanki 3P" || sum.Data[2]["latest_date"] != "2026-09-10" {
+		t.Errorf("default summary order: %v", sum.Data)
+	}
 }
 
 func TestActivityWithoutItemsIsNotACost(t *testing.T) {

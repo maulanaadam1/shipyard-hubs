@@ -13,6 +13,10 @@ import (
 // Work item search over wo_items (leaf items flattened from WO details),
 // joined with work_order_summary for WO / project / vendor context.
 
+// itemDateExpr is an item's date for "newest first": its approval date, or for
+// items not approved yet, the date its WO was last updated in SIAGA.
+const itemDateExpr = "COALESCE(NULLIF(i.approval_date, ''), SUBSTR(COALESCE(s.updated_source_at, ''), 1, 10))"
+
 // woItemFilters builds the WHERE clause shared by the item list and summaries.
 func woItemFilters(q url.Values) (string, []interface{}) {
 	where := []string{"1=1"}
@@ -80,14 +84,15 @@ func GetWorkOrderItems(w http.ResponseWriter, r *http.Request) {
 		"total_cost":    "i.total_cost",
 		"unit_cost":     "i.unit_cost",
 		"volume":        "i.volume",
-		"approval_date": "i.approval_date",
+		"approval_date": itemDateExpr,
+		"item_date":     itemDateExpr,
 		"label":         "i.label",
 		"wo_code":       "s.wo_code",
 		"project_name":  "s.project_name",
 	}
 	sortCol := sortCols[q.Get("sort")]
 	if sortCol == "" {
-		sortCol = "i.total_cost"
+		sortCol = itemDateExpr // newest first by default
 	}
 
 	from := ` FROM wo_items i JOIN work_order_summary s ON s.wo_id = i.wo_id WHERE ` + where
@@ -99,8 +104,8 @@ func GetWorkOrderItems(w http.ResponseWriter, r *http.Request) {
 			COALESCE(i.label, ''), COALESCE(i.unit, ''), COALESCE(i.volume, 0), COALESCE(i.unit_cost, 0), COALESCE(i.total_cost, 0),
 			COALESCE(i.approved_level, 0), COALESCE(i.status, ''), COALESCE(i.approval_date, ''),
 			COALESCE(s.wo_code, ''), COALESCE(s.jo_code, ''), COALESCE(s.project_name, ''), COALESCE(s.vendor_name, ''),
-			COALESCE(s.ship_name, ''), COALESCE(s.project_type, 'external')`+from+`
-		ORDER BY `+sortCol+` `+sortDir(q)+`, i.wo_id, i.path LIMIT ? OFFSET ?`, append(args, limit, (page-1)*limit)...)
+			COALESCE(s.ship_name, ''), COALESCE(s.project_type, 'external'), `+itemDateExpr+` AS item_date`+from+`
+		ORDER BY `+sortCol+` `+sortDir(q)+`, i.total_cost DESC, i.wo_id, i.path LIMIT ? OFFSET ?`, append(args, limit, (page-1)*limit)...)
 	if err != nil {
 		http.Error(w, `{"error": "`+err.Error()+`"}`, http.StatusInternalServerError)
 		return
@@ -127,13 +132,14 @@ func GetWorkOrderItems(w http.ResponseWriter, r *http.Request) {
 		VendorName   string  `json:"vendor_name"`
 		ShipName     string  `json:"ship_name"`
 		ProjectType  string  `json:"project_type"`
+		ItemDate     string  `json:"item_date"`
 	}
 	data := []itemRow{}
 	for rows.Next() {
 		var it itemRow
 		if rows.Scan(&it.WOID, &it.ItemID, &it.Category, &it.ActivityName, &it.Path, &it.Label, &it.Unit, &it.Volume, &it.UnitCost,
 			&it.TotalCost, &it.Level, &it.Status, &it.ApprovalDate, &it.WOCode, &it.JOCode, &it.ProjectName, &it.VendorName,
-			&it.ShipName, &it.ProjectType) == nil {
+			&it.ShipName, &it.ProjectType, &it.ItemDate) == nil {
 			data = append(data, it)
 		}
 	}
@@ -174,10 +180,11 @@ func GetWorkOrderItemSummary(w http.ResponseWriter, r *http.Request) {
 	sortCols := map[string]string{
 		"total_cost": "total_cost", "item_count": "item_count", "wo_count": "wo_count",
 		"total_volume": "total_volume", "avg_cost": "avg_cost", "max_cost": "max_cost", "min_cost": "min_cost",
+		"latest_date": "latest_date",
 	}
 	sortCol := sortCols[q.Get("sort")]
 	if sortCol == "" {
-		sortCol = "total_cost"
+		sortCol = "latest_date" // groups with the newest item first by default
 	}
 
 	keyList := strings.Join(group.keys, ", ")
@@ -194,9 +201,10 @@ func GetWorkOrderItemSummary(w http.ResponseWriter, r *http.Request) {
 			CASE WHEN SUM(CASE WHEN i.unit_cost > 0 THEN i.volume ELSE 0 END) > 0
 				THEN SUM(CASE WHEN i.unit_cost > 0 THEN i.total_cost ELSE 0 END) / SUM(CASE WHEN i.unit_cost > 0 THEN i.volume ELSE 0 END)
 				ELSE 0 END AS avg_cost,
-			COALESCE(MAX(i.unit_cost), 0) AS max_cost`+from+`
+			COALESCE(MAX(i.unit_cost), 0) AS max_cost,
+			COALESCE(MAX(`+itemDateExpr+`), '') AS latest_date`+from+`
 		GROUP BY `+keyList+`
-		ORDER BY `+sortCol+` `+sortDir(q)+`
+		ORDER BY `+sortCol+` `+sortDir(q)+`, total_cost DESC
 		LIMIT ? OFFSET ?`, append(args, limit, (page-1)*limit)...)
 	if err != nil {
 		http.Error(w, `{"error": "`+err.Error()+`"}`, http.StatusInternalServerError)
@@ -209,17 +217,18 @@ func GetWorkOrderItemSummary(w http.ResponseWriter, r *http.Request) {
 		keys := make([]string, len(group.keys))
 		var itemCount, woCount int
 		var volume, cost, minCost, avgCost, maxCost float64
+		var latestDate string
 		dest := make([]interface{}, 0, len(keys)+7)
 		for i := range keys {
 			dest = append(dest, &keys[i])
 		}
-		dest = append(dest, &itemCount, &woCount, &volume, &cost, &minCost, &avgCost, &maxCost)
+		dest = append(dest, &itemCount, &woCount, &volume, &cost, &minCost, &avgCost, &maxCost, &latestDate)
 		if rows.Scan(dest...) != nil {
 			continue
 		}
 		row := map[string]interface{}{
 			"item_count": itemCount, "wo_count": woCount, "total_volume": volume, "total_cost": cost,
-			"min_cost": minCost, "avg_cost": avgCost, "max_cost": maxCost,
+			"min_cost": minCost, "avg_cost": avgCost, "max_cost": maxCost, "latest_date": latestDate,
 		}
 		for i, name := range group.labels {
 			row[name] = keys[i]

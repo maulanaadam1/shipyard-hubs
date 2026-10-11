@@ -67,9 +67,12 @@ export default function WorkOrderItems() {
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(25);
   const [jumpTo, setJumpTo] = useState('');
-  const [sort, setSort] = useState('total_cost');
+  const [sort, setSort] = useState('item_date');
   const [dir, setDir] = useState<'asc' | 'desc'>('desc');
   const [rows, setRows] = useState<any[]>([]);
+  // The view the current rows were fetched for; rows of another view are never
+  // rendered under this view's columns.
+  const [rowsView, setRowsView] = useState<View | null>(null);
   const [total, setTotal] = useState(0);
   const [totalCost, setTotalCost] = useState(0);
   const [loading, setLoading] = useState(false);
@@ -127,7 +130,7 @@ export default function WorkOrderItems() {
       });
       params.set('page', '1');
       params.set('limit', String(limit));
-      params.set('sort', 'total_cost');
+      params.set('sort', 'item_date');
       params.set('dir', 'desc');
       const res = await fetch(`/api/wo-items?${params}`, { headers });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -175,14 +178,25 @@ export default function WorkOrderItems() {
   useEffect(() => { setDetails({}); }, [rows]);
   // "Show all details": open every group on the current page.
   useEffect(() => {
-    if (view === 'list' || !showAllDetails) return;
+    if (view === 'list' || !showAllDetails || rowsView !== view) return;
     rows.forEach(r => loadGroupDetail(r));
-  }, [rows, showAllDetails]);
+  }, [rows, rowsView, view, showAllDetails]);
 
   // Reset paging and sorting when the question changes.
   useEffect(() => { setPage(1); }, [debouncedSearch, projectType, status, category, project, vendor, startDate, endDate, view, pageSize]);
+  // Switching view clears the table at once instead of showing the previous
+  // view's rows under the new columns while the new data loads.
   useEffect(() => {
-    setSort('total_cost');
+    setRows([]);
+    setRowsView(null);
+    setTotal(0);
+    setTotalCost(0);
+    setDetails({});
+  }, [view]);
+  const visibleRows = rowsView === view ? rows : [];
+  useEffect(() => {
+    // Newest first in every view: items by date, groups by their newest item.
+    setSort(view === 'list' ? 'item_date' : 'latest_date');
     setDir('desc');
   }, [view]);
 
@@ -209,6 +223,7 @@ export default function WorkOrderItems() {
         const json = await res.json();
         if (controller.signal.aborted) return;
         setRows(json.data || []);
+        setRowsView(view);
         setTotal(json.total || 0);
         setTotalCost(view === 'list' ? json.totalCost || 0 : 0);
       } catch (e: any) {
@@ -419,7 +434,7 @@ export default function WorkOrderItems() {
                       <SortHead column="unit_cost">Biaya Satuan</SortHead>
                       <SortHead column="total_cost">Total Biaya</SortHead>
                       <th className="py-3 px-4 text-left">Status</th>
-                      <SortHead column="approval_date" align="left">Tgl Approval</SortHead>
+                      <SortHead column="item_date" align="left">Tanggal</SortHead>
                     </tr>
                   ) : (
                     <tr>
@@ -431,16 +446,20 @@ export default function WorkOrderItems() {
                       <SortHead column="min_cost">Biaya Min</SortHead>
                       <SortHead column="avg_cost">Biaya Rata²</SortHead>
                       <SortHead column="max_cost">Biaya Maks</SortHead>
+                      <SortHead column="latest_date">Tgl Terbaru</SortHead>
                       <SortHead column="total_cost">Total Biaya</SortHead>
                     </tr>
                   )}
                 </thead>
                 <tbody className="divide-y divide-slate-100">
-                  {!loading && rows.length === 0 && (
+                  {loading && visibleRows.length === 0 && (
+                    <tr><td colSpan={12} className="p-8 text-center text-slate-400">Memuat data…</td></tr>
+                  )}
+                  {!loading && visibleRows.length === 0 && (
                     <tr><td colSpan={10} className="p-8 text-center text-slate-400">Tidak ada item yang cocok dengan filter.</td></tr>
                   )}
                   {view === 'list'
-                    ? rows.map(r => (
+                    ? visibleRows.map(r => (
                       <tr key={`${r.wo_id}-${r.item_id}`} className="hover:bg-slate-50 align-top">
                         <td className="py-2.5 px-4 max-w-md">
                           <p className="font-semibold text-slate-800">{r.label || '-'}</p>
@@ -465,10 +484,13 @@ export default function WorkOrderItems() {
                         <td className="py-2.5 px-4">
                           <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold capitalize ${STATUS_STYLE[r.status] || 'bg-slate-100 text-slate-600'}`}>{r.status}</span>
                         </td>
-                        <td className="py-2.5 px-4 font-mono text-slate-500 whitespace-nowrap">{r.approval_date || '-'}</td>
+                        <td className="py-2.5 px-4 font-mono text-slate-500 whitespace-nowrap">
+                          {r.item_date || '-'}
+                          {!r.approval_date && r.item_date && <p className="text-[9px] font-sans text-slate-400">update WO</p>}
+                        </td>
                       </tr>
                     ))
-                    : rows.map((r, idx) => {
+                    : visibleRows.map((r, idx) => {
                       const key = groupKey(r);
                       const detail = details[key];
                       return (
@@ -490,11 +512,12 @@ export default function WorkOrderItems() {
                         <td className="py-2.5 px-4 text-right font-mono whitespace-nowrap">{formatIDR(r.min_cost)}</td>
                         <td className="py-2.5 px-4 text-right font-mono whitespace-nowrap">{formatIDR(r.avg_cost)}</td>
                         <td className="py-2.5 px-4 text-right font-mono whitespace-nowrap">{formatIDR(r.max_cost)}</td>
+                        <td className="py-2.5 px-4 text-right font-mono text-slate-500 whitespace-nowrap">{r.latest_date || '-'}</td>
                         <td className="py-2.5 px-4 text-right font-mono font-semibold whitespace-nowrap">{formatIDR(r.total_cost)}</td>
                       </tr>
                       {detail && (
                         <tr className="bg-slate-50/60">
-                          <td colSpan={groupColumns.length + 8} className="px-4 pb-4 pt-1">
+                          <td colSpan={groupColumns.length + 9} className="px-4 pb-4 pt-1">
                             {detail.error ? (
                               <p className="text-xs text-rose-600 py-2">{detail.error}</p>
                             ) : (
@@ -509,7 +532,7 @@ export default function WorkOrderItems() {
                                       <th className="py-2 px-3 text-right">Biaya Satuan</th>
                                       <th className="py-2 px-3 text-right">Total Biaya</th>
                                       <th className="py-2 px-3 text-left">Status</th>
-                                      <th className="py-2 px-3 text-left">Tgl Approval</th>
+                                      <th className="py-2 px-3 text-left">Tanggal</th>
                                     </tr>
                                   </thead>
                                   <tbody className="divide-y divide-slate-100">
@@ -531,7 +554,10 @@ export default function WorkOrderItems() {
                                         <td className="py-1.5 px-3">
                                           <span className={`px-1.5 py-0.5 rounded-full text-[9px] font-bold capitalize ${STATUS_STYLE[it.status] || 'bg-slate-100 text-slate-600'}`}>{it.status}</span>
                                         </td>
-                                        <td className="py-1.5 px-3 font-mono text-slate-500 whitespace-nowrap">{it.approval_date || '-'}</td>
+                                        <td className="py-1.5 px-3 font-mono text-slate-500 whitespace-nowrap">
+                                          {it.item_date || '-'}
+                                          {!it.approval_date && it.item_date && <p className="text-[9px] font-sans text-slate-400">update WO</p>}
+                                        </td>
                                       </tr>
                                     ))}
                                     {detail.loading && (
