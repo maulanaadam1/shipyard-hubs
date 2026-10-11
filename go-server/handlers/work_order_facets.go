@@ -145,6 +145,12 @@ func addGlobalFacets(result map[string]interface{}) error {
 	_ = db.QueryRow("SELECT COALESCE(MAX(latest_date), '') FROM work_order_summary WHERE latest_date <> ''").Scan(&latestDate)
 	result["latestDate"] = latestDate
 
+	// Latest approval day in the daily ledger, so the UI can explain an empty
+	// trend range (stored details may be older than the latest WO activity).
+	var latestApproval string
+	_ = db.QueryRow("SELECT COALESCE(MAX(cost_date), '') FROM work_order_daily_costs").Scan(&latestApproval)
+	result["latestApprovalDate"] = latestApproval
+
 	// Projects: newest first for the dropdown, plus the year used by projectYearsStats.
 	rows, err := db.Query(`
 		SELECT project_name, MAX(COALESCE(jo_code, '')), MAX(COALESCE(created_source_at, ''))

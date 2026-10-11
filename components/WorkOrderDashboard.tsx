@@ -79,6 +79,9 @@ export default function WorkOrderDashboard() {
   const [globalFacets, setGlobalFacets] = useState<any | null | undefined>(undefined);
   const [cardFacets, setCardFacets] = useState<any | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
+  // Health of the SIAGA list/detail sync (expired token, errors, detail queue).
+  const [syncStatus, setSyncStatus] = useState<any | null>(null);
+  const [statusTick, setStatusTick] = useState(0);
   const [isUsingMock, setIsUsingMock] = useState(!syncCache['WorkOrders']);
   const [fileName, setFileName] = useState(syncDates['WorkOrders'] ? `Auto-Synced (${syncDates['WorkOrders']})` : "Data Contoh (Demo)");
   const [lastSyncDate, setLastSyncDate] = useState<string>(syncDates['WorkOrders'] || '');
@@ -435,16 +438,59 @@ export default function WorkOrderDashboard() {
       const headers = await getHeaders();
       const body = JSON.stringify({ id: 'WorkOrders' });
       const res = await fetch('/api/sync/trigger', { method: 'POST', headers, body });
-      if (!res.ok) throw new Error("Gagal");
-      
-      // Re-run every summary query without reloading the window
+      if (!res.ok) {
+        const errObj = await res.json().catch(() => ({}));
+        throw new Error(errObj.error || "Gagal melakukan sinkronisasi. Cek log server atau pastikan URL API valid di menu API Sync Config.");
+      }
+    } catch (e: any) {
+      alert(e?.message || "Gagal melakukan sinkronisasi.");
+    } finally {
+      // Re-run every summary query (and the sync status) without reloading the window
       setReloadKey(k => k + 1);
-      setIsSyncing(false);
-    } catch (e) {
-      alert("Gagal melakukan sinkronisasi. Cek log server atau pastikan URL API valid di menu API Sync Config.");
       setIsSyncing(false);
     }
   };
+
+  useEffect(() => {
+    const controller = new AbortController();
+    const loadSyncStatus = async () => {
+      try {
+        const headers = await getHeaders();
+        const res = await fetch('/api/work-orders/sync-status', { headers, signal: controller.signal });
+        if (res.ok && !controller.signal.aborted) setSyncStatus(await res.json());
+      } catch (error) {
+        // Status is informational only; keep the dashboard usable without it.
+      }
+    };
+    loadSyncStatus();
+    return () => controller.abort();
+  }, [reloadKey, statusTick]);
+
+  // Poll while the server rebuilds derived data, then reload the dashboard once it finishes.
+  const wasRebuildingRef = useRef(false);
+  useEffect(() => {
+    const running = !!syncStatus?.rebuild?.running;
+    if (wasRebuildingRef.current && !running) setReloadKey(k => k + 1);
+    wasRebuildingRef.current = running;
+    if (!running) return;
+    const timer = setTimeout(() => setStatusTick(t => t + 1), 5000);
+    return () => clearTimeout(timer);
+  }, [syncStatus]);
+
+  const syncProblem = useMemo(() => {
+    if (!syncStatus) return null;
+    const list = syncStatus.list;
+    const detail = syncStatus.detail;
+    if (list?.last_status === 'auth_expired' || detail?.last_status === 'auth_expired' || syncStatus.detailPaused) {
+      return { level: 'auth', message: 'Token/cookie SIAGA di menu API Sync Config sudah kedaluwarsa. Data Work Order tidak diperbarui sampai token diganti.' };
+    }
+    if (list?.last_status === 'error') return { level: 'error', message: `Sinkronisasi daftar WO gagal: ${list.last_error}` };
+    if (detail?.last_status === 'error') return { level: 'error', message: `Sinkronisasi detail WO gagal: ${detail.last_error}` };
+    return null;
+  }, [syncStatus]);
+  const detailQueueCount = syncStatus?.queue
+    ? (syncStatus.queue.missing || 0) + (syncStatus.queue.changed || 0) + (syncStatus.queue.staleOpen || 0)
+    : 0;
 
   useEffect(() => {
     const timer = setTimeout(() => setDebouncedSearch(searchTerm), 300);
@@ -1692,10 +1738,23 @@ export default function WorkOrderDashboard() {
               <span>{lastSyncDate}</span>
             </div>
           )}
-          <span className="inline-flex items-center gap-1 px-3 py-1.5 rounded-full text-xs font-semibold bg-emerald-500/10 text-emerald-500 border border-emerald-500/20">
-            <span className="h-1.5 w-1.5 rounded-full bg-emerald-500"></span>
-            Terhubung
-          </span>
+          {syncProblem ? (
+            <span
+              title={syncProblem.message}
+              className="inline-flex items-center gap-1 px-3 py-1.5 rounded-full text-xs font-semibold bg-amber-500/10 text-amber-600 border border-amber-500/30"
+            >
+              <span className="h-1.5 w-1.5 rounded-full bg-amber-500"></span>
+              {syncProblem.level === 'auth' ? 'Token SIAGA kedaluwarsa' : 'Sync gagal'}
+            </span>
+          ) : (
+            <span
+              title={detailQueueCount > 0 ? `${detailQueueCount} detail WO menunggu diperbarui` : 'Data detail WO sudah terbaru'}
+              className="inline-flex items-center gap-1 px-3 py-1.5 rounded-full text-xs font-semibold bg-emerald-500/10 text-emerald-500 border border-emerald-500/20"
+            >
+              <span className="h-1.5 w-1.5 rounded-full bg-emerald-500"></span>
+              Terhubung
+            </span>
+          )}
 
           <button
             onClick={() => { setShowFloatingAI(true); setIsAIModalOpen(prev => !prev); }}
@@ -1725,6 +1784,31 @@ export default function WorkOrderDashboard() {
           </button>
         </div>
       </header>
+
+      {syncProblem && (
+        <div className="mx-6 mt-4 flex items-start gap-3 rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+          <AlertCircle size={18} className="mt-0.5 shrink-0" />
+          <div>
+            <p className="font-semibold">Sinkronisasi SIAGA bermasalah</p>
+            <p className="text-xs mt-0.5">
+              {syncProblem.message}
+              {detailQueueCount > 0 && ` ${detailQueueCount.toLocaleString('id-ID')} detail WO menunggu diperbarui.`}
+            </p>
+          </div>
+        </div>
+      )}
+
+      {syncStatus?.rebuild?.running && (
+        <div className="mx-6 mt-4 flex items-start gap-3 rounded-xl border border-indigo-200 bg-indigo-50 px-4 py-3 text-sm text-indigo-800">
+          <RefreshCw size={18} className="mt-0.5 shrink-0 animate-spin" />
+          <div>
+            <p className="font-semibold">Menyusun ulang data dari detail WO yang tersimpan</p>
+            <p className="text-xs mt-0.5">
+              {(syncStatus.rebuild.done || 0).toLocaleString('id-ID')} dari {(syncStatus.rebuild.total || 0).toLocaleString('id-ID')} WO diproses. Grafik tren lengkap setelah selesai; tidak ada request ke SIAGA.
+            </p>
+          </div>
+        </div>
+      )}
 
       <main className="w-full p-4 md:p-8 space-y-6">
 
@@ -1845,6 +1929,7 @@ export default function WorkOrderDashboard() {
                     <Calendar size={16} className="text-indigo-500" />
                     Tren Biaya Operasional
                   </h3>
+                  <p className="text-[10px] text-slate-400 mt-0.5">Nilai approved per tanggal approval item, termasuk approval bertahap di hari-hari sebelumnya.</p>
                   <div className="flex flex-wrap items-center gap-1.5 mt-2">
                     <button 
                       onClick={() => setTrendGroupingMode('daily')} 
@@ -1931,7 +2016,12 @@ export default function WorkOrderDashboard() {
                 {weeklyCostTrend.length === 0 ? (
                   <div className="h-28 flex flex-col items-center justify-center text-xs text-slate-400 bg-slate-500/5 rounded-xl border border-dashed border-slate-200 dark:border-slate-800">
                     <TrendingUp size={24} className="mb-2 text-slate-300" />
-                    Belum ada riwayat transaksi pada rentang waktu terpilih
+                    Belum ada approval tercatat pada rentang waktu terpilih
+                    {globalFacets?.latestApprovalDate && (
+                      <span className="mt-1 text-[10px]">
+                        Approval terakhir yang tersimpan: {new Date(globalFacets.latestApprovalDate).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' })}. Pilih rentang yang lebih panjang (mis. 1 Bln / 3 Bln).
+                      </span>
+                    )}
                   </div>
                 ) : (
                   <div className="w-full overflow-x-auto overflow-y-hidden">

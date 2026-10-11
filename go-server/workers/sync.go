@@ -3,6 +3,7 @@ package workers
 import (
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log"
@@ -21,6 +22,38 @@ type SyncConfig struct {
 	LastSync     string `json:"last_sync"`
 	LastResponse string `json:"last_response"`
 	IsActive     bool   `json:"is_active"`
+}
+
+// HTTPStatusError is returned when a sync URL answers with a non-2xx status.
+type HTTPStatusError struct {
+	URL  string
+	Code int
+}
+
+func (e *HTTPStatusError) Error() string { return fmt.Sprintf("%s: HTTP %d", e.URL, e.Code) }
+
+// IsAuthError reports whether err means the SIAGA credentials were rejected.
+func IsAuthError(err error) bool {
+	var statusErr *HTTPStatusError
+	return errors.As(err, &statusErr) && (statusErr.Code == http.StatusUnauthorized || statusErr.Code == http.StatusForbidden)
+}
+
+// ListProcessors post-process a successful generic sync response, keyed by
+// sync_configs.id. Registered from main to avoid an import cycle with handlers.
+var ListProcessors = map[string]func(body []byte) error{}
+
+// SetSyncStatus records the outcome of a sync attempt on its sync_configs row.
+func SetSyncStatus(id string, err error) {
+	if err == nil {
+		db.Exec("UPDATE sync_configs SET last_status = 'ok', last_error = NULL WHERE id = ?", id)
+		return
+	}
+	status := "error"
+	if IsAuthError(err) {
+		status = "auth_expired"
+	}
+	db.Exec("UPDATE sync_configs SET last_status = ?, last_error = ?, last_error_at = ? WHERE id = ?",
+		status, err.Error(), time.Now().Format("2006-01-02 15:04:05"), id)
 }
 
 func StartSyncWorker() {
@@ -97,7 +130,7 @@ func fetchSyncURLs(urlStr string, headers map[string]string) ([]byte, error) {
 			return nil, readErr
 		}
 		if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-			return nil, fmt.Errorf("%s: HTTP %d", currentURL, resp.StatusCode)
+			return nil, &HTTPStatusError{URL: currentURL, Code: resp.StatusCode}
 		}
 		responses = append(responses, bodyBytes)
 	}
@@ -149,7 +182,9 @@ func mergeSyncResponses(responses [][]byte) ([]byte, error) {
 	return json.Marshal(map[string]interface{}{"data": merged})
 }
 
-func RunSyncJob(force bool, targetId string) {
+// RunSyncJob syncs every due config (or just targetId) and returns the error of
+// the last generic (non-incremental) config that failed, if any.
+func RunSyncJob(force bool, targetId string) error {
 	query := "SELECT id, url, headers, COALESCE(last_sync, ''), COALESCE(interval_type, 'minutes'), COALESCE(interval_value, 5) FROM sync_configs WHERE is_active = true"
 	var rows *sql.Rows
 	var err error
@@ -163,9 +198,11 @@ func RunSyncJob(force bool, targetId string) {
 
 	if err != nil {
 		log.Printf("SyncWorker Error reading configs: %v", err)
-		return
+		return err
 	}
 	defer rows.Close()
+
+	var lastErr error
 
 	for rows.Next() {
 		var id, urlStr, headersStr, lastSyncStr, intervalType string
@@ -205,6 +242,11 @@ func RunSyncJob(force bool, targetId string) {
 			headers = map[string]string{}
 		}
 
+		if id == "WorkOrderDetails" {
+			// Per-WO URL template, fetched by the work order detail worker instead.
+			continue
+		}
+
 		if id == "JobOrders" {
 			processJobOrdersIncremental(id, urlStr, headers, lastSyncStr)
 			continue
@@ -236,7 +278,9 @@ func RunSyncJob(force bool, targetId string) {
 
 		bodyBytes, err := fetchSyncURLs(urlStr, headers)
 		if err != nil {
-			log.Printf("SyncWorker HTTP error for %s: %v", urlStr, err)
+			log.Printf("SyncWorker HTTP error for %s: %v", id, err)
+			SetSyncStatus(id, err)
+			lastErr = err
 			continue
 		}
 
@@ -255,13 +299,21 @@ func RunSyncJob(force bool, targetId string) {
 				_, err = db.Exec("UPDATE sync_configs SET last_sync = ?, last_response = ? WHERE id = ?", now, string(bodyBytes), id)
 			}
 
+			if err == nil {
+				if process := ListProcessors[id]; process != nil {
+					err = process(bodyBytes)
+				}
+			}
+			SetSyncStatus(id, err)
 			if err != nil {
-				log.Printf("SyncWorker DB error updating %s: %v", id, err)
+				lastErr = err
+				log.Printf("SyncWorker error updating %s: %v", id, err)
 			} else {
 				log.Printf("SyncWorker successfully updated data for: %s", id)
 			}
 		}
 	}
+	return lastErr
 }
 
 func processJobOrdersIncremental(configId, baseUrl string, headers map[string]string, lastSyncStr string) {

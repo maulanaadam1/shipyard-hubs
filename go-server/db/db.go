@@ -366,6 +366,10 @@ func createTables() {
 	// Migrations for sync_configs if they already exist from previous session
 	DB.Exec("ALTER TABLE sync_configs ADD COLUMN interval_type TEXT DEFAULT 'minutes'")
 	DB.Exec("ALTER TABLE sync_configs ADD COLUMN interval_value INTEGER DEFAULT 5")
+	// Outcome of the last sync attempt: ok | error | auth_expired (set by the sync workers).
+	DB.Exec("ALTER TABLE sync_configs ADD COLUMN last_status TEXT")
+	DB.Exec("ALTER TABLE sync_configs ADD COLUMN last_error TEXT")
+	DB.Exec("ALTER TABLE sync_configs ADD COLUMN last_error_at TEXT")
 	DB.Exec("UPDATE sync_configs SET interval_type = 'minutes', interval_value = 5 WHERE interval_type IS NULL")
 
 	// Migrations for existing schemas
@@ -459,6 +463,25 @@ func createTables() {
 		updated_source_at TEXT,
 		created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
 		updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+	);`)
+	// updated_at (from SIAGA) of the detail we last stored; when it differs from
+	// updated_source_at (from the WO list) the detail is stale and gets re-fetched.
+	DB.Exec("ALTER TABLE work_order_summary ADD COLUMN detail_updated_at TEXT")
+
+	// Approved cost per WO per approval date, derived from work_order_details.
+	// Drives the cost trend so approvals on earlier days aren't lost.
+	DB.Exec(`CREATE TABLE IF NOT EXISTS work_order_daily_costs (
+		wo_id TEXT NOT NULL,
+		cost_date TEXT NOT NULL,
+		approved_cost NUMERIC DEFAULT 0,
+		PRIMARY KEY (wo_id, cost_date)
+	);`)
+	DB.Exec("CREATE INDEX IF NOT EXISTS idx_wo_daily_costs_date ON work_order_daily_costs(cost_date)")
+
+	// Small key/value store for app-level markers (e.g. derived-data version).
+	DB.Exec(`CREATE TABLE IF NOT EXISTS app_meta (
+		key TEXT PRIMARY KEY,
+		value TEXT
 	);`)
 	DB.Exec("CREATE INDEX IF NOT EXISTS idx_wo_summary_latest_date ON work_order_summary(latest_date)")
 	DB.Exec("CREATE INDEX IF NOT EXISTS idx_wo_summary_vendor_date ON work_order_summary(vendor_name, latest_date)")
