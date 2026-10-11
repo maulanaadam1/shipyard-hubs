@@ -2016,7 +2016,12 @@ export default function WorkOrderDashboard() {
                 {weeklyCostTrend.length === 0 ? (
                   <div className="h-28 flex flex-col items-center justify-center text-xs text-slate-400 bg-slate-500/5 rounded-xl border border-dashed border-slate-200 dark:border-slate-800">
                     <TrendingUp size={24} className="mb-2 text-slate-300" />
-                    Belum ada riwayat transaksi pada rentang waktu terpilih
+                    Belum ada approval tercatat pada rentang waktu terpilih
+                    {globalFacets?.latestApprovalDate && (
+                      <span className="mt-1 text-[10px]">
+                        Approval terakhir yang tersimpan: {new Date(globalFacets.latestApprovalDate).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' })}. Pilih rentang yang lebih panjang (mis. 1 Bln / 3 Bln).
+                      </span>
+                    )}
                   </div>
                 ) : (
                   <div className="w-full overflow-x-auto overflow-y-hidden">

@@ -395,7 +395,35 @@ func RebuildWorkOrderDerived() error {
 	return err
 }
 
+// ReprocessStoredWorkOrderList applies the WO list already stored by the last
+// successful list sync (sync_configs.last_response) to the summary, without
+// calling SIAGA. Older code only stored that blob, so codes, status and
+// total_cost of recent WOs could lag behind it.
+func ReprocessStoredWorkOrderList() error {
+	var body string
+	if err := db.QueryRow("SELECT COALESCE(last_response, '') FROM sync_configs WHERE id = 'WorkOrders'").Scan(&body); err != nil || body == "" {
+		return nil
+	}
+	return ProcessWorkOrderList([]byte(body))
+}
+
+// ReprocessStoredWorkOrderListHandler is the Admin endpoint for the above.
+func ReprocessStoredWorkOrderListHandler(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+	if err := ReprocessStoredWorkOrderList(); err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
+		return
+	}
+	w.Write([]byte(`{"success": true}`))
+}
+
 func rebuildWorkOrderDerived() error {
+	// List fields first, so detail-derived rows land on current WO metadata.
+	if err := ReprocessStoredWorkOrderList(); err != nil {
+		log.Printf("[WO DERIVED] stored WO list not applied: %v", err)
+	}
+
 	var total int
 	db.QueryRow("SELECT COUNT(*) FROM work_order_details").Scan(&total)
 	rebuildState.Lock()
@@ -568,6 +596,9 @@ func StartWorkOrderDetailWorker() {
 	go func() {
 		// Derived data first, from what's already stored; SIAGA is only asked
 		// for details that are missing or changed afterwards.
+		if err := ReprocessStoredWorkOrderList(); err != nil {
+			log.Printf("[WO LIST] stored list not applied: %v", err)
+		}
 		maybeRebuildDerived()
 		ticker := time.NewTicker(interval)
 		defer ticker.Stop()
