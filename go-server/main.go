@@ -84,6 +84,7 @@ func main() {
 		r.Get("/api/work-orders/export", handlers.GetWorkOrdersExport)
 		r.Get("/api/work-orders/stats", handlers.GetWorkOrderStats)
 		r.Get("/api/work-orders/timeline", handlers.GetWorkOrderTimeline)
+		r.Get("/api/work-orders/facets", handlers.GetWorkOrderFacets)
 		r.Get("/api/work-orders/{id}/detail", handlers.GetWorkOrderDetail)
 		r.Post("/api/work-orders/{id}/sync", handlers.SyncWorkOrderDetail)
 		r.Get("/api/local-wo-history/{id}", handlers.GetLocalWorkOrderHistory)

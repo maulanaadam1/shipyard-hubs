@@ -7,6 +7,7 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"os"
 	"sort"
 	"strconv"
 	"strings"
@@ -27,8 +28,15 @@ func GetWorkOrderDetail(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Age is computed in SQL so it uses the same clock that wrote last_sync.
+	ageExpr := "(julianday('now') - julianday(last_sync)) * 86400"
+	if os.Getenv("DB_CONNECTION") == "postgres" {
+		ageExpr = "EXTRACT(EPOCH FROM (LOCALTIMESTAMP - last_sync))"
+	}
+
 	var rawJson string
-	err := db.QueryRow("SELECT raw_json FROM work_order_details WHERE wo_id = ?", woID).Scan(&rawJson)
+	var ageSeconds sql.NullFloat64
+	err := db.QueryRow("SELECT raw_json, "+ageExpr+" FROM work_order_details WHERE wo_id = ?", woID).Scan(&rawJson, &ageSeconds)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			http.Error(w, `{"error": "Not synced yet"}`, http.StatusNotFound)
@@ -39,6 +47,9 @@ func GetWorkOrderDetail(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "application/json")
+	if ageSeconds.Valid {
+		w.Header().Set("X-Sync-Age-Seconds", strconv.FormatInt(int64(ageSeconds.Float64), 10))
+	}
 	w.Write([]byte(rawJson))
 }
 
@@ -99,6 +110,21 @@ func SyncWorkOrderDetail(w http.ResponseWriter, r *http.Request) {
 	bodyBytes, err := io.ReadAll(resp.Body)
 	if err != nil {
 		http.Error(w, `{"error": "Failed to read response"}`, http.StatusInternalServerError)
+		return
+	}
+
+	// Don't overwrite a good local copy (or the summary) with an error body,
+	// e.g. {"message":"Unauthenticated."} when the remote token has expired.
+	if resp.StatusCode != http.StatusOK {
+		log.Printf("Remote API returned %d for WO %s", resp.StatusCode, woID)
+		msg := fmt.Sprintf("API Samudera mengembalikan status %d.", resp.StatusCode)
+		if resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden {
+			msg += " Token/cookie di menu API Sync Config kemungkinan sudah kedaluwarsa."
+		}
+		errBody, _ := json.Marshal(map[string]string{"error": msg})
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadGateway)
+		w.Write(errBody)
 		return
 	}
 

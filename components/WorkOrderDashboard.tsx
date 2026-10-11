@@ -41,6 +41,9 @@ import WorkOrderItemHistory from './WorkOrderItemHistory';
 
 const MOCK_DATA: any[] = [];
 
+// Local WO detail older than this is re-synced from the remote API when the modal opens.
+const DETAIL_STALE_SECONDS = 15 * 60;
+
 const mapSummaryWorkOrder = (item: any) => ({
   id: item.id,
   code: item.wo_code || 'N/A',
@@ -71,6 +74,11 @@ export default function WorkOrderDashboard() {
   const [serverTotalRows, setServerTotalRows] = useState(0);
   const [timelineData, setTimelineData] = useState<any[] | null>(null);
   const [serverStats, setServerStats] = useState<any | null>(null);
+  // Aggregates over the whole summary table (not just the current page).
+  // globalFacets: undefined = loading, null = unavailable (legacy data source).
+  const [globalFacets, setGlobalFacets] = useState<any | null | undefined>(undefined);
+  const [cardFacets, setCardFacets] = useState<any | null>(null);
+  const [reloadKey, setReloadKey] = useState(0);
   const [isUsingMock, setIsUsingMock] = useState(!syncCache['WorkOrders']);
   const [fileName, setFileName] = useState(syncDates['WorkOrders'] ? `Auto-Synced (${syncDates['WorkOrders']})` : "Data Contoh (Demo)");
   const [lastSyncDate, setLastSyncDate] = useState<string>(syncDates['WorkOrders'] || '');
@@ -80,6 +88,8 @@ export default function WorkOrderDashboard() {
 
   // Filter States
   const [searchTerm, setSearchTerm] = useState("");
+  // Server queries use the debounced value so typing doesn't fire a request per keystroke.
+  const [debouncedSearch, setDebouncedSearch] = useState("");
   const [selectedProject, setSelectedProject] = useState("All");
   const [selectedStatus, setSelectedStatus] = useState("All");
   const [selectedVendor, setSelectedVendor] = useState<string>("All");
@@ -146,6 +156,7 @@ export default function WorkOrderDashboard() {
   const [showChartDaily, setShowChartDaily] = useState(true);
   const [selectedDetailDate, setSelectedDetailDate] = useState<string | null>(null);
   const [selectedDetailStatus, setSelectedDetailStatus] = useState<string | null>(null);
+  // Returns whether the local copy is fresh enough to skip a remote sync.
   const fetchDetail = async (): Promise<boolean> => {
     if (!selectedRow || !selectedRow.id) return false;
     setIsFetchingDetail(true);
@@ -156,8 +167,11 @@ export default function WorkOrderDashboard() {
       const res = await fetch(`/api/work-orders/${selectedRow.id}/detail`, { headers });
       if (res.ok) {
         const result = await res.json();
-        setDetailedRowData(result.data || result);
-        return true;
+        const detail = result.data || result;
+        setDetailedRowData(detail);
+        // A stored error body (e.g. {"message":"Unauthenticated."}) has no id and is never fresh.
+        const age = Number(res.headers.get('X-Sync-Age-Seconds'));
+        return !!detail?.id && res.headers.has('X-Sync-Age-Seconds') && age >= 0 && age < DETAIL_STALE_SECONDS;
       } else if (res.status === 404) {
         // Not synced yet, this is expected.
         setDetailedRowData(null);
@@ -266,11 +280,10 @@ export default function WorkOrderDashboard() {
   useEffect(() => {
     if (selectedRow) {
       setActiveDetailTab('pekerjaan'); // reset tab on new selection
-      fetchDetail().then((hasLocalData) => {
-        // Automatically sync to pull the latest details when modal opens
-        // If hasLocalData is false, we definitely need it.
-        // Even if it's true, we trigger sync in the background so the user always has latest data.
-        triggerSyncDetail();
+      fetchDetail().then((isFresh) => {
+        // Only hit the remote API when there is no local copy or it is stale;
+        // the "Sync" button in the modal still forces a refresh.
+        if (!isFresh) triggerSyncDetail();
       });
     } else {
       setDetailedRowData(null);
@@ -337,37 +350,10 @@ export default function WorkOrderDashboard() {
     fetchMissing();
   }, [detailedRowData, masterComponentsMap]);
 
-  const fetchSyncData = async () => {
+  // Legacy source: the raw WorkOrders cache, used only when the summary table is empty/unavailable.
+  const fetchLegacyCache = async () => {
     try {
       const headers = await getHeaders();
-      const summaryRes = await fetch('/api/work-orders?page=1&limit=1&sort=latest_date&dir=desc', { headers });
-      if (summaryRes.ok) {
-        const summaryJson = await summaryRes.json();
-        if (Array.isArray(summaryJson.data) && summaryJson.data.length > 0) {
-          const list = summaryJson.data.map(mapSummaryWorkOrder);
-          const financeMap: Record<string, any> = {};
-          list.forEach((item: any) => {
-            financeMap[item.id] = item.__summaryFinancial;
-          });
-          setRawData(list);
-          setFinancialData(financeMap);
-          setPendingApprovals(Object.fromEntries(list.map((item: any) => [item.id, item.__summaryFinancial.pending || 0])));
-          setFinalCosts(Object.fromEntries(list.map((item: any) => [item.id, item.__summaryFinancial.latest_cost || 0])));
-          setPreviousCosts(Object.fromEntries(list.map((item: any) => [item.id, item.__summaryFinancial.previous_cost || 0])));
-          setRejectedCosts(Object.fromEntries(list.map((item: any) => [item.id, item.__summaryFinancial.rejected_cost || 0])));
-          setFinalDates(Object.fromEntries(list.map((item: any) => [item.id, item.__summaryFinancial.latest_date || ''])));
-          setIsSummarySource(true);
-          setServerTotalRows(summaryJson.total || list.length);
-          setIsUsingMock(false);
-          setFileName(`Summary Optimized (${summaryJson.total || list.length} WO)`);
-          setLastSyncDate(new Date().toISOString());
-          setSyncCache(prev => ({ ...prev, WorkOrders: list }));
-          setSyncDates(prev => ({ ...prev, WorkOrders: 'Summary Optimized' }));
-          return;
-        }
-      }
-
-      // Fallback lama: cache mentah WorkOrders.
       let res = await fetch('/api/cache/WorkOrders', { headers });
       
       let rawParsed = null;
@@ -413,12 +399,35 @@ export default function WorkOrderDashboard() {
     }
   };
 
-  // Load data from local DB on mount (no auto remote sync)
+  // Load whole-table aggregates (latest date, dropdown options, global stats) on mount
+  // and after a manual sync. This also decides between summary and legacy mode.
   useEffect(() => {
-    if (!syncCache['WorkOrders']) {
-      fetchSyncData();
-    }
-  }, []);
+    const controller = new AbortController();
+    const loadGlobalFacets = async () => {
+      try {
+        const headers = await getHeaders();
+        const res = await fetch('/api/work-orders/facets?scope=global', { headers, signal: controller.signal });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const result = await res.json();
+        if (controller.signal.aborted) return;
+        if ((result.globalStats?.totalWOs || 0) > 0) {
+          setGlobalFacets(result);
+          setIsSummarySource(true);
+          setIsUsingMock(false);
+          setLastSyncDate('Summary Optimized');
+          setSyncDates(prev => ({ ...prev, WorkOrders: 'Summary Optimized' }));
+          return;
+        }
+      } catch (error) {
+        if (controller.signal.aborted) return;
+        console.warn('Work order summary unavailable, falling back to legacy cache.', error);
+      }
+      setGlobalFacets(null);
+      if (!syncCache['WorkOrders'] || reloadKey > 0) fetchLegacyCache();
+    };
+    loadGlobalFacets();
+    return () => controller.abort();
+  }, [reloadKey]);
 
   const triggerManualSync = async () => {
     setIsSyncing(true);
@@ -428,8 +437,8 @@ export default function WorkOrderDashboard() {
       const res = await fetch('/api/sync/trigger', { method: 'POST', headers, body });
       if (!res.ok) throw new Error("Gagal");
       
-      // Update data silently without reloading window
-      await fetchSyncData();
+      // Re-run every summary query without reloading the window
+      setReloadKey(k => k + 1);
       setIsSyncing(false);
     } catch (e) {
       alert("Gagal melakukan sinkronisasi. Cek log server atau pastikan URL API valid di menu API Sync Config.");
@@ -437,12 +446,17 @@ export default function WorkOrderDashboard() {
     }
   };
 
+  useEffect(() => {
+    const timer = setTimeout(() => setDebouncedSearch(searchTerm), 300);
+    return () => clearTimeout(timer);
+  }, [searchTerm]);
+
   // Reset pagination when data presets change
   useEffect(() => {
     setProjectPage(1);
     setVendorPage(1);
     setCurrentPage(1);
-  }, [datePreset, customStartDate, customEndDate, searchTerm, selectedProject, selectedStatus, selectedVendor]);
+  }, [datePreset, customStartDate, customEndDate, debouncedSearch, selectedProject, selectedStatus, selectedVendor]);
 
   // Kalkulasi Chart Modal Header
   const detailChartConfig = useMemo(() => {
@@ -666,6 +680,11 @@ export default function WorkOrderDashboard() {
   }, [rawData, financialData]);
 
   const latestDatasetDate = useMemo(() => {
+    // In summary mode rawData is a single page, so take the latest date of the whole table.
+    if (isSummarySource && globalFacets?.latestDate) {
+      const d = new Date(globalFacets.latestDate);
+      if (!isNaN(d.getTime())) return d;
+    }
     if (processedData.length === 0) return new Date();
     
     return processedData.reduce((latest, current) => {
@@ -673,7 +692,7 @@ export default function WorkOrderDashboard() {
       if (!currentDate || isNaN(currentDate.getTime())) return latest;
       return currentDate > latest ? currentDate : latest;
     }, new Date('2000-01-01'));
-  }, [processedData]);
+  }, [processedData, isSummarySource, globalFacets]);
 
   // Kalkulasi Rentang Tanggal Efektif berdasarkan Preset
   const effectiveDateRange = useMemo(() => {
@@ -708,6 +727,7 @@ export default function WorkOrderDashboard() {
   }, [latestDatasetDate, datePreset, customStartDate, customEndDate]);
 
   useEffect(() => {
+    if (!isSummarySource) return;
     const controller = new AbortController();
     const loadOptimizedWorkOrders = async () => {
       try {
@@ -718,7 +738,7 @@ export default function WorkOrderDashboard() {
           sort: sortColumn,
           dir: sortDirection,
         });
-        if (searchTerm.trim()) params.set('search', searchTerm.trim());
+        if (debouncedSearch.trim()) params.set('search', debouncedSearch.trim());
         if (selectedStatus !== 'All') params.set('status', selectedStatus);
         if (selectedVendor !== 'All') params.set('vendor', selectedVendor);
         if (selectedProject !== 'All') params.set('project', selectedProject);
@@ -733,7 +753,7 @@ export default function WorkOrderDashboard() {
         if (!res.ok) return;
         const result = await res.json();
         if (!Array.isArray(result.data)) return;
-        if (result.total === 0 && result.data.length === 0) return;
+        // An empty page is a real "no matches" result; show it instead of keeping stale rows.
 
         const list = result.data.map(mapSummaryWorkOrder);
         const financeMap: Record<string, any> = {};
@@ -748,10 +768,8 @@ export default function WorkOrderDashboard() {
         setPreviousCosts(Object.fromEntries(list.map((item: any) => [item.id, item.__summaryFinancial.previous_cost || 0])));
         setRejectedCosts(Object.fromEntries(list.map((item: any) => [item.id, item.__summaryFinancial.rejected_cost || 0])));
         setFinalDates(Object.fromEntries(list.map((item: any) => [item.id, item.__summaryFinancial.latest_date || ''])));
-        setServerTotalRows(result.total || list.length);
-        setIsSummarySource(true);
-        setIsUsingMock(false);
-        setFileName(`Summary Optimized (${result.total || list.length} WO)`);
+        setServerTotalRows(result.total || 0);
+        setFileName(`Summary Optimized (${globalFacets?.globalStats?.totalWOs ?? result.total ?? 0} WO)`);
       } catch (error) {
         if (!controller.signal.aborted) {
           console.warn('Optimized WorkOrder endpoint unavailable, keeping existing data.', error);
@@ -761,10 +779,42 @@ export default function WorkOrderDashboard() {
 
     loadOptimizedWorkOrders();
     return () => controller.abort();
-  }, [currentPage, searchTerm, selectedStatus, selectedVendor, selectedProject, selectedTrendDate, trendGroupingMode, sortColumn, sortDirection, effectiveDateRange.start?.getTime(), effectiveDateRange.end?.getTime()]);
+  }, [isSummarySource, reloadKey, currentPage, debouncedSearch, selectedStatus, selectedVendor, selectedProject, selectedTrendDate, trendGroupingMode, sortColumn, sortDirection, effectiveDateRange.start?.getTime(), effectiveDateRange.end?.getTime()]);
+
+  // Project / vendor cards, aggregated server-side over every matching WO (not just this page).
+  useEffect(() => {
+    if (!isSummarySource) return;
+    const controller = new AbortController();
+    const loadCardFacets = async () => {
+      try {
+        const headers = await getHeaders();
+        const params = new URLSearchParams();
+        if (debouncedSearch.trim()) params.set('search', debouncedSearch.trim());
+        if (selectedStatus !== 'All') params.set('status', selectedStatus);
+        if (selectedVendor !== 'All') params.set('vendor', selectedVendor);
+        if (selectedProject !== 'All') params.set('project', selectedProject);
+        if (effectiveDateRange.start) params.set('start_date', effectiveDateRange.start.toISOString().split('T')[0]);
+        if (effectiveDateRange.end) params.set('end_date', effectiveDateRange.end.toISOString().split('T')[0]);
+        const res = await fetch(`/api/work-orders/facets?${params.toString()}`, { headers, signal: controller.signal });
+        if (!res.ok) return;
+        const result = await res.json();
+        if (!controller.signal.aborted) setCardFacets(result);
+      } catch (error) {
+        if (!controller.signal.aborted) setCardFacets(null);
+      }
+    };
+    loadCardFacets();
+    return () => controller.abort();
+  }, [isSummarySource, reloadKey, debouncedSearch, selectedStatus, selectedVendor, selectedProject, effectiveDateRange.start?.getTime(), effectiveDateRange.end?.getTime()]);
 
   // 1.1. Unsur filter list yang unik (filterOptions) - DIURUTKAN SECARA KRONOLOGIS (TERBARU DI ATAS)
   const filterOptions = useMemo(() => {
+    if (isSummarySource && globalFacets) {
+      return {
+        projects: ["All", ...(globalFacets.projectOptions || [])],
+        vendors: ["All", ...(globalFacets.vendorOptions || [])]
+      };
+    }
     const projectMap: Record<string, number> = {}; // projectName -> t_job_order_id tertinggi
     const vendors = new Set<string>();
 
@@ -787,14 +837,15 @@ export default function WorkOrderDashboard() {
       projects: ["All", ...sortedProjects],
       vendors: ["All", ...Array.from(vendors).sort()]
     };
-  }, [processedData]);
+  }, [processedData, isSummarySource, globalFacets]);
 
   // 2. Terapkan Filter Tanggal Terlebih Dahulu (Dasar dari Seluruh Komponen Dashboard)
   const dateFilteredData = useMemo(() => {
     const { start, end } = effectiveDateRange;
     
-    // Jika tidak ada filter tanggal aktif (Semua / All), return semua data
-    if (!start && !end) return processedData;
+    // Jika tidak ada filter tanggal aktif (Semua / All), return semua data.
+    // Mode summary: server sudah menerapkan semua filter, jangan disaring ulang.
+    if (isSummarySource || (!start && !end)) return processedData;
 
     return processedData.filter(item => {
       // Untuk filter spesifik, jika tanggal kosong, maka skip. 
@@ -812,21 +863,23 @@ export default function WorkOrderDashboard() {
       }
       return true;
     });
-  }, [processedData, effectiveDateRange]);
+  }, [processedData, effectiveDateRange, isSummarySource]);
 
   // 3. Terapkan Filter Pencarian Global
   const searchFilteredData = useMemo(() => {
+    if (isSummarySource) return dateFilteredData;
+    const term = debouncedSearch.toLowerCase();
     return dateFilteredData.filter(item => {
       return (
-        item.woCode.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        item.joCode.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        item.vendorName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        item.shipName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        item.projectName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        (item.created_name && item.created_name.toLowerCase().includes(searchTerm.toLowerCase()))
+        item.woCode.toLowerCase().includes(term) ||
+        item.joCode.toLowerCase().includes(term) ||
+        item.vendorName.toLowerCase().includes(term) ||
+        item.shipName.toLowerCase().includes(term) ||
+        item.projectName.toLowerCase().includes(term) ||
+        (item.created_name && item.created_name.toLowerCase().includes(term))
       );
     });
-  }, [dateFilteredData, searchTerm]);
+  }, [dateFilteredData, debouncedSearch, isSummarySource]);
 
   // 4. Data spesifik untuk di-render pada Kartu Sub-Project (Hanya di-filter oleh Vendor & Status)
   const dataForProjectCard = useMemo(() => {
@@ -848,13 +901,14 @@ export default function WorkOrderDashboard() {
 
   // 6. Data Terfilter Dasar (tanpa filter Trend Date)
   const baseFilteredData = useMemo(() => {
+    if (isSummarySource) return searchFilteredData;
     return searchFilteredData.filter(item => {
       const matchProject = selectedProject === "All" || item.projectName === selectedProject;
       const matchStatus = selectedStatus === "All" || item.derivedStatus === selectedStatus;
       const matchVendor = selectedVendor === "All" || item.vendorName === selectedVendor;
       return matchProject && matchStatus && matchVendor;
     });
-  }, [searchFilteredData, selectedProject, selectedStatus, selectedVendor]);
+  }, [searchFilteredData, selectedProject, selectedStatus, selectedVendor, isSummarySource]);
 
   // Helper: Pengelompokan Tanggal ke Hari / Senin Mingguan / Bulan
   const getStartOfWeek = (dateStr: string) => {
@@ -871,6 +925,7 @@ export default function WorkOrderDashboard() {
 
   // 6.1 Data Terfilter Akhir untuk Tabel Utama & Statistik
   const filteredData = useMemo(() => {
+    if (isSummarySource) return baseFilteredData;
     return baseFilteredData.filter(item => {
       let matchTrend = true;
       if (selectedTrendDate) {
@@ -891,10 +946,16 @@ export default function WorkOrderDashboard() {
       }
       return matchTrend;
     });
-  }, [baseFilteredData, selectedTrendDate, trendGroupingMode]);
+  }, [baseFilteredData, selectedTrendDate, trendGroupingMode, isSummarySource]);
 
   // 7. Kalkulasi Folder Master Directory untuk Sidebar / Sub Cards
   const masterDirectories = useMemo(() => {
+    if (isSummarySource && cardFacets) {
+      return {
+        allSortedProjects: cardFacets.projects || [],
+        allSortedVendorProjects: cardFacets.vendorProjects || []
+      };
+    }
     const projectTracker: Record<string, any> = {};
     dataForProjectCard.forEach(item => {
       const pName = item.projectName;
@@ -955,7 +1016,7 @@ export default function WorkOrderDashboard() {
       .sort((a, b) => b.latestWOId - a.latestWOId);
 
     return { allSortedProjects, allSortedVendorProjects };
-  }, [dataForProjectCard, dataForVendorCard]);
+  }, [dataForProjectCard, dataForVendorCard, isSummarySource, cardFacets]);
 
   // 8. Statistik Global Real-time
   const stats = useMemo(() => {
@@ -1038,6 +1099,7 @@ export default function WorkOrderDashboard() {
 
   // 8.5 Statistik Keseluruhan (Global) Tanpa Filter
   const globalStats = useMemo(() => {
+    if (isSummarySource && globalFacets?.globalStats) return globalFacets.globalStats;
     const totalWOs = processedData.length;
     
     const joSet = new Set(processedData.map(d => d.joCode).filter(c => c !== "N/A"));
@@ -1105,7 +1167,7 @@ export default function WorkOrderDashboard() {
       sumTotal, sumSebelumnya, sumSaatIni, sumPending,
       approvalCounts, projectYearsStats, projectYearList
     };
-  }, [processedData, previousCosts, pendingApprovals, financialData, finalCosts]);
+  }, [processedData, previousCosts, pendingApprovals, financialData, finalCosts, isSummarySource, globalFacets]);
 
   // Helper dipindahkan ke atas
 
@@ -1140,7 +1202,7 @@ export default function WorkOrderDashboard() {
         const params = new URLSearchParams({
           group: trendGroupingMode === 'daily' ? 'day' : trendGroupingMode === 'weekly' ? 'week' : 'month',
         });
-        if (searchTerm.trim()) params.set('search', searchTerm.trim());
+        if (debouncedSearch.trim()) params.set('search', debouncedSearch.trim());
         if (selectedStatus !== 'All') params.set('status', selectedStatus);
         if (selectedVendor !== 'All') params.set('vendor', selectedVendor);
         if (selectedProject !== 'All') params.set('project', selectedProject);
@@ -1157,7 +1219,7 @@ export default function WorkOrderDashboard() {
     };
     loadStats();
     return () => controller.abort();
-  }, [isSummarySource, searchTerm, selectedStatus, selectedVendor, selectedProject, selectedTrendDate, trendGroupingMode, effectiveDateRange.start?.getTime(), effectiveDateRange.end?.getTime()]);
+  }, [isSummarySource, reloadKey, debouncedSearch, selectedStatus, selectedVendor, selectedProject, selectedTrendDate, trendGroupingMode, effectiveDateRange.start?.getTime(), effectiveDateRange.end?.getTime()]);
 
   useEffect(() => {
     if (!isSummarySource) return;
@@ -1185,7 +1247,7 @@ export default function WorkOrderDashboard() {
     };
     loadTimeline();
     return () => controller.abort();
-  }, [isSummarySource, trendGroupingMode, selectedStatus, selectedVendor, selectedProject, effectiveDateRange.start?.getTime(), effectiveDateRange.end?.getTime()]);
+  }, [isSummarySource, reloadKey, trendGroupingMode, selectedStatus, selectedVendor, selectedProject, effectiveDateRange.start?.getTime(), effectiveDateRange.end?.getTime()]);
 
   // Kalkulasi Tren Finansial Mingguan / Harian / Bulanan secara Kronologis
   const weeklyCostTrend = useMemo(() => {
@@ -1263,7 +1325,7 @@ export default function WorkOrderDashboard() {
           count: groups[groupKey].count
         };
       });
-  }, [filteredData, trendGroupingMode, isSummarySource, timelineData]);
+  }, [baseFilteredData, financialData, trendGroupingMode, isSummarySource, timelineData]);
 
   // SVG Coordinates Generator untuk Trendline Dinamis
   const svgChartConfig = useMemo(() => {
@@ -1341,6 +1403,7 @@ export default function WorkOrderDashboard() {
         }
 
         setRawData(list);
+        setIsSummarySource(false);
         setIsUsingMock(false);
       } catch (err: any) {
         setUploadError(err.message || "Gagal mengurai file JSON.");
@@ -1356,6 +1419,7 @@ export default function WorkOrderDashboard() {
 
   const handleResetData = () => {
     setRawData(MOCK_DATA);
+    setIsSummarySource(false);
     setIsUsingMock(true);
     setFileName("Data Contoh (Demo)");
     setUploadError("");
@@ -1450,7 +1514,7 @@ export default function WorkOrderDashboard() {
         sort: sortColumn,
         dir: sortDirection,
       });
-      if (searchTerm.trim()) params.set('search', searchTerm.trim());
+      if (debouncedSearch.trim()) params.set('search', debouncedSearch.trim());
       if (selectedStatus !== 'All') params.set('status', selectedStatus);
       if (selectedVendor !== 'All') params.set('vendor', selectedVendor);
       if (selectedProject !== 'All') params.set('project', selectedProject);
@@ -2090,9 +2154,11 @@ export default function WorkOrderDashboard() {
                                 </span>
                               )}
                             </p>
-                            <p className="text-[10px] text-slate-500 font-medium truncate pr-2 mt-0.5">
-                              ID Project: #{project.maxJobOrderId}
-                            </p>
+                            {project.maxJobOrderId ? (
+                              <p className="text-[10px] text-slate-500 font-medium truncate pr-2 mt-0.5">
+                                ID Project: #{project.maxJobOrderId}
+                              </p>
+                            ) : null}
                           </div>
                           <div className="text-right pl-2 shrink-0">
                             <p className="text-xs font-bold text-indigo-500">{project.count} WO</p>
@@ -2183,7 +2249,7 @@ export default function WorkOrderDashboard() {
                         </div>
                         <div className="flex justify-between text-[9px] text-slate-400 mt-0.5">
                           <span className="font-mono">WO: {vp.latestWOCode}</span>
-                          <span>{vp.latestWODate ? vp.latestWOCode.split(' ')[0] : 'N/A'}</span>
+                          <span>{vp.latestWODate ? vp.latestWODate.split(' ')[0] : 'N/A'}</span>
                         </div>
                       </div>
                     );
