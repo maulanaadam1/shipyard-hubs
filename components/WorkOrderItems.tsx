@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Search, ListChecks, ChevronLeft, ChevronRight, ChevronDown, ArrowDown, ArrowUp, Eye, EyeOff, Layers } from 'lucide-react';
+import { Search, ListChecks, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, ChevronDown, ArrowDown, ArrowUp, Eye, EyeOff, Layers, RotateCcw } from 'lucide-react';
 import { getHeaders } from '@/lib/api-client';
 import { SearchableSelect } from './SearchableSelect';
 
@@ -48,7 +48,7 @@ const STATUS_STYLE: Record<string, string> = {
   rejected: 'bg-rose-100 text-rose-700',
 };
 
-const PAGE_SIZE = 25;
+const PAGE_SIZES = [25, 50, 100];
 
 export default function WorkOrderItems() {
   const [view, setView] = useState<View>('list');
@@ -62,6 +62,8 @@ export default function WorkOrderItems() {
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
   const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(25);
+  const [jumpTo, setJumpTo] = useState('');
   const [sort, setSort] = useState('total_cost');
   const [dir, setDir] = useState<'asc' | 'desc'>('desc');
   const [rows, setRows] = useState<any[]>([]);
@@ -175,7 +177,7 @@ export default function WorkOrderItems() {
   }, [rows, showAllDetails]);
 
   // Reset paging and sorting when the question changes.
-  useEffect(() => { setPage(1); }, [debouncedSearch, projectType, status, category, project, vendor, startDate, endDate, view]);
+  useEffect(() => { setPage(1); }, [debouncedSearch, projectType, status, category, project, vendor, startDate, endDate, view, pageSize]);
   useEffect(() => {
     setSort('total_cost');
     setDir('desc');
@@ -188,7 +190,7 @@ export default function WorkOrderItems() {
       setError('');
       try {
         const headers = await getHeaders();
-        const params = new URLSearchParams({ page: String(page), limit: String(PAGE_SIZE), sort, dir });
+        const params = new URLSearchParams({ page: String(page), limit: String(pageSize), sort, dir });
         if (debouncedSearch.trim()) params.set('search', debouncedSearch.trim());
         if (projectType !== 'All') params.set('project_type', projectType);
         if (status !== 'All') params.set('status', status);
@@ -213,9 +215,41 @@ export default function WorkOrderItems() {
       }
     })();
     return () => controller.abort();
-  }, [page, sort, dir, debouncedSearch, projectType, status, category, project, vendor, startDate, endDate, view]);
+  }, [page, pageSize, sort, dir, debouncedSearch, projectType, status, category, project, vendor, startDate, endDate, view]);
 
-  const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+  const totalPages = Math.max(1, Math.ceil(total / pageSize));
+  const firstRow = total === 0 ? 0 : (page - 1) * pageSize + 1;
+  const lastRow = Math.min(page * pageSize, total);
+  // Page buttons: first, last, and a window around the current page.
+  const pageButtons = useMemo(() => {
+    const pages = new Set<number>([1, totalPages]);
+    for (let p = page - 2; p <= page + 2; p++) if (p >= 1 && p <= totalPages) pages.add(p);
+    const sorted = Array.from(pages).sort((a, b) => a - b);
+    const out: (number | 'gap')[] = [];
+    sorted.forEach((p, i) => {
+      if (i > 0 && p - sorted[i - 1] > 1) out.push('gap');
+      out.push(p);
+    });
+    return out;
+  }, [page, totalPages]);
+  const goToPage = (p: number) => setPage(Math.min(totalPages, Math.max(1, p)));
+
+  const filtersActive = !!(searchTerm || projectType !== 'All' || status !== 'All' || category !== 'All' || project !== 'All'
+    || vendor !== 'All' || startDate || endDate);
+  const resetFilters = () => {
+    setSearchTerm('');
+    setDebouncedSearch('');
+    setProjectType('All');
+    setStatus('All');
+    setCategory('All');
+    setProject('All');
+    setVendor('All');
+    setStartDate('');
+    setEndDate('');
+    setShowAllDetails(false);
+    setDetails({});
+    setPage(1);
+  };
 
   const onSort = (column: string) => {
     if (sort === column) setDir(d => (d === 'asc' ? 'desc' : 'asc'));
@@ -262,6 +296,7 @@ export default function WorkOrderItems() {
 
       <main className="w-full p-4 md:p-8 space-y-6">
         <section className="p-5 rounded-2xl border bg-white border-slate-200 shadow-sm space-y-4">
+          <div className="flex flex-wrap items-center justify-between gap-2">
           <div className="flex flex-wrap gap-2">
             {VIEWS.map(v => (
               <button
@@ -272,6 +307,15 @@ export default function WorkOrderItems() {
                 {v.key === 'list' ? <span className="inline-flex items-center gap-1"><ListChecks size={12} /> {v.label}</span> : <span className="inline-flex items-center gap-1"><Layers size={12} /> {v.label}</span>}
               </button>
             ))}
+          </div>
+          <button
+            onClick={resetFilters}
+            disabled={!filtersActive}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold text-indigo-600 hover:bg-indigo-50 disabled:text-slate-300 disabled:hover:bg-transparent transition"
+            title="Kosongkan pencarian dan semua filter"
+          >
+            <RotateCcw size={12} /> Reset Filter
+          </button>
           </div>
 
           <div className="flex flex-wrap items-center gap-2">
@@ -508,13 +552,44 @@ export default function WorkOrderItems() {
             </div>
           )}
 
-          <div className="px-5 py-3 border-t border-slate-100 flex items-center justify-between text-xs">
-            <span className="text-slate-400 font-semibold">Hal. {page} dari {totalPages}</span>
-            <div className="flex items-center gap-1.5">
-              <button onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page === 1}
+          <div className="px-5 py-3 border-t border-slate-100 flex flex-wrap items-center justify-between gap-3 text-xs">
+            <div className="flex items-center gap-3 text-slate-500">
+              <span className="font-semibold">
+                {firstRow.toLocaleString('id-ID')}–{lastRow.toLocaleString('id-ID')} dari {total.toLocaleString('id-ID')} {view === 'list' ? 'item' : 'grup'}
+              </span>
+              <label className="inline-flex items-center gap-1">
+                Baris
+                <select value={pageSize} onChange={e => setPageSize(Number(e.target.value))}
+                  className="px-1.5 py-1 border border-slate-200 rounded-md bg-white outline-none">
+                  {PAGE_SIZES.map(n => <option key={n} value={n}>{n}</option>)}
+                </select>
+              </label>
+            </div>
+            <div className="flex flex-wrap items-center gap-1">
+              <button onClick={() => goToPage(1)} disabled={page === 1} title="Halaman pertama"
+                className="p-1 rounded-md border hover:bg-slate-100 disabled:opacity-30"><ChevronsLeft size={14} /></button>
+              <button onClick={() => goToPage(page - 1)} disabled={page === 1} title="Sebelumnya"
                 className="p-1 rounded-md border hover:bg-slate-100 disabled:opacity-30"><ChevronLeft size={14} /></button>
-              <button onClick={() => setPage(p => Math.min(totalPages, p + 1))} disabled={page >= totalPages}
+              {pageButtons.map((p, i) => p === 'gap'
+                ? <span key={`gap-${i}`} className="px-1 text-slate-400">…</span>
+                : (
+                  <button key={p} onClick={() => goToPage(p)}
+                    className={`min-w-[28px] px-1.5 py-1 rounded-md border text-[11px] font-semibold ${p === page ? 'bg-indigo-600 border-indigo-600 text-white' : 'hover:bg-slate-100 text-slate-600'}`}>
+                    {p.toLocaleString('id-ID')}
+                  </button>
+                ))}
+              <button onClick={() => goToPage(page + 1)} disabled={page >= totalPages} title="Berikutnya"
                 className="p-1 rounded-md border hover:bg-slate-100 disabled:opacity-30"><ChevronRight size={14} /></button>
+              <button onClick={() => goToPage(totalPages)} disabled={page >= totalPages} title="Halaman terakhir"
+                className="p-1 rounded-md border hover:bg-slate-100 disabled:opacity-30"><ChevronsRight size={14} /></button>
+              <form
+                onSubmit={e => { e.preventDefault(); const n = parseInt(jumpTo, 10); if (!isNaN(n)) goToPage(n); setJumpTo(''); }}
+                className="inline-flex items-center gap-1 ml-2 text-slate-500"
+              >
+                Ke hal.
+                <input value={jumpTo} onChange={e => setJumpTo(e.target.value.replace(/[^0-9]/g, ''))} placeholder={String(page)}
+                  className="w-14 px-1.5 py-1 border border-slate-200 rounded-md outline-none text-center" />
+              </form>
             </div>
           </div>
         </section>

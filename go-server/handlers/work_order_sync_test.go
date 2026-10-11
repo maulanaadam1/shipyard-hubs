@@ -42,8 +42,8 @@ func resetWorkOrderTables(t *testing.T) {
 func TestApplyFinancialsDailyCostsSumToFinal(t *testing.T) {
 	raw := []byte(`{"data": {"id": 7, "min_approval_level": 5, "updated_at": "2026-10-01 10:00:00", "total_cost": 900,
 		"repair_list": [{"id": "act-test", "path": "1", "parameter": {"path_name": "TEST > Activity"}, "material": [
-			{"price": "100", "volume": 2, "approved_level": 5, "date_approval": "2026-09-10 08:00:00"},
-			{"price": "300", "volume": 1, "approved_level": 5, "date_approval": "2026-10-01 10:00:00"}
+			{"volume_cost_final": 100, "volume": 2, "approved_level": 5, "date_approval": "2026-09-10 08:00:00"},
+			{"volume_cost_final": 300, "volume": 1, "approved_level": 5, "date_approval": "2026-10-01 10:00:00"}
 		]}]}}`)
 	s := applyFinancialsFromDetail(workOrderSummary{WOID: "7"}, raw)
 	var sum float64
@@ -88,8 +88,8 @@ func TestRebuildFromStoredDetailsAndTimeline(t *testing.T) {
 	// The stored detail is older (updated 2026-09-20) and has approvals on two days in different months.
 	detail := `{"data": {"id": 100, "code": "WO-100", "min_approval_level": 5, "updated_at": "2026-09-20 10:00:00",
 		"repair_list": [{"id": "act-test", "path": "1", "parameter": {"path_name": "TEST > Activity"}, "material": [
-			{"price": "200", "volume": 1, "approved_level": 5, "date_approval": "2026-08-15 08:00:00"},
-			{"price": "300", "volume": 1, "approved_level": 5, "date_approval": "2026-09-20 10:00:00"}
+			{"volume_cost_final": 200, "volume": 1, "approved_level": 5, "date_approval": "2026-08-15 08:00:00"},
+			{"volume_cost_final": 300, "volume": 1, "approved_level": 5, "date_approval": "2026-09-20 10:00:00"}
 		]}]}}`
 	if _, err := db.Exec("INSERT INTO work_order_details (wo_id, raw_json) VALUES (?, ?)", "100", detail); err != nil {
 		t.Fatal(err)

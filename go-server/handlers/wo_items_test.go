@@ -129,3 +129,17 @@ func TestActivityWithoutItemsIsNotACost(t *testing.T) {
 		t.Errorf("items = %+v, want only the work item", s.Items)
 	}
 }
+
+func TestCostUsesVolumeCostFinalOnly(t *testing.T) {
+	raw := []byte(`{"data": {"id": 600, "updated_at": "2026-10-05 09:00:00", "repair_list": [
+		{"id": "act", "path": "1", "parameter": {"path_name": "A"}, "price": "31500000000.00", "act_price": "31500000000", "material": [
+			{"id": "a", "path": "1.1", "label": "price only", "volume": 2, "price": "1000", "approved_level": 5, "status_approval": "approved", "date_approval": "2026-10-01 08:00:00"},
+			{"id": "b", "path": "1.2", "label": "total_price only", "volume": 1, "total_price": 5000, "approved_level": 5, "status_approval": "approved", "date_approval": "2026-10-01 08:00:00"},
+			{"id": "c", "path": "1.3", "label": "zero volume", "volume": 0, "volume_cost_final": 7000, "approved_level": 5, "status_approval": "approved", "date_approval": "2026-10-01 08:00:00"},
+			{"id": "d", "path": "1.4", "label": "real", "volume": 3, "volume_cost_final": 250, "approved_level": 5, "status_approval": "approved", "date_approval": "2026-10-01 08:00:00"}
+		]}]}}`)
+	s := applyFinancialsFromDetail(workOrderSummary{WOID: "600"}, raw)
+	if s.FinalCost != 750 {
+		t.Errorf("FinalCost = %v, want 750 (only volume_cost_final x volume)", s.FinalCost)
+	}
+}

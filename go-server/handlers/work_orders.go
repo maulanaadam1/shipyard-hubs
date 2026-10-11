@@ -432,21 +432,15 @@ func applyFinancialsFromDetail(summary workOrderSummary, raw []byte) workOrderSu
 				continue
 			}
 
+			// Cost = volume_cost_final x volume only (same as lib/work-order-cost.ts).
+			// "price", "act_price" and "total_price" are contract/selling values,
+			// never WO costs, so there is no fallback to them.
 			baseCost := parseFloatAny(item["volume_cost_final"])
-			if baseCost == 0 {
-				baseCost = parseFloatAny(item["price"])
+			vol := float64(1) // a missing volume counts as 1; an explicit 0 stays 0
+			if v, ok := item["volume"]; ok && v != nil {
+				vol = parseFloatAny(v)
 			}
-			costToAdd := float64(0)
-			if baseCost > 0 {
-				vol := parseFloatAny(item["volume"])
-				if vol == 0 {
-					vol = 1
-				}
-				costToAdd = baseCost * vol
-			}
-			if costToAdd == 0 {
-				costToAdd = parseFloatAny(item["total_price"])
-			}
+			costToAdd := baseCost * vol
 
 			approvedLevel := parseFloatAny(item["approved_level"])
 			statusAppr := strings.ToLower(strings.TrimSpace(firstString(item, "status_approval")))
