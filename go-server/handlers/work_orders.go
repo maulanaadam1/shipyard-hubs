@@ -483,6 +483,7 @@ func upsertWorkOrderSummary(summary workOrderSummary) error {
 	if summary.WOID == "" {
 		return nil
 	}
+	defer InvalidateWorkOrderCache()
 	_, err := db.Exec(`
 		INSERT INTO work_order_summary (
 			wo_id, wo_code, jo_code, project_name, vendor_name, ship_name, status_approval, derived_status,

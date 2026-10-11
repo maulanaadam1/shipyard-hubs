@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 	chiMiddleware "github.com/go-chi/chi/v5/middleware"
@@ -91,11 +92,13 @@ func main() {
 		// Proxy for single Work Order Detail
 		r.Get("/api/projects/wo-summary", handlers.GetProjectWorkOrderSummaries)
 		r.Get("/api/projects/wo-summary/detail", handlers.GetProjectWorkOrderDetail)
-		r.Get("/api/work-orders", handlers.GetWorkOrders)
+		// Dashboard reads: cached for 60s, dropped on any WO data write.
+		woCache := handlers.CacheWorkOrderReads(60 * time.Second)
+		r.With(woCache).Get("/api/work-orders", handlers.GetWorkOrders)
 		r.Get("/api/work-orders/export", handlers.GetWorkOrdersExport)
-		r.Get("/api/work-orders/stats", handlers.GetWorkOrderStats)
-		r.Get("/api/work-orders/timeline", handlers.GetWorkOrderTimeline)
-		r.Get("/api/work-orders/facets", handlers.GetWorkOrderFacets)
+		r.With(woCache).Get("/api/work-orders/stats", handlers.GetWorkOrderStats)
+		r.With(woCache).Get("/api/work-orders/timeline", handlers.GetWorkOrderTimeline)
+		r.With(woCache).Get("/api/work-orders/facets", handlers.GetWorkOrderFacets)
 		r.Get("/api/work-orders/sync-status", handlers.GetWorkOrderSyncStatus)
 		r.Get("/api/work-orders/{id}/detail", handlers.GetWorkOrderDetail)
 		r.Post("/api/work-orders/{id}/sync", handlers.SyncWorkOrderDetail)
