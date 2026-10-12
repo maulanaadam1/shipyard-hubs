@@ -3,6 +3,7 @@ package handlers
 import (
 	"bytes"
 	"net/http"
+	"net/url"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -25,8 +26,9 @@ type cachedResponse struct {
 const maxCachedResponses = 500
 
 var (
-	woDataVersion atomic.Int64
-	woCache       = struct {
+	woDataVersion     atomic.Int64
+	woLastInvalidated atomic.Int64 // unix nanos of the last InvalidateWorkOrderCache
+	woCache           = struct {
 		sync.Mutex
 		entries map[string]cachedResponse
 	}{entries: map[string]cachedResponse{}}
@@ -34,7 +36,23 @@ var (
 
 // InvalidateWorkOrderCache marks every cached WO dashboard response as stale.
 func InvalidateWorkOrderCache() {
+	woLastInvalidated.Store(time.Now().UnixNano())
 	woDataVersion.Add(1)
+}
+
+// cacheKey ignores the order of query parameters, so a page and the pre-warmer
+// (wo_items_prewarm.go) share entries however each builds its URL.
+func cacheKey(path string, q url.Values) string {
+	return path + "?" + q.Encode()
+}
+
+func storeCachedResponse(key string, body []byte, contentType string, version int64) {
+	woCache.Lock()
+	defer woCache.Unlock()
+	if len(woCache.entries) >= maxCachedResponses {
+		woCache.entries = map[string]cachedResponse{}
+	}
+	woCache.entries[key] = cachedResponse{body: body, contentType: contentType, at: time.Now(), version: version}
 }
 
 type recordingWriter struct {
@@ -61,7 +79,7 @@ func CacheWorkOrderReads(ttl time.Duration) func(http.Handler) http.Handler {
 				next.ServeHTTP(w, r)
 				return
 			}
-			key := r.URL.Path + "?" + r.URL.RawQuery
+			key := cacheKey(r.URL.Path, r.URL.Query())
 			version := woDataVersion.Load()
 
 			woCache.Lock()
@@ -81,17 +99,7 @@ func CacheWorkOrderReads(ttl time.Duration) func(http.Handler) http.Handler {
 				return
 			}
 
-			woCache.Lock()
-			if len(woCache.entries) >= maxCachedResponses {
-				woCache.entries = map[string]cachedResponse{}
-			}
-			woCache.entries[key] = cachedResponse{
-				body:        rec.buf.Bytes(),
-				contentType: w.Header().Get("Content-Type"),
-				at:          time.Now(),
-				version:     version,
-			}
-			woCache.Unlock()
+			storeCachedResponse(key, rec.buf.Bytes(), w.Header().Get("Content-Type"), version)
 		})
 	}
 }

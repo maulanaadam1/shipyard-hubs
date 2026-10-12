@@ -53,6 +53,8 @@ func main() {
 		workers.StartSyncWorker()
 		handlers.StartWorkOrderDetailWorker()
 	}
+	// Per process (it fills this instance's response cache), so it runs either way.
+	handlers.StartWorkOrderItemPrewarm()
 
 	r := chi.NewRouter()
 	r.Use(chiMiddleware.Recoverer)
@@ -95,9 +97,10 @@ func main() {
 		// Flattened WO work items: search, per-group summaries, filter options and
 		// Excel export. The permission check runs before the shared cache.
 		itemsView := handlers.RequirePermission(handlers.ResourceWorkOrderItems, "view")
-		r.With(itemsView, woCache).Get("/api/wo-items", handlers.GetWorkOrderItems)
-		r.With(itemsView, woCache).Get("/api/wo-items/summary", handlers.GetWorkOrderItemSummary)
-		r.With(itemsView, woCache).Get("/api/wo-items/facets", handlers.GetWorkOrderItemFacets)
+		itemsCache := handlers.CacheWorkOrderReads(handlers.WorkOrderItemsCacheTTL)
+		r.With(itemsView, itemsCache).Get("/api/wo-items", handlers.GetWorkOrderItems)
+		r.With(itemsView, itemsCache).Get("/api/wo-items/summary", handlers.GetWorkOrderItemSummary)
+		r.With(itemsView, itemsCache).Get("/api/wo-items/facets", handlers.GetWorkOrderItemFacets)
 		r.With(handlers.RequirePermission(handlers.ResourceWorkOrderItems, "export")).Get("/api/wo-items/export", handlers.ExportWorkOrderItems)
 		r.Get("/api/work-orders/sync-status", handlers.GetWorkOrderSyncStatus)
 		r.Get("/api/work-orders/{id}/detail", handlers.GetWorkOrderDetail)
