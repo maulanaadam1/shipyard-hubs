@@ -66,8 +66,14 @@ export default function WorkOrderItems() {
   const [vendor, setVendor] = useState('All');
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
-  const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(25);
+  // The page belongs to the filters it was chosen under: when any filter, the
+  // view or the page size changes, the page is 1 in that same render (an effect
+  // resetting it would fetch the old page first, then page 1).
+  const filterKey = [debouncedSearch, projectType, status, category, project, vendor, startDate, endDate, view, pageSize].join('\u0001');
+  const [pageState, setPageState] = useState({ key: filterKey, page: 1 });
+  const page = pageState.key === filterKey ? pageState.page : 1;
+  const setPage = (p: number) => setPageState({ key: filterKey, page: p });
   const [jumpTo, setJumpTo] = useState('');
   const [sort, setSort] = useState('item_date');
   const [dir, setDir] = useState<'asc' | 'desc'>('desc');
@@ -184,8 +190,6 @@ export default function WorkOrderItems() {
     rows.forEach(r => loadGroupDetail(r));
   }, [rows, rowsView, view, showAllDetails]);
 
-  // Reset paging and sorting when the question changes.
-  useEffect(() => { setPage(1); }, [debouncedSearch, projectType, status, category, project, vendor, startDate, endDate, view, pageSize]);
   // Switching view clears the table at once instead of showing the previous
   // view's rows under the new columns while the new data loads.
   useEffect(() => {
@@ -196,11 +200,17 @@ export default function WorkOrderItems() {
     setDetails({});
   }, [view]);
   const visibleRows = rowsView === view ? rows : [];
-  useEffect(() => {
-    // Newest first in every view: items by date, groups by their newest item.
-    setSort(view === 'list' ? 'item_date' : 'latest_date');
+
+  // The new view, its default sort (newest first: items by date, groups by
+  // their newest item) and page 1 change in one render, so a click sends one
+  // request instead of a stale-sort request followed by the real one.
+  const selectView = (next: View) => {
+    if (next === view) return;
+    setView(next);
+    setSort(next === 'list' ? 'item_date' : 'latest_date');
     setDir('desc');
-  }, [view]);
+    setPage(1);
+  };
 
   useEffect(() => {
     const controller = new AbortController();
@@ -359,7 +369,7 @@ export default function WorkOrderItems() {
             {VIEWS.map(v => (
               <button
                 key={v.key}
-                onClick={() => setView(v.key)}
+                onClick={() => selectView(v.key)}
                 className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${view === v.key ? 'bg-indigo-600 text-white shadow-sm' : 'bg-slate-500/5 hover:bg-slate-500/10 text-slate-600'}`}
               >
                 {v.key === 'list' ? <span className="inline-flex items-center gap-1"><ListChecks size={12} /> {v.label}</span> : <span className="inline-flex items-center gap-1"><Layers size={12} /> {v.label}</span>}

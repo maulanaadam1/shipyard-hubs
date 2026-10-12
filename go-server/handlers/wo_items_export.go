@@ -200,7 +200,7 @@ func writeWoItemSummary(sw *excelize.StreamWriter, styles exportStyles, q url.Va
 	}
 
 	where, args := woItemFilters(q)
-	rows, err := db.Query(woItemSummarySQL(q, group, where)+` LIMIT ?`, append(args, woItemExportMaxRows+1)...)
+	rows, err := db.Query(woItemSummarySQL(q, group, where, false)+` LIMIT ?`, append(args, woItemExportMaxRows+1)...)
 	if err != nil {
 		return 0, false, err
 	}
@@ -211,7 +211,7 @@ func writeWoItemSummary(sw *excelize.StreamWriter, styles exportStyles, q url.Va
 		if n == woItemExportMaxRows {
 			return n, true, nil
 		}
-		s, err := scanWoItemSummary(rows, group)
+		s, err := scanWoItemSummary(rows, group, false)
 		if err != nil {
 			return n, false, err
 		}
