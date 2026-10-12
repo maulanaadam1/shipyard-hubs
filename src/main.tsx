@@ -220,7 +220,7 @@ createRoot(document.getElementById('root')!).render(
               </ProtectedRoute>
             } />
             <Route path="work-order-items" element={
-              <ProtectedRoute resource="Work Order">
+              <ProtectedRoute resource="Item Pekerjaan WO">
                 <WorkOrderItems />
               </ProtectedRoute>
             } />

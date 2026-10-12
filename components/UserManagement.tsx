@@ -28,7 +28,7 @@ export default function UserManagement() {
   const [isInputFocused, setIsInputFocused] = useState(false);
 
   const ALL_RESOURCES = [
-    'Dashboard', 'Utility', 'Job Order', 'Request', 'Release', 'Return',
+    'Dashboard', 'Utility', 'Job Order', 'Work Order', 'Item Pekerjaan WO', 'Request', 'Release', 'Return',
     'Maintenance', 'Inventory', 'Reports', 'Master Equipment',
     'Master Vendor', 'Master Company', 'Master Kapal', 'Master Workflow',
     'Master Configuration', 'User Management', 'Role Management'

@@ -1,7 +1,8 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Search, ListChecks, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, ChevronDown, ArrowDown, ArrowUp, Eye, EyeOff, Layers, RotateCcw } from 'lucide-react';
+import { Search, ListChecks, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, ChevronDown, ArrowDown, ArrowUp, Eye, EyeOff, Layers, RotateCcw, FileSpreadsheet } from 'lucide-react';
 import { getHeaders } from '@/lib/api-client';
 import { SearchableSelect } from './SearchableSelect';
+import { useData } from '@/context/DataContext';
 
 // Work items flattened from every WO detail (wo_items), searchable by item,
 // cost, project, vendor or activity, with per-group cost summaries.
@@ -54,6 +55,7 @@ const FIELD_LABEL = 'block text-[11px] font-bold uppercase tracking-wide text-sl
 const FIELD_INPUT = 'w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-sm outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500';
 
 export default function WorkOrderItems() {
+  const { canAccess } = useData();
   const [view, setView] = useState<View>('list');
   const [searchTerm, setSearchTerm] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
@@ -234,6 +236,44 @@ export default function WorkOrderItems() {
     })();
     return () => controller.abort();
   }, [page, pageSize, sort, dir, debouncedSearch, projectType, status, category, project, vendor, startDate, endDate, view]);
+
+  // Excel export of the current view: every matching row with the current
+  // filters and sort, built on the server (not just the visible page).
+  const canExport = canAccess('Item Pekerjaan WO', 'export');
+  const [exporting, setExporting] = useState(false);
+  const [exportError, setExportError] = useState('');
+  const exportExcel = async () => {
+    setExporting(true);
+    setExportError('');
+    try {
+      const headers = await getHeaders();
+      const params = baseParams();
+      params.set('view', view);
+      params.set('sort', sort);
+      params.set('dir', dir);
+      const res = await fetch(`/api/wo-items/export?${params}`, { headers });
+      if (!res.ok) {
+        const body = await res.json().catch(() => null);
+        throw new Error(body?.error || `server membalas HTTP ${res.status}`);
+      }
+      const blob = await res.blob();
+      const filename = /filename="([^"]+)"/.exec(res.headers.get('Content-Disposition') || '')?.[1]
+        || `Item_Pekerjaan_WO_${view}.xlsx`;
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = filename;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(url);
+    } catch (e: any) {
+      setExportError(`Export gagal: ${e?.message || 'koneksi terputus'}. Coba lagi.`);
+    } finally {
+      setExporting(false);
+    }
+  };
+  useEffect(() => { setExportError(''); }, [view]);
 
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
   const firstRow = total === 0 ? 0 : (page - 1) * pageSize + 1;
@@ -416,8 +456,22 @@ export default function WorkOrderItems() {
                 </label>
               )}
               <p className="text-xs text-slate-500">{loading ? 'Memuat…' : summaryCaption}</p>
+              {canExport && (
+                <button
+                  onClick={exportExcel}
+                  disabled={exporting || loading || total === 0}
+                  title={total === 0 ? 'Tidak ada data untuk diekspor' : `Unduh semua ${total.toLocaleString('id-ID')} baris tampilan ini sesuai filter dan urutan`}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold border border-emerald-200 text-emerald-700 bg-emerald-50 hover:bg-emerald-100 disabled:opacity-50 disabled:hover:bg-emerald-50 outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/40 transition"
+                >
+                  <FileSpreadsheet size={13} />
+                  {exporting ? 'Menyiapkan file…' : `Export Excel (${total.toLocaleString('id-ID')} baris)`}
+                </button>
+              )}
             </div>
           </div>
+          {exportError && (
+            <p role="alert" className="px-5 py-2 text-xs text-rose-700 bg-rose-50 border-b border-rose-100">{exportError}</p>
+          )}
 
           {error ? (
             <div className="p-8 text-center text-sm text-rose-600">{error}</div>

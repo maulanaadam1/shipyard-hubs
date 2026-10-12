@@ -45,7 +45,7 @@ export default function Sidebar({ onTabChange }: { onTabChange: () => void }) {
         { icon: Activity, label: 'Utility', path: '/utility', resource: 'Utility' },
         { icon: Briefcase, label: 'Job Order', path: '/job-order', resource: 'Job Order' },
         { icon: FileSpreadsheet, label: 'Work Order', path: '/work-order', resource: 'Work Order' },
-        { icon: ListChecks, label: 'Item Pekerjaan WO', path: '/work-order-items', resource: 'Work Order' },
+        { icon: ListChecks, label: 'Item Pekerjaan WO', path: '/work-order-items', resource: 'Item Pekerjaan WO' },
         { icon: Anchor, label: 'Ship Docking', path: '/ship-docking', resource: 'Ship Docking' },
       ]
     },
