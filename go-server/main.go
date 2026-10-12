@@ -92,10 +92,13 @@ func main() {
 		r.With(woCache).Get("/api/work-orders/stats", handlers.GetWorkOrderStats)
 		r.With(woCache).Get("/api/work-orders/timeline", handlers.GetWorkOrderTimeline)
 		r.With(woCache).Get("/api/work-orders/facets", handlers.GetWorkOrderFacets)
-		// Flattened WO work items: search, per-group summaries, filter options.
-		r.With(woCache).Get("/api/wo-items", handlers.GetWorkOrderItems)
-		r.With(woCache).Get("/api/wo-items/summary", handlers.GetWorkOrderItemSummary)
-		r.With(woCache).Get("/api/wo-items/facets", handlers.GetWorkOrderItemFacets)
+		// Flattened WO work items: search, per-group summaries, filter options and
+		// Excel export. The permission check runs before the shared cache.
+		itemsView := handlers.RequirePermission(handlers.ResourceWorkOrderItems, "view")
+		r.With(itemsView, woCache).Get("/api/wo-items", handlers.GetWorkOrderItems)
+		r.With(itemsView, woCache).Get("/api/wo-items/summary", handlers.GetWorkOrderItemSummary)
+		r.With(itemsView, woCache).Get("/api/wo-items/facets", handlers.GetWorkOrderItemFacets)
+		r.With(handlers.RequirePermission(handlers.ResourceWorkOrderItems, "export")).Get("/api/wo-items/export", handlers.ExportWorkOrderItems)
 		r.Get("/api/work-orders/sync-status", handlers.GetWorkOrderSyncStatus)
 		r.Get("/api/work-orders/{id}/detail", handlers.GetWorkOrderDetail)
 		r.Post("/api/work-orders/{id}/sync", handlers.SyncWorkOrderDetail)

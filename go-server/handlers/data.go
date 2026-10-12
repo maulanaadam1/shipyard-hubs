@@ -170,68 +170,91 @@ func redactRow(table string, row map[string]any, admin bool) {
 
 // CheckTablePermission verifies if the user from context has permission for table and action
 func CheckTablePermission(r *http.Request, table string, action string) bool {
-	// Get claims from context
+	// Special case: anyone can add notifications (send them)
+	if table == "notifications" && action == "add" {
+		if _, ok := middleware.GetUserClaims(r); ok {
+			return true
+		}
+	}
+	return HasResourcePermission(r, tableToResource[table], action)
+}
+
+// HasResourcePermission reports whether the user from context may perform
+// action on a Role Management resource, with the same rules as the frontend's
+// canAccess: Admin always, then extra_roles overrides ("Resource" or
+// "Resource:action"), then the role_permissions of the user's roles.
+func HasResourcePermission(r *http.Request, resource string, action string) bool {
 	claims, ok := middleware.GetUserClaims(r)
 	if !ok {
 		return false
 	}
-	
-	// Re-parse role from DB to be sure
-	var dbRole, dbRoles, dbExtraRoles string
-	err := db.QueryRow(
+
+	// Re-read the role from the DB: the JWT's copy can be up to 7 days old.
+	var dbRole, dbRoles, dbExtraRoles sql.NullString
+	if err := db.QueryRow(
 		"SELECT role, roles, extra_roles FROM profiles WHERE id = ? OR email = ?",
 		claims.ID, claims.Email,
-	).Scan(&dbRole, &dbRoles, &dbExtraRoles)
-	
-	if err != nil {
-		// Fallback to claims if DB fetch fails
-		dbRole = claims.Role
+	).Scan(&dbRole, &dbRoles, &dbExtraRoles); err != nil {
+		dbRole = sql.NullString{String: claims.Role, Valid: true}
 	}
 
-	if dbRole == "Admin" {
+	if dbRole.String == "Admin" {
 		return true
 	}
-
-	// Special case: anyone can add notifications (send them)
-	if table == "notifications" && action == "add" {
-		return true
-	}
-
-	resource := tableToResource[table]
 	if resource == "" {
-		return false // Default deny for unknown tables
+		return false // Default deny for unknown resources
 	}
 
-	// Check Extra Roles (direct overrides)
-	extras := strings.Split(dbExtraRoles, ",")
-	for _, e := range extras {
+	for _, e := range strings.Split(dbExtraRoles.String, ",") {
 		e = strings.TrimSpace(e)
 		if e == resource || e == resource+":"+action {
 			return true
 		}
 	}
 
-	// Check Roles via role_permissions
-	userRoles := strings.Split(dbRoles, ",")
-	for _, roleName := range userRoles {
+	for _, roleName := range strings.Split(dbRoles.String, ",") {
 		roleName = strings.TrimSpace(roleName)
 		if roleName == "" {
 			continue
 		}
-
-		var allowed bool
-		err := db.QueryRow(`
+		rows, err := db.Query(`
 			SELECT is_allowed FROM role_permissions p
 			JOIN roles_master r ON p.role_id = r.id
 			WHERE r.name = ? AND p.resource = ? AND (p.action = ? OR p.action = '*')
-		`, roleName, resource, action).Scan(&allowed)
-
-		if err == nil && allowed {
+		`, roleName, resource, action)
+		if err != nil {
+			continue
+		}
+		allowed := false
+		for rows.Next() {
+			var v bool
+			if rows.Scan(&v) == nil && v {
+				allowed = true
+				break
+			}
+		}
+		rows.Close()
+		if allowed {
 			return true
 		}
 	}
 
 	return false
+}
+
+// RequirePermission rejects requests whose user lacks action on resource.
+func RequirePermission(resource, action string) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if !HasResourcePermission(r, resource, action) {
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(http.StatusForbidden)
+				fmt.Fprintf(w, `{"error": "Anda tidak punya akses %s untuk menu %s"}`, action, resource)
+				return
+			}
+			next.ServeHTTP(w, r)
+		})
+	}
 }
 
 // defaultOrderCol returns the default sort column for a given table

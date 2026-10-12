@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"database/sql"
 	"encoding/json"
 	"net/http"
 	"net/url"
@@ -16,6 +17,8 @@ import (
 // itemDateExpr is an item's date for "newest first": its approval date, or for
 // items not approved yet, the date its WO was last updated in SIAGA.
 const itemDateExpr = "COALESCE(NULLIF(i.approval_date, ''), SUBSTR(COALESCE(s.updated_source_at, ''), 1, 10))"
+
+const woItemFrom = ` FROM wo_items i JOIN work_order_summary s ON s.wo_id = i.wo_id WHERE `
 
 // woItemFilters builds the WHERE clause shared by the item list and summaries.
 func woItemFilters(q url.Values) (string, []interface{}) {
@@ -75,11 +78,9 @@ func sortDir(q url.Values) string {
 	return "DESC"
 }
 
-// GetWorkOrderItems lists leaf work items with their WO context.
-func GetWorkOrderItems(w http.ResponseWriter, r *http.Request) {
-	q := r.URL.Query()
-	where, args := woItemFilters(q)
-	page, limit := pageParams(q, 25, 200)
+// woItemOrder is the ORDER BY of the item list and its export: the requested
+// column (newest item first by default) with stable tie-breakers.
+func woItemOrder(q url.Values) string {
 	sortCols := map[string]string{
 		"total_cost":    "i.total_cost",
 		"unit_cost":     "i.unit_cost",
@@ -92,54 +93,69 @@ func GetWorkOrderItems(w http.ResponseWriter, r *http.Request) {
 	}
 	sortCol := sortCols[q.Get("sort")]
 	if sortCol == "" {
-		sortCol = itemDateExpr // newest first by default
+		sortCol = itemDateExpr
 	}
+	return sortCol + " " + sortDir(q) + ", i.total_cost DESC, i.wo_id, i.path"
+}
 
-	from := ` FROM wo_items i JOIN work_order_summary s ON s.wo_id = i.wo_id WHERE ` + where
+const woItemColumns = `SELECT i.wo_id, i.item_id, COALESCE(i.category, ''), COALESCE(i.activity_name, ''), COALESCE(i.path, ''),
+		COALESCE(i.label, ''), COALESCE(i.unit, ''), COALESCE(i.volume, 0), COALESCE(i.unit_cost, 0), COALESCE(i.total_cost, 0),
+		COALESCE(i.approved_level, 0), COALESCE(i.status, ''), COALESCE(i.approval_date, ''),
+		COALESCE(s.wo_code, ''), COALESCE(s.jo_code, ''), COALESCE(s.project_name, ''), COALESCE(s.vendor_name, ''),
+		COALESCE(s.ship_name, ''), COALESCE(s.project_type, 'external'), ` + itemDateExpr + ` AS item_date`
+
+type woItemRow struct {
+	WOID         string  `json:"wo_id"`
+	ItemID       string  `json:"item_id"`
+	Category     string  `json:"category"`
+	ActivityName string  `json:"activity_name"`
+	Path         string  `json:"path"`
+	Label        string  `json:"label"`
+	Unit         string  `json:"unit"`
+	Volume       float64 `json:"volume"`
+	UnitCost     float64 `json:"unit_cost"`
+	TotalCost    float64 `json:"total_cost"`
+	Level        int     `json:"approved_level"`
+	Status       string  `json:"status"`
+	ApprovalDate string  `json:"approval_date"`
+	WOCode       string  `json:"wo_code"`
+	JOCode       string  `json:"jo_code"`
+	ProjectName  string  `json:"project_name"`
+	VendorName   string  `json:"vendor_name"`
+	ShipName     string  `json:"ship_name"`
+	ProjectType  string  `json:"project_type"`
+	ItemDate     string  `json:"item_date"`
+}
+
+func scanWoItem(rows *sql.Rows) (woItemRow, error) {
+	var it woItemRow
+	err := rows.Scan(&it.WOID, &it.ItemID, &it.Category, &it.ActivityName, &it.Path, &it.Label, &it.Unit, &it.Volume, &it.UnitCost,
+		&it.TotalCost, &it.Level, &it.Status, &it.ApprovalDate, &it.WOCode, &it.JOCode, &it.ProjectName, &it.VendorName,
+		&it.ShipName, &it.ProjectType, &it.ItemDate)
+	return it, err
+}
+
+// GetWorkOrderItems lists leaf work items with their WO context.
+func GetWorkOrderItems(w http.ResponseWriter, r *http.Request) {
+	q := r.URL.Query()
+	where, args := woItemFilters(q)
+	page, limit := pageParams(q, 25, 200)
+
+	from := woItemFrom + where
 	var total int
 	var totalCost, totalVolume float64
 	db.QueryRow("SELECT COUNT(*), COALESCE(SUM(i.total_cost), 0), COALESCE(SUM(i.volume), 0)"+from, args...).Scan(&total, &totalCost, &totalVolume)
 
-	rows, err := db.Query(`SELECT i.wo_id, i.item_id, COALESCE(i.category, ''), COALESCE(i.activity_name, ''), COALESCE(i.path, ''),
-			COALESCE(i.label, ''), COALESCE(i.unit, ''), COALESCE(i.volume, 0), COALESCE(i.unit_cost, 0), COALESCE(i.total_cost, 0),
-			COALESCE(i.approved_level, 0), COALESCE(i.status, ''), COALESCE(i.approval_date, ''),
-			COALESCE(s.wo_code, ''), COALESCE(s.jo_code, ''), COALESCE(s.project_name, ''), COALESCE(s.vendor_name, ''),
-			COALESCE(s.ship_name, ''), COALESCE(s.project_type, 'external'), `+itemDateExpr+` AS item_date`+from+`
-		ORDER BY `+sortCol+` `+sortDir(q)+`, i.total_cost DESC, i.wo_id, i.path LIMIT ? OFFSET ?`, append(args, limit, (page-1)*limit)...)
+	rows, err := db.Query(woItemColumns+from+` ORDER BY `+woItemOrder(q)+` LIMIT ? OFFSET ?`, append(args, limit, (page-1)*limit)...)
 	if err != nil {
 		http.Error(w, `{"error": "`+err.Error()+`"}`, http.StatusInternalServerError)
 		return
 	}
 	defer rows.Close()
 
-	type itemRow struct {
-		WOID         string  `json:"wo_id"`
-		ItemID       string  `json:"item_id"`
-		Category     string  `json:"category"`
-		ActivityName string  `json:"activity_name"`
-		Path         string  `json:"path"`
-		Label        string  `json:"label"`
-		Unit         string  `json:"unit"`
-		Volume       float64 `json:"volume"`
-		UnitCost     float64 `json:"unit_cost"`
-		TotalCost    float64 `json:"total_cost"`
-		Level        int     `json:"approved_level"`
-		Status       string  `json:"status"`
-		ApprovalDate string  `json:"approval_date"`
-		WOCode       string  `json:"wo_code"`
-		JOCode       string  `json:"jo_code"`
-		ProjectName  string  `json:"project_name"`
-		VendorName   string  `json:"vendor_name"`
-		ShipName     string  `json:"ship_name"`
-		ProjectType  string  `json:"project_type"`
-		ItemDate     string  `json:"item_date"`
-	}
-	data := []itemRow{}
+	data := []woItemRow{}
 	for rows.Next() {
-		var it itemRow
-		if rows.Scan(&it.WOID, &it.ItemID, &it.Category, &it.ActivityName, &it.Path, &it.Label, &it.Unit, &it.Volume, &it.UnitCost,
-			&it.TotalCost, &it.Level, &it.Status, &it.ApprovalDate, &it.WOCode, &it.JOCode, &it.ProjectName, &it.VendorName,
-			&it.ShipName, &it.ProjectType, &it.ItemDate) == nil {
+		if it, err := scanWoItem(rows); err == nil {
 			data = append(data, it)
 		}
 	}
@@ -151,12 +167,14 @@ func GetWorkOrderItems(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// woItemGroups are the supported groupings for the summary: key expressions
-// and the label columns returned for each.
-var woItemGroups = map[string]struct {
+type woItemGroup struct {
 	keys   []string // SQL expressions grouped by
 	labels []string // JSON names for those expressions
-}{
+}
+
+// woItemGroups are the supported groupings for the summary: key expressions
+// and the label columns returned for each.
+var woItemGroups = map[string]woItemGroup{
 	"category":         {[]string{"COALESCE(i.category, '')"}, []string{"category"}},
 	"activity":         {[]string{"COALESCE(i.activity_name, '')"}, []string{"activity_name"}},
 	"item":             {[]string{"COALESCE(i.label, '')", "COALESCE(i.unit, '')"}, []string{"label", "unit"}},
@@ -167,16 +185,10 @@ var woItemGroups = map[string]struct {
 	"vendor_activity":  {[]string{"COALESCE(s.vendor_name, '')", "COALESCE(i.activity_name, '')"}, []string{"vendor_name", "activity_name"}},
 }
 
-// GetWorkOrderItemSummary aggregates items by the requested group: item and WO
-// counts, total volume and cost, and min / volume-weighted average / max unit cost.
-func GetWorkOrderItemSummary(w http.ResponseWriter, r *http.Request) {
-	q := r.URL.Query()
-	group, ok := woItemGroups[q.Get("group")]
-	if !ok {
-		group = woItemGroups["activity"]
-	}
-	where, args := woItemFilters(q)
-	page, limit := pageParams(q, 25, 200)
+// woItemSummarySQL is the grouped query of a summary view, without paging:
+// item and WO counts, total volume and cost, min / volume-weighted average /
+// max unit cost and the newest item date, newest group first by default.
+func woItemSummarySQL(q url.Values, group woItemGroup, where string) string {
 	sortCols := map[string]string{
 		"total_cost": "total_cost", "item_count": "item_count", "wo_count": "wo_count",
 		"total_volume": "total_volume", "avg_cost": "avg_cost", "max_cost": "max_cost", "min_cost": "min_cost",
@@ -184,15 +196,10 @@ func GetWorkOrderItemSummary(w http.ResponseWriter, r *http.Request) {
 	}
 	sortCol := sortCols[q.Get("sort")]
 	if sortCol == "" {
-		sortCol = "latest_date" // groups with the newest item first by default
+		sortCol = "latest_date"
 	}
-
 	keyList := strings.Join(group.keys, ", ")
-	from := ` FROM wo_items i JOIN work_order_summary s ON s.wo_id = i.wo_id WHERE ` + where
-	var totalGroups int
-	db.QueryRow("SELECT COUNT(*) FROM (SELECT 1"+from+" GROUP BY "+keyList+") g", args...).Scan(&totalGroups)
-
-	rows, err := db.Query(`SELECT `+keyList+`,
+	return `SELECT ` + keyList + `,
 			COUNT(*) AS item_count,
 			COUNT(DISTINCT i.wo_id) AS wo_count,
 			COALESCE(SUM(i.volume), 0) AS total_volume,
@@ -202,10 +209,42 @@ func GetWorkOrderItemSummary(w http.ResponseWriter, r *http.Request) {
 				THEN SUM(CASE WHEN i.unit_cost > 0 THEN i.total_cost ELSE 0 END) / SUM(CASE WHEN i.unit_cost > 0 THEN i.volume ELSE 0 END)
 				ELSE 0 END AS avg_cost,
 			COALESCE(MAX(i.unit_cost), 0) AS max_cost,
-			COALESCE(MAX(`+itemDateExpr+`), '') AS latest_date`+from+`
-		GROUP BY `+keyList+`
-		ORDER BY `+sortCol+` `+sortDir(q)+`, total_cost DESC
-		LIMIT ? OFFSET ?`, append(args, limit, (page-1)*limit)...)
+			COALESCE(MAX(` + itemDateExpr + `), '') AS latest_date` + woItemFrom + where + `
+		GROUP BY ` + keyList + `
+		ORDER BY ` + sortCol + ` ` + sortDir(q) + `, total_cost DESC`
+}
+
+type woItemSummaryRow struct {
+	Keys                                    []string
+	ItemCount, WOCount                      int
+	Volume, Cost, MinCost, AvgCost, MaxCost float64
+	LatestDate                              string
+}
+
+func scanWoItemSummary(rows *sql.Rows, group woItemGroup) (woItemSummaryRow, error) {
+	s := woItemSummaryRow{Keys: make([]string, len(group.keys))}
+	dest := make([]interface{}, 0, len(group.keys)+8)
+	for i := range s.Keys {
+		dest = append(dest, &s.Keys[i])
+	}
+	dest = append(dest, &s.ItemCount, &s.WOCount, &s.Volume, &s.Cost, &s.MinCost, &s.AvgCost, &s.MaxCost, &s.LatestDate)
+	return s, rows.Scan(dest...)
+}
+
+// GetWorkOrderItemSummary aggregates items by the requested group.
+func GetWorkOrderItemSummary(w http.ResponseWriter, r *http.Request) {
+	q := r.URL.Query()
+	group, ok := woItemGroups[q.Get("group")]
+	if !ok {
+		group = woItemGroups["activity"]
+	}
+	where, args := woItemFilters(q)
+	page, limit := pageParams(q, 25, 200)
+
+	var totalGroups int
+	db.QueryRow("SELECT COUNT(*) FROM (SELECT 1"+woItemFrom+where+" GROUP BY "+strings.Join(group.keys, ", ")+") g", args...).Scan(&totalGroups)
+
+	rows, err := db.Query(woItemSummarySQL(q, group, where)+` LIMIT ? OFFSET ?`, append(args, limit, (page-1)*limit)...)
 	if err != nil {
 		http.Error(w, `{"error": "`+err.Error()+`"}`, http.StatusInternalServerError)
 		return
@@ -214,24 +253,16 @@ func GetWorkOrderItemSummary(w http.ResponseWriter, r *http.Request) {
 
 	data := []map[string]interface{}{}
 	for rows.Next() {
-		keys := make([]string, len(group.keys))
-		var itemCount, woCount int
-		var volume, cost, minCost, avgCost, maxCost float64
-		var latestDate string
-		dest := make([]interface{}, 0, len(keys)+7)
-		for i := range keys {
-			dest = append(dest, &keys[i])
-		}
-		dest = append(dest, &itemCount, &woCount, &volume, &cost, &minCost, &avgCost, &maxCost, &latestDate)
-		if rows.Scan(dest...) != nil {
+		s, err := scanWoItemSummary(rows, group)
+		if err != nil {
 			continue
 		}
 		row := map[string]interface{}{
-			"item_count": itemCount, "wo_count": woCount, "total_volume": volume, "total_cost": cost,
-			"min_cost": minCost, "avg_cost": avgCost, "max_cost": maxCost, "latest_date": latestDate,
+			"item_count": s.ItemCount, "wo_count": s.WOCount, "total_volume": s.Volume, "total_cost": s.Cost,
+			"min_cost": s.MinCost, "avg_cost": s.AvgCost, "max_cost": s.MaxCost, "latest_date": s.LatestDate,
 		}
 		for i, name := range group.labels {
-			row[name] = keys[i]
+			row[name] = s.Keys[i]
 		}
 		data = append(data, row)
 	}

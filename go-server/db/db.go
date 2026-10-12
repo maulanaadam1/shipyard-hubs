@@ -64,6 +64,54 @@ func Init() {
 
 	createTables()
 	seedAdmin()
+	MigrateWorkOrderItemsPermission()
+}
+
+// MigrateWorkOrderItemsPermission runs once (called from Init): the Item Pekerjaan WO menu used to
+// share the "Work Order" permission, so each role gets the same rights on the
+// new "Item Pekerjaan WO" resource and nobody loses access when it is split out.
+func MigrateWorkOrderItemsPermission() {
+	const marker = "rbac_item_pekerjaan_wo"
+	var done string
+	if DB.QueryRow(FormatQuery("SELECT value FROM app_meta WHERE key = ?"), marker).Scan(&done) == nil {
+		return
+	}
+
+	rows, err := DB.Query(FormatQuery("SELECT role_id, action, is_allowed FROM role_permissions WHERE resource = ?"), "Work Order")
+	if err != nil {
+		log.Printf("Item Pekerjaan WO permission migration: %v", err)
+		return
+	}
+	type perm struct {
+		roleID, action string
+		allowed        bool
+	}
+	var perms []perm
+	for rows.Next() {
+		var p perm
+		if rows.Scan(&p.roleID, &p.action, &p.allowed) == nil {
+			perms = append(perms, p)
+		}
+	}
+	rows.Close()
+
+	copied := 0
+	for _, p := range perms {
+		var exists int
+		DB.QueryRow(FormatQuery("SELECT COUNT(*) FROM role_permissions WHERE role_id = ? AND resource = ? AND action = ?"),
+			p.roleID, "Item Pekerjaan WO", p.action).Scan(&exists)
+		if exists > 0 {
+			continue
+		}
+		if _, err := DB.Exec(FormatQuery("INSERT INTO role_permissions (id, role_id, resource, action, is_allowed) VALUES (?, ?, ?, ?, ?)"),
+			uuid.New().String(), p.roleID, "Item Pekerjaan WO", p.action, p.allowed); err != nil {
+			log.Printf("Item Pekerjaan WO permission migration: %v", err)
+			return
+		}
+		copied++
+	}
+	DB.Exec(FormatQuery("INSERT INTO app_meta (key, value) VALUES (?, ?)"), marker, "done")
+	log.Printf("Item Pekerjaan WO: copied %d Work Order permission(s) to the new resource", copied)
 }
 
 // FormatQuery dynamically replaces ? with $1, $2 for PostgreSQL compatibility
@@ -855,7 +903,7 @@ func seedRolesAndPermissions() {
 
 		// Seed all permissions for Admin, selected for others
 		resources := []string{
-			"Dashboard", "Utility", "Job Order", "Ship Docking", "Request", "Release", "Return",
+			"Dashboard", "Utility", "Job Order", "Work Order", "Item Pekerjaan WO", "Ship Docking", "Request", "Release", "Return",
 			"Maintenance", "Inventory", "Reports", "Master Equipment",
 			"Master Vendor", "Master Company", "Master Kapal", "Master Location", "Master Workflow",
 			"Master Configuration", "User Management", "Role Management", "Master Dock Status", "Vessel Layout",
