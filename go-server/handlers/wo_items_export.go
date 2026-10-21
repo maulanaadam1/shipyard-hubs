@@ -190,8 +190,14 @@ func writeWoItemSummary(sw *excelize.StreamWriter, styles exportStyles, q url.Va
 		}
 		columns = append(columns, exportColumn{woItemColumnLabels[name], width})
 	}
+	// Groups not split by unit get one total per unit (text), not a sum of
+	// unlike units.
+	volumeColumn := exportColumn{"Total Volume", 13}
+	if !group.hasUnit() {
+		volumeColumn = exportColumn{"Volume per Satuan", 44}
+	}
 	columns = append(columns,
-		exportColumn{"Jumlah Item", 11}, exportColumn{"Jumlah WO", 11}, exportColumn{"Total Volume", 13},
+		exportColumn{"Jumlah Item", 11}, exportColumn{"Jumlah WO", 11}, volumeColumn,
 		exportColumn{"Biaya Min", 16}, exportColumn{"Biaya Rata-rata", 16}, exportColumn{"Biaya Maks", 16},
 		exportColumn{"Tgl Terbaru", 12}, exportColumn{"Total Biaya", 18},
 	)
@@ -200,6 +206,13 @@ func writeWoItemSummary(sw *excelize.StreamWriter, styles exportStyles, q url.Va
 	}
 
 	where, args := woItemFilters(q)
+	var byUnit map[string][]unitVolume
+	if !group.hasUnit() {
+		var err error
+		if byUnit, err = woItemVolumeByUnit(group, where, args, nil); err != nil {
+			return 0, false, err
+		}
+	}
 	rows, err := db.Query(woItemSummarySQL(q, group, where, false)+` LIMIT ?`, append(args, woItemExportMaxRows+1)...)
 	if err != nil {
 		return 0, false, err
@@ -224,10 +237,14 @@ func writeWoItemSummary(sw *excelize.StreamWriter, styles exportStyles, q url.Va
 				values = append(values, s.Keys[i])
 			}
 		}
+		var volume interface{} = excelize.Cell{StyleID: styles.number, Value: s.Volume}
+		if byUnit != nil {
+			volume = formatVolumeByUnit(byUnit[groupKeyString(s.Keys)])
+		}
 		values = append(values,
 			excelize.Cell{StyleID: styles.integer, Value: s.ItemCount},
 			excelize.Cell{StyleID: styles.integer, Value: s.WOCount},
-			excelize.Cell{StyleID: styles.number, Value: s.Volume},
+			volume,
 			excelize.Cell{StyleID: styles.money, Value: s.MinCost},
 			excelize.Cell{StyleID: styles.money, Value: s.AvgCost},
 			excelize.Cell{StyleID: styles.money, Value: s.MaxCost},

@@ -552,6 +552,8 @@ func createTables() {
 	DB.Exec("ALTER TABLE wo_items RENAME COLUMN total_price TO total_cost")
 	DB.Exec("CREATE INDEX IF NOT EXISTS idx_wo_items_category ON wo_items(category)")
 	DB.Exec("CREATE INDEX IF NOT EXISTS idx_wo_items_approval_date ON wo_items(approval_date)")
+	// Volume per unit of the activity groups shown on a page (wo_items_units.go).
+	DB.Exec("CREATE INDEX IF NOT EXISTS idx_wo_items_activity_name ON wo_items(activity_name)")
 	if os.Getenv("DB_CONNECTION") == "postgres" {
 		// Fast substring search on item / activity names (needs pg_trgm; skipped if unavailable).
 		DB.Exec("CREATE EXTENSION IF NOT EXISTS pg_trgm")
