@@ -3,6 +3,7 @@ package handlers
 import (
 	"encoding/json"
 	"net/http/httptest"
+	"net/url"
 	"testing"
 
 	"shipyard/db"
@@ -61,6 +62,25 @@ func TestVolumeByUnitInSummary(t *testing.T) {
 	}
 	if len(order) != 3 || order[0] != "Kg" || order[1] != noUnitLabel || order[2] != "Unit" {
 		t.Errorf("most items first, then by name: %v", order)
+	}
+
+	// Each unit's keys list exactly the items it counts (who contributes to it).
+	for _, u := range units {
+		m := u.(map[string]interface{})
+		query := "/api/wo-items?activity=" + url.QueryEscape("FASILITAS > Perawatan")
+		for _, k := range m["unit_keys"].([]interface{}) {
+			query += "&unit_key=" + url.QueryEscape(k.(string))
+		}
+		rec := httptest.NewRecorder()
+		GetWorkOrderItems(rec, httptest.NewRequest("GET", query, nil))
+		var items struct {
+			Total       int     `json:"total"`
+			TotalVolume float64 `json:"totalVolume"`
+		}
+		json.Unmarshal(rec.Body.Bytes(), &items)
+		if items.Total != int(m["item_count"].(float64)) || items.TotalVolume != m["volume"].(float64) {
+			t.Errorf("%s: unit_key lists %d items / volume %v, breakdown says %v / %v", m["unit"], items.Total, items.TotalVolume, m["item_count"], m["volume"])
+		}
 	}
 
 	// Per Item is already split by unit: no breakdown, the plain total stays.

@@ -17,7 +17,13 @@ type unitVolume struct {
 	Unit      string  `json:"unit"`
 	Volume    float64 `json:"volume"`
 	ItemCount int     `json:"item_count"`
+	// UnitKeys are the normalized units (woItemUnitKey) merged into this one,
+	// for listing its items with the unit_key filter.
+	UnitKeys []string `json:"unit_keys"`
 }
+
+// woItemUnitKey normalizes an item's unit the way the breakdown merges them.
+const woItemUnitKey = "LOWER(TRIM(COALESCE(i.unit, '')))"
 
 const noUnitLabel = "tanpa satuan"
 
@@ -76,7 +82,7 @@ func woItemVolumeByUnit(group woItemGroup, where string, args []interface{}, onl
 		}
 		where += " AND (" + strings.Join(ors, " OR ") + ")"
 	}
-	unitKey := "LOWER(TRIM(COALESCE(i.unit, '')))"
+	unitKey := woItemUnitKey
 	keyList := group.keyList()
 	rows, err := db.Query(`SELECT `+keyList+`, `+unitKey+`, MIN(TRIM(COALESCE(i.unit, ''))), COUNT(*), COALESCE(SUM(i.volume), 0)`+
 		woItemFrom+where+` GROUP BY `+keyList+`, `+unitKey, queryArgs...)
@@ -106,12 +112,13 @@ func woItemVolumeByUnit(group woItemGroup, where string, args []interface{}, onl
 			if result[k][i].Unit == label { // e.g. several punctuation-only units
 				result[k][i].Volume += volume
 				result[k][i].ItemCount += count
+				result[k][i].UnitKeys = append(result[k][i].UnitKeys, unitKeyValue)
 				merged = true
 				break
 			}
 		}
 		if !merged {
-			result[k] = append(result[k], unitVolume{Unit: label, Volume: volume, ItemCount: count})
+			result[k] = append(result[k], unitVolume{Unit: label, Volume: volume, ItemCount: count, UnitKeys: []string{unitKeyValue}})
 		}
 	}
 	for _, units := range result {

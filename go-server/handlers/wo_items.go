@@ -40,6 +40,15 @@ func woItemFilters(q url.Values) (string, []interface{}) {
 			args = append(args, v)
 		}
 	}
+	// unit_key (repeatable): normalized units, as listed in a volume_by_unit entry.
+	if keys := q["unit_key"]; len(keys) > 0 {
+		marks := make([]string, len(keys))
+		for i, k := range keys {
+			marks[i] = "?"
+			args = append(args, k)
+		}
+		where = append(where, woItemUnitKey+" IN ("+strings.Join(marks, ", ")+")")
+	}
 	if vendor := strings.TrimSpace(q.Get("vendor")); vendor == noVendorLabel {
 		where = append(where, "COALESCE(s.vendor_name, '') = ''")
 	} else if vendor != "" && vendor != "All" {
