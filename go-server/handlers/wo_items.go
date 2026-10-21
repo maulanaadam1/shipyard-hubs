@@ -284,6 +284,7 @@ func GetWorkOrderItemSummary(w http.ResponseWriter, r *http.Request) {
 
 	totalGroups := -1
 	data := []map[string]interface{}{}
+	var pageKeys [][]string
 	for rows.Next() {
 		s, err := scanWoItemSummary(rows, group, true)
 		if err != nil {
@@ -298,6 +299,18 @@ func GetWorkOrderItemSummary(w http.ResponseWriter, r *http.Request) {
 			row[name] = s.Keys[i]
 		}
 		data = append(data, row)
+		pageKeys = append(pageKeys, s.Keys)
+	}
+	// Groups not split by unit get their volume per unit, for this page only.
+	if !group.hasUnit() && len(pageKeys) > 0 {
+		byUnit, err := woItemVolumeByUnit(group, where, args, pageKeys)
+		if err != nil {
+			http.Error(w, `{"error": "`+err.Error()+`"}`, http.StatusInternalServerError)
+			return
+		}
+		for i, row := range data {
+			row["volume_by_unit"] = byUnit[groupKeyString(pageKeys[i])]
+		}
 	}
 	if totalGroups < 0 {
 		// An empty page has no row to carry the count (e.g. a page past the end).

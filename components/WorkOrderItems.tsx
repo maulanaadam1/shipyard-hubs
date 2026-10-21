@@ -54,6 +54,38 @@ const PAGE_SIZES = [25, 50, 100];
 const FIELD_LABEL = 'block text-[11px] font-bold uppercase tracking-wide text-slate-500';
 const FIELD_INPUT = 'w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-sm outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500';
 
+type UnitVolume = { unit: string; volume: number; item_count: number };
+
+const UNIT_PREVIEW = 3;
+const formatVolume = (value: number) => new Intl.NumberFormat('id-ID', { maximumFractionDigits: 2 }).format(value || 0);
+
+// Volume of a group that is not split by unit: one total per unit, most items
+// first (adding Kg, Unit and Orang into one number would mean nothing).
+function VolumeByUnitCell({ units }: { units: UnitVolume[] }) {
+  const [open, setOpen] = useState(false);
+  if (!units.length) return <span className="text-slate-400">-</span>;
+  const shown = open ? units : units.slice(0, UNIT_PREVIEW);
+  return (
+    <div className="flex flex-col items-end gap-0.5 whitespace-nowrap">
+      {shown.map(u => (
+        <span key={u.unit} title={`${u.item_count.toLocaleString('id-ID')} item`}>
+          {formatVolume(u.volume)} <span className="font-sans text-slate-500">{u.unit}</span>
+        </span>
+      ))}
+      {units.length > UNIT_PREVIEW && (
+        <button
+          type="button"
+          onClick={e => { e.stopPropagation(); setOpen(o => !o); }}
+          aria-expanded={open}
+          className="font-sans text-[11px] font-semibold text-indigo-600 hover:underline rounded outline-none focus-visible:ring-2 focus-visible:ring-indigo-500/40"
+        >
+          {open ? 'Ringkas' : `+${units.length - UNIT_PREVIEW} satuan lain`}
+        </button>
+      )}
+    </div>
+  );
+}
+
 export default function WorkOrderItems() {
   const { canAccess } = useData();
   const [view, setView] = useState<View>('list');
@@ -336,6 +368,8 @@ export default function WorkOrderItems() {
   );
 
   const groupColumns = view === 'list' ? [] : GROUP_COLUMNS[view];
+  // Per Item views are split by unit, so their total volume is one meaningful number.
+  const groupHasUnit = groupColumns.some(c => c.key === 'unit');
   const summaryCaption = useMemo(() => {
     if (view === 'list') return `${total.toLocaleString('id-ID')} item · total biaya ${formatIDR(totalCost)}`;
     return `${total.toLocaleString('id-ID')} grup`;
@@ -506,7 +540,9 @@ export default function WorkOrderItems() {
                       {groupColumns.map(c => <th key={c.key} className="py-3 px-4 text-left">{c.label}</th>)}
                       <SortHead column="item_count">Item</SortHead>
                       <SortHead column="wo_count">WO</SortHead>
-                      <SortHead column="total_volume">Total Volume</SortHead>
+                      {groupHasUnit
+                        ? <SortHead column="total_volume">Total Volume</SortHead>
+                        : <th className="py-3 px-4 text-right whitespace-nowrap">Volume per Satuan</th>}
                       <SortHead column="min_cost">Biaya Min</SortHead>
                       <SortHead column="avg_cost">Biaya Rata²</SortHead>
                       <SortHead column="max_cost">Biaya Maks</SortHead>
@@ -572,7 +608,9 @@ export default function WorkOrderItems() {
                         ))}
                         <td className="py-2.5 px-4 text-right font-mono">{formatNum(r.item_count)}</td>
                         <td className="py-2.5 px-4 text-right font-mono">{formatNum(r.wo_count)}</td>
-                        <td className="py-2.5 px-4 text-right font-mono">{formatNum(r.total_volume)}</td>
+                        <td className="py-2.5 px-4 text-right font-mono">
+                          {groupHasUnit ? formatNum(r.total_volume) : <VolumeByUnitCell key={key} units={r.volume_by_unit || []} />}
+                        </td>
                         <td className="py-2.5 px-4 text-right font-mono whitespace-nowrap">{formatIDR(r.min_cost)}</td>
                         <td className="py-2.5 px-4 text-right font-mono whitespace-nowrap">{formatIDR(r.avg_cost)}</td>
                         <td className="py-2.5 px-4 text-right font-mono whitespace-nowrap">{formatIDR(r.max_cost)}</td>
