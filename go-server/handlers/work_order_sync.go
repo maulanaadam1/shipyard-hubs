@@ -47,24 +47,17 @@ func ProcessWorkOrderList(body []byte) error {
 	}
 
 	existing := map[string]workOrderSummary{}
-	// WOs whose status is judged from their stored work items (see
-	// lowestItemLevel): the list's min_approval_level must not overwrite it.
-	statusFromItems := map[string]bool{}
 	rows, err := db.Query(`SELECT wo_id, COALESCE(wo_code, ''), COALESCE(jo_code, ''), COALESCE(project_name, ''), COALESCE(vendor_name, ''),
 		COALESCE(ship_name, ''), COALESCE(status_approval, ''), COALESCE(derived_status, ''), COALESCE(total_cost, 0),
-		COALESCE(created_source_at, ''), COALESCE(updated_source_at, ''), COALESCE(project_type, ''),
-		CASE WHEN EXISTS (SELECT 1 FROM wo_items i WHERE i.wo_id = work_order_summary.wo_id AND COALESCE(i.status, '') <> 'rejected') THEN 1 ELSE 0 END
-		FROM work_order_summary`)
+		COALESCE(created_source_at, ''), COALESCE(updated_source_at, ''), COALESCE(project_type, '') FROM work_order_summary`)
 	if err != nil {
 		return err
 	}
 	for rows.Next() {
 		var s workOrderSummary
-		var fromItems int
 		if rows.Scan(&s.WOID, &s.WOCode, &s.JOCode, &s.ProjectName, &s.VendorName, &s.ShipName, &s.StatusApproval,
-			&s.DerivedStatus, &s.TotalCost, &s.CreatedSourceAt, &s.UpdatedSourceAt, &s.ProjectType, &fromItems) == nil {
+			&s.DerivedStatus, &s.TotalCost, &s.CreatedSourceAt, &s.UpdatedSourceAt, &s.ProjectType) == nil {
 			existing[s.WOID] = s
-			statusFromItems[s.WOID] = fromItems == 1
 		}
 	}
 	rows.Close()
@@ -81,11 +74,7 @@ func ProcessWorkOrderList(body []byte) error {
 			continue
 		}
 		seen[s.WOID] = true
-		old, ok := existing[s.WOID]
-		if ok && statusFromItems[s.WOID] {
-			s.DerivedStatus = old.DerivedStatus
-		}
-		if ok && sameListFields(old, s) {
+		if old, ok := existing[s.WOID]; ok && sameListFields(old, s) {
 			continue
 		}
 		changed = append(changed, s)
@@ -319,25 +308,6 @@ func writeDetailDerived(items []detailDerived) error {
 			return err
 		}
 
-		// A status judged from the work items replaces the stored one; for WOs
-		// without items the upsert above keeps the stored (list) status.
-		var statusMarks []string
-		var statusArgs []interface{}
-		for _, d := range chunk {
-			if d.summary.StatusFromItems {
-				statusMarks = append(statusMarks, "(?, ?)")
-				statusArgs = append(statusArgs, d.summary.WOID, d.summary.DerivedStatus)
-			}
-		}
-		if len(statusMarks) > 0 {
-			// VALUES columns are column1, column2 on both PostgreSQL and SQLite.
-			if _, err := tx.Exec(db.FormatQuery(`UPDATE work_order_summary SET derived_status = v.column2
-				FROM (VALUES `+strings.Join(statusMarks, ", ")+`) AS v
-				WHERE work_order_summary.wo_id = v.column1`), statusArgs...); err != nil {
-				return err
-			}
-		}
-
 		if _, err := tx.Exec(db.FormatQuery("DELETE FROM work_order_daily_costs WHERE wo_id IN ("+strings.Join(idMarks, ", ")+")"), idArgs...); err != nil {
 			return err
 		}
@@ -421,7 +391,7 @@ func writeDetailDerived(items []detailDerived) error {
 
 // derivedDataVersion changes whenever the way summary financials or the daily
 // ledger are computed changes; a mismatch triggers a one-time local rebuild.
-const derivedDataVersion = "2026-10-12.status-from-items"
+const derivedDataVersion = "2026-10-12.volume-cost-final-only"
 
 type rebuildProgress struct {
 	Running    bool   `json:"running"`
