@@ -161,9 +161,6 @@ type workOrderSummary struct {
 	// Items are the leaf work items behind the financials (one row per
 	// item in wo_items). Not part of the API payload.
 	Items []woItem `json:"-"`
-	// StatusFromItems: DerivedStatus was judged from the work items (see
-	// lowestItemLevel), so it replaces the stored status when saved.
-	StatusFromItems bool `json:"-"`
 }
 
 // woItem is one leaf work item of a WO detail, classified with the same rules
@@ -470,7 +467,7 @@ func applyFinancialsFromDetail(summary workOrderSummary, raw []byte) workOrderSu
 					Volume:       parseFloatAny(item["volume"]),
 					UnitCost:     baseCost,
 					TotalCost:    costToAdd,
-					Level:        itemApprovalLevel(approvedLevel, statusAppr),
+					Level:        int(approvedLevel),
 					Status:       status,
 					ApprovalDate: approvalDate,
 				})
@@ -551,55 +548,7 @@ func applyFinancialsFromDetail(summary workOrderSummary, raw []byte) workOrderSu
 	if latestDate != "" {
 		summary.LatestDate = latestDate
 	}
-	// The lowest item wins, even when SIAGA's list says Level 5: a lower item
-	// is work not finished yet or newly added. Only a globally approved WO
-	// (root level 5, which can leave item levels at 0) stays at Level 5.
-	if level, ok := lowestItemLevel(items); ok {
-		if rootLevel >= 5 {
-			level = 5
-		}
-		summary.DerivedStatus = approvalStatusText(level, summary.StatusApproval)
-		summary.StatusFromItems = true
-	}
 	return summary
-}
-
-// itemApprovalLevel is an item's approval level. SIAGA sometimes moves only the
-// text status ("approved level 1") and leaves approved_level at 0, so the
-// higher of the two counts; "approved" alone is level 5.
-func itemApprovalLevel(approvedLevel float64, statusAppr string) int {
-	level := int(approvedLevel)
-	s := strings.ToLower(strings.TrimSpace(statusAppr))
-	fromText := 0
-	switch {
-	case s == "approved":
-		fromText = 5
-	case strings.HasPrefix(s, "approved level "):
-		fromText, _ = strconv.Atoi(strings.TrimSpace(strings.TrimPrefix(s, "approved level ")))
-	case strings.HasPrefix(s, "level "):
-		fromText, _ = strconv.Atoi(strings.TrimSpace(strings.TrimPrefix(s, "level ")))
-	}
-	if fromText > level {
-		return fromText
-	}
-	return level
-}
-
-// lowestItemLevel is the lowest approval level over a WO's work items, rejected
-// ones excluded. SIAGA's min_approval_level also counts entries that are not
-// work items, so it can read 0 while every item is at level 5. ok is false
-// when there is no item to judge by, and the WO keeps SIAGA's level.
-func lowestItemLevel(items []woItem) (float64, bool) {
-	lowest, found := 0, false
-	for _, it := range items {
-		if it.Status == "rejected" {
-			continue
-		}
-		if !found || it.Level < lowest {
-			lowest, found = it.Level, true
-		}
-	}
-	return float64(lowest), found
 }
 
 func upsertWorkOrderSummary(summary workOrderSummary) error {
