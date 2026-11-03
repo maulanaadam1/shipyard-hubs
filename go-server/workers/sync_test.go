@@ -3,6 +3,7 @@ package workers
 import (
 	"encoding/json"
 	"testing"
+	"time"
 )
 
 func TestMergeSyncResponsesTagsProjectScope(t *testing.T) {
@@ -43,5 +44,30 @@ func TestProjectScope(t *testing.T) {
 	}
 	if got := projectScope("https://x/api?sort=a"); got != "" {
 		t.Errorf("got %q", got)
+	}
+}
+
+// last_sync is local server time; on a UTC+7 server a 5-minute sync must be
+// due 5 minutes later, not 7 hours and 5 minutes later.
+func TestSyncDueUsesLocalTime(t *testing.T) {
+	wib := time.FixedZone("WIB", 7*3600)
+	now := time.Date(2026, 11, 3, 20, 4, 0, 0, wib)
+	cases := []struct {
+		last, typ string
+		value     int
+		want      bool
+	}{
+		{"2026-11-03 13:56:53", "minutes", 5, true},
+		{"2026-11-03 20:01:00", "minutes", 5, false},
+		{"2026-11-03 19:59:00", "minutes", 5, true},
+		{"2026-11-03 17:08:31", "hours", 6, false},
+		{"2026-11-01 23:19:53", "days", 5, false},
+		{"", "minutes", 5, true},
+		{"not a time", "minutes", 5, true},
+	}
+	for _, c := range cases {
+		if got := syncDue(c.last, c.typ, c.value, now); got != c.want {
+			t.Errorf("syncDue(%q, %s %d) = %v, want %v", c.last, c.typ, c.value, got, c.want)
+		}
 	}
 }
