@@ -207,6 +207,30 @@ func mergeSyncResponses(responses [][]byte, urls []string) ([]byte, error) {
 	return json.Marshal(map[string]interface{}{"data": merged})
 }
 
+// syncDue reports whether a config last synced at lastSyncStr is due again.
+// last_sync is written with time.Now() in the server's local time, so it is
+// read back in local time too: parsed as UTC, every sync on a UTC+7 server
+// waited seven hours longer than its interval.
+func syncDue(lastSyncStr, intervalType string, intervalValue int, now time.Time) bool {
+	if lastSyncStr == "" {
+		return true
+	}
+	lastSync, err := time.ParseInLocation("2006-01-02 15:04:05", lastSyncStr, now.Location())
+	if err != nil {
+		return true
+	}
+	var nextSync time.Time
+	switch intervalType {
+	case "hours":
+		nextSync = lastSync.Add(time.Duration(intervalValue) * time.Hour)
+	case "days":
+		nextSync = lastSync.Add(time.Duration(intervalValue) * 24 * time.Hour)
+	default:
+		nextSync = lastSync.Add(time.Duration(intervalValue) * time.Minute)
+	}
+	return !now.Before(nextSync)
+}
+
 // RunSyncJob syncs every due config (or just targetId) and returns the error of
 // the last generic (non-incremental) config that failed, if any.
 func RunSyncJob(force bool, targetId string) error {
@@ -240,23 +264,8 @@ func RunSyncJob(force bool, targetId string) error {
 			continue
 		}
 
-		if !force && lastSyncStr != "" {
-			lastSync, err := time.Parse("2006-01-02 15:04:05", lastSyncStr)
-			if err == nil {
-				var nextSync time.Time
-				switch intervalType {
-				case "hours":
-					nextSync = lastSync.Add(time.Duration(intervalValue) * time.Hour)
-				case "days":
-					nextSync = lastSync.Add(time.Duration(intervalValue) * 24 * time.Hour)
-				default:
-					nextSync = lastSync.Add(time.Duration(intervalValue) * time.Minute)
-				}
-
-				if time.Now().Before(nextSync) {
-					continue // Not time yet
-				}
-			}
+		if !force && !syncDue(lastSyncStr, intervalType, intervalValue, time.Now()) {
+			continue // Not time yet
 		}
 
 		var headers map[string]string
