@@ -408,10 +408,24 @@ func writeDetailDerived(items []detailDerived) error {
 
 // derivedDataVersion changes whenever the way summary financials or the daily
 // ledger are computed changes; a mismatch triggers a one-time local rebuild.
-// It includes the item parser version, so new parsing rules rebuild
-// wo_item_parsed from the stored details on the next start. (Status comes from
-// the WO list's min_approval_level again; the list pass on start restores it.)
-const derivedDataVersion = "2026-11-03.status-from-api+item-parse/" + itemparse.Version
+//
+// The item parser has its own version: new parsing rules only refill
+// wo_item_parsed (backfillParsedItems), never a full rebuild.
+const derivedDataVersion = "2026-11-03.status-from-api"
+
+// equivalentDerivedVersions are stored versions whose summaries, ledger and
+// items already match derivedDataVersion: maybeRebuildDerived just records the
+// new version for them. A full rebuild rewrites every row of four tables and
+// took the production database down once (3 Nov 2026), so it only runs when the
+// derived data really changes.
+var equivalentDerivedVersions = map[string]bool{
+	// Status from work items (reverted): statuses come back from the WO list
+	// pass that runs before maybeRebuildDerived; items and ledger are unchanged.
+	"2026-10-12.status-from-items": true,
+	// Versions shipped in between and never completed in production.
+	"2026-10-22.status-from-api":                                true,
+	"2026-11-03.status-from-api+item-parse/" + itemparse.Version: true,
+}
 
 type rebuildProgress struct {
 	Running    bool   `json:"running"`
@@ -491,15 +505,20 @@ func rebuildWorkOrderDerived() error {
 	rebuildState.Total = total
 	rebuildState.Unlock()
 
+	// Small batches with a pause between them: each batch rewrites summaries,
+	// ledger, items and parsed items in one transaction, and back to back they
+	// overloaded the production database.
+	batchSize := envInt("WO_REBUILD_BATCH", 50)
+	pause := time.Duration(envInt("WO_REBUILD_PAUSE_MS", 500)) * time.Millisecond
 	start := time.Now()
 	last := ""
 	for {
-		rows, err := db.Query("SELECT wo_id, raw_json FROM work_order_details WHERE wo_id > ? ORDER BY wo_id LIMIT 200", last)
+		rows, err := db.Query("SELECT wo_id, raw_json FROM work_order_details WHERE wo_id > ? ORDER BY wo_id LIMIT ?", last, batchSize)
 		if err != nil {
 			return err
 		}
 		read := 0
-		batch := make([]detailDerived, 0, 200)
+		batch := make([]detailDerived, 0, batchSize)
 		for rows.Next() {
 			var id string
 			var raw []byte
@@ -524,12 +543,20 @@ func rebuildWorkOrderDerived() error {
 		rebuildState.Lock()
 		rebuildState.Done += read
 		rebuildState.Unlock()
+		if read < batchSize {
+			break // last batch
+		}
+		time.Sleep(pause)
 	}
-	db.Exec("DELETE FROM app_meta WHERE key = 'wo_derived_version'")
-	db.Exec("INSERT INTO app_meta (key, value) VALUES ('wo_derived_version', ?)", derivedDataVersion)
+	setDerivedVersion()
 	InvalidateWorkOrderCache()
 	log.Printf("[WO DERIVED] rebuilt summary financials and daily costs for %d work orders in %s", total, time.Since(start).Round(time.Second))
 	return nil
+}
+
+func setDerivedVersion() {
+	db.Exec("DELETE FROM app_meta WHERE key = 'wo_derived_version'")
+	db.Exec("INSERT INTO app_meta (key, value) VALUES ('wo_derived_version', ?)", derivedDataVersion)
 }
 
 // maybeRebuildDerived runs the local rebuild once per derivedDataVersion.
@@ -537,6 +564,11 @@ func maybeRebuildDerived() {
 	var version string
 	db.QueryRow("SELECT COALESCE(value, '') FROM app_meta WHERE key = 'wo_derived_version'").Scan(&version)
 	if version == derivedDataVersion {
+		return
+	}
+	if equivalentDerivedVersions[version] {
+		setDerivedVersion()
+		log.Printf("[WO DERIVED] version %q -> %q: stored data already matches, no rebuild", version, derivedDataVersion)
 		return
 	}
 	log.Printf("[WO DERIVED] version %q -> %q: rebuilding from stored details (no SIAGA calls)", version, derivedDataVersion)
@@ -662,6 +694,9 @@ func StartWorkOrderDetailWorker() {
 			log.Printf("[WO LIST] stored list not applied: %v", err)
 		}
 		maybeRebuildDerived()
+		// Parsed descriptions for items that lack them (new table, new rules, an
+		// interrupted rebuild), a little at a time.
+		startParsedItemsBackfill()
 		ticker := time.NewTicker(interval)
 		defer ticker.Stop()
 		for {
