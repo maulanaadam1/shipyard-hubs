@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"shipyard/db"
+	"shipyard/itemparse"
 	"shipyard/workers"
 )
 
@@ -341,13 +342,16 @@ func writeDetailDerived(items []detailDerived) error {
 			return err
 		}
 
-		// Flattened leaf items, replaced per WO like the ledger.
+		// Flattened leaf items and their parsed descriptions, replaced per WO like the ledger.
 		if _, err := tx.Exec(db.FormatQuery("DELETE FROM wo_items WHERE wo_id IN ("+strings.Join(idMarks, ", ")+")"), idArgs...); err != nil {
 			return err
 		}
+		if _, err := tx.Exec(db.FormatQuery("DELETE FROM wo_item_parsed WHERE wo_id IN ("+strings.Join(idMarks, ", ")+")"), idArgs...); err != nil {
+			return err
+		}
 		const itemBatch = 250
-		var itemRows []string
-		var itemArgs []interface{}
+		var itemRows, parsedRows []string
+		var itemArgs, parsedArgs []interface{}
 		flushItems := func() error {
 			if len(itemRows) == 0 {
 				return nil
@@ -356,6 +360,15 @@ func writeDetailDerived(items []detailDerived) error {
 				volume, unit_cost, total_cost, approved_level, status, approval_date) VALUES `+strings.Join(itemRows, ", ")+`
 				ON CONFLICT(wo_id, item_id) DO NOTHING`), itemArgs...)
 			itemRows, itemArgs = itemRows[:0], itemArgs[:0]
+			if err != nil {
+				return err
+			}
+			if len(parsedRows) > 0 {
+				_, err = tx.Exec(db.FormatQuery(`INSERT INTO wo_item_parsed (wo_id, item_id, rules, action, object, material, size, qty,
+					source, work_type, recognized, pipe_mm, elbows, flanges, frame, side, weight_kg, parser_version) VALUES `+strings.Join(parsedRows, ", ")+`
+					ON CONFLICT(wo_id, item_id) DO NOTHING`), parsedArgs...)
+				parsedRows, parsedArgs = parsedRows[:0], parsedArgs[:0]
+			}
 			return err
 		}
 		for _, d := range chunk {
@@ -367,6 +380,10 @@ func writeDetailDerived(items []detailDerived) error {
 				itemRows = append(itemRows, "(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")
 				itemArgs = append(itemArgs, d.summary.WOID, id, it.ActivityPath, it.ActivityName, it.Category, it.Path, it.Label, it.Unit,
 					it.Volume, it.UnitCost, it.TotalCost, it.Level, it.Status, it.ApprovalDate)
+				p := itemparse.Parse(it.Label)
+				parsedRows = append(parsedRows, "(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")
+				parsedArgs = append(parsedArgs, d.summary.WOID, id, p.Rules, p.Action, p.Object, p.Material, p.Size, p.Qty,
+					p.Source, p.WorkType, p.Recognized, p.PipeMM, p.Elbows, p.Flanges, p.Frame, p.Side, p.WeightKg, itemparse.Version)
 				if len(itemRows) >= itemBatch {
 					if err := flushItems(); err != nil {
 						return err
@@ -391,7 +408,10 @@ func writeDetailDerived(items []detailDerived) error {
 
 // derivedDataVersion changes whenever the way summary financials or the daily
 // ledger are computed changes; a mismatch triggers a one-time local rebuild.
-const derivedDataVersion = "2026-10-22.status-from-api"
+// It includes the item parser version, so new parsing rules rebuild
+// wo_item_parsed from the stored details on the next start. (Status comes from
+// the WO list's min_approval_level again; the list pass on start restores it.)
+const derivedDataVersion = "2026-11-03.status-from-api+item-parse/" + itemparse.Version
 
 type rebuildProgress struct {
 	Running    bool   `json:"running"`
