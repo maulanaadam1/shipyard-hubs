@@ -559,6 +559,32 @@ func createTables() {
 		DB.Exec("CREATE INDEX IF NOT EXISTS idx_wo_items_activity_trgm ON wo_items USING gin (lower(activity_name) gin_trgm_ops)")
 	}
 
+	// Each wo_items description read into structured fields (package
+	// itemparse): work type, comparable size, pipe / hull details. Rewritten with
+	// wo_items; parser_version says which rule set produced the row.
+	DB.Exec(`CREATE TABLE IF NOT EXISTS wo_item_parsed (
+		wo_id TEXT NOT NULL,
+		item_id TEXT NOT NULL,
+		rules TEXT,
+		action TEXT,
+		object TEXT,
+		material TEXT,
+		size TEXT,
+		qty TEXT,
+		source TEXT,
+		work_type TEXT,
+		recognized BOOLEAN DEFAULT false,
+		pipe_mm NUMERIC,
+		elbows INTEGER,
+		flanges INTEGER,
+		frame TEXT,
+		side TEXT,
+		weight_kg NUMERIC,
+		parser_version TEXT,
+		PRIMARY KEY (wo_id, item_id)
+	);`)
+	DB.Exec("CREATE INDEX IF NOT EXISTS idx_wo_item_parsed_work ON wo_item_parsed(work_type, size)")
+
 	// Small key/value store for app-level markers (e.g. derived-data version).
 	DB.Exec(`CREATE TABLE IF NOT EXISTS app_meta (
 		key TEXT PRIMARY KEY,

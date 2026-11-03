@@ -47,7 +47,7 @@ jobs:
         working-directory: go-server
     env:
       # go-server/scripts holds standalone one-off programs (several main funcs).
-      GO_PACKAGES: . ./db/... ./handlers/... ./middleware/... ./workers/...
+      GO_PACKAGES: . ./db/... ./handlers/... ./itemparse/... ./middleware/... ./workers/...
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
