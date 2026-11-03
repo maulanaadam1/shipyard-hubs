@@ -41,7 +41,8 @@ const GROUP_FILTER_PARAM: Record<string, string> = {
 
 const DETAIL_PAGE_SIZE = 20;
 
-type GroupDetail = { loading: boolean; rows: any[]; total: number; limit: number; error?: string };
+// unit: when set, the detail lists only the group's items in that unit.
+type GroupDetail = { loading: boolean; rows: any[]; total: number; limit: number; error?: string; unit?: UnitVolume };
 
 const STATUS_STYLE: Record<string, string> = {
   approved: 'bg-emerald-100 text-emerald-700',
@@ -53,6 +54,46 @@ const PAGE_SIZES = [25, 50, 100];
 
 const FIELD_LABEL = 'block text-[11px] font-bold uppercase tracking-wide text-slate-500';
 const FIELD_INPUT = 'w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-sm outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500';
+
+type UnitVolume = { unit: string; volume: number; item_count: number; unit_keys: string[] };
+
+const UNIT_PREVIEW = 3;
+const formatVolume = (value: number) => new Intl.NumberFormat('id-ID', { maximumFractionDigits: 2 }).format(value || 0);
+
+// Volume of a group that is not split by unit: one total per unit, most items
+// first (adding Kg, Unit and Orang into one number would mean nothing).
+// Each total opens the group's items in that unit (who contributes to it).
+function VolumeByUnitCell({ units, selected, onSelect }: { units: UnitVolume[]; selected?: string; onSelect: (u: UnitVolume) => void }) {
+  const [open, setOpen] = useState(false);
+  if (!units.length) return <span className="text-slate-400">-</span>;
+  const shown = open ? units : units.slice(0, UNIT_PREVIEW);
+  return (
+    <div className="flex flex-col items-end gap-0.5 whitespace-nowrap">
+      {shown.map(u => (
+        <button
+          key={u.unit}
+          type="button"
+          onClick={e => { e.stopPropagation(); onSelect(u); }}
+          aria-pressed={selected === u.unit}
+          title={`Lihat ${u.item_count.toLocaleString('id-ID')} item dengan satuan ${u.unit}`}
+          className={`rounded px-1 -mx-1 outline-none focus-visible:ring-2 focus-visible:ring-indigo-500/40 ${selected === u.unit ? 'bg-indigo-100 text-indigo-800' : 'hover:bg-slate-100 hover:underline'}`}
+        >
+          {formatVolume(u.volume)} <span className={`font-sans ${selected === u.unit ? 'text-indigo-700' : 'text-slate-500'}`}>{u.unit}</span>
+        </button>
+      ))}
+      {units.length > UNIT_PREVIEW && (
+        <button
+          type="button"
+          onClick={e => { e.stopPropagation(); setOpen(o => !o); }}
+          aria-expanded={open}
+          className="font-sans text-[11px] font-semibold text-indigo-600 hover:underline rounded outline-none focus-visible:ring-2 focus-visible:ring-indigo-500/40"
+        >
+          {open ? 'Ringkas' : `+${units.length - UNIT_PREVIEW} satuan lain`}
+        </button>
+      )}
+    </div>
+  );
+}
 
 export default function WorkOrderItems() {
   const { canAccess } = useData();
@@ -121,10 +162,14 @@ export default function WorkOrderItems() {
 
   const groupKey = (row: any) => JSON.stringify((view === 'list' ? [] : GROUP_COLUMNS[view]).map(c => row[c.key] ?? ''));
 
-  const loadGroupDetail = async (row: any, limit = DETAIL_PAGE_SIZE) => {
+  const loadGroupDetail = async (row: any, limit = DETAIL_PAGE_SIZE, unit?: UnitVolume) => {
     if (view === 'list') return;
     const key = groupKey(row);
-    setDetails(prev => ({ ...prev, [key]: { ...(prev[key] || { rows: [], total: 0 }), loading: true, limit } }));
+    setDetails(prev => {
+      // Switching unit starts from an empty list instead of the other unit's items.
+      const sameUnit = prev[key]?.unit?.unit === unit?.unit;
+      return { ...prev, [key]: { ...(sameUnit && prev[key] ? prev[key] : { rows: [], total: 0 }), loading: true, limit, unit } };
+    });
     try {
       const headers = await getHeaders();
       const params = baseParams();
@@ -136,17 +181,26 @@ export default function WorkOrderItems() {
         if (param === 'vendor' && value === '') params.set('vendor', 'Tanpa Vendor');
         else params.set(param, value);
       });
+      unit?.unit_keys.forEach(k => params.append('unit_key', k));
       params.set('page', '1');
       params.set('limit', String(limit));
-      params.set('sort', 'item_date');
+      // One unit: biggest contributors first. All units: newest first.
+      params.set('sort', unit ? 'volume' : 'item_date');
       params.set('dir', 'desc');
       const res = await fetch(`/api/wo-items?${params}`, { headers });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const json = await res.json();
-      setDetails(prev => ({ ...prev, [key]: { loading: false, rows: json.data || [], total: json.total || 0, limit } }));
+      setDetails(prev => ({ ...prev, [key]: { loading: false, rows: json.data || [], total: json.total || 0, limit, unit } }));
     } catch {
-      setDetails(prev => ({ ...prev, [key]: { loading: false, rows: [], total: 0, limit, error: 'Gagal memuat detail.' } }));
+      setDetails(prev => ({ ...prev, [key]: { loading: false, rows: [], total: 0, limit, unit, error: 'Gagal memuat detail. Klik lagi untuk mencoba ulang.' } }));
     }
+  };
+
+  // A unit total opens that unit's items; clicking the same unit again goes
+  // back to all of the group's items.
+  const selectUnit = (row: any, unit: UnitVolume) => {
+    const current = details[groupKey(row)]?.unit;
+    loadGroupDetail(row, DETAIL_PAGE_SIZE, current?.unit === unit.unit ? undefined : unit);
   };
 
   const toggleGroup = (row: any) => {
@@ -336,6 +390,8 @@ export default function WorkOrderItems() {
   );
 
   const groupColumns = view === 'list' ? [] : GROUP_COLUMNS[view];
+  // Per Item views are split by unit, so their total volume is one meaningful number.
+  const groupHasUnit = groupColumns.some(c => c.key === 'unit');
   const summaryCaption = useMemo(() => {
     if (view === 'list') return `${total.toLocaleString('id-ID')} item · total biaya ${formatIDR(totalCost)}`;
     return `${total.toLocaleString('id-ID')} grup`;
@@ -506,7 +562,9 @@ export default function WorkOrderItems() {
                       {groupColumns.map(c => <th key={c.key} className="py-3 px-4 text-left">{c.label}</th>)}
                       <SortHead column="item_count">Item</SortHead>
                       <SortHead column="wo_count">WO</SortHead>
-                      <SortHead column="total_volume">Total Volume</SortHead>
+                      {groupHasUnit
+                        ? <SortHead column="total_volume">Total Volume</SortHead>
+                        : <th className="py-3 px-4 text-right whitespace-nowrap">Volume per Satuan</th>}
                       <SortHead column="min_cost">Biaya Min</SortHead>
                       <SortHead column="avg_cost">Biaya Rata²</SortHead>
                       <SortHead column="max_cost">Biaya Maks</SortHead>
@@ -572,7 +630,11 @@ export default function WorkOrderItems() {
                         ))}
                         <td className="py-2.5 px-4 text-right font-mono">{formatNum(r.item_count)}</td>
                         <td className="py-2.5 px-4 text-right font-mono">{formatNum(r.wo_count)}</td>
-                        <td className="py-2.5 px-4 text-right font-mono">{formatNum(r.total_volume)}</td>
+                        <td className="py-2.5 px-4 text-right font-mono">
+                          {groupHasUnit
+                            ? formatNum(r.total_volume)
+                            : <VolumeByUnitCell key={key} units={r.volume_by_unit || []} selected={detail?.unit?.unit} onSelect={u => selectUnit(r, u)} />}
+                        </td>
                         <td className="py-2.5 px-4 text-right font-mono whitespace-nowrap">{formatIDR(r.min_cost)}</td>
                         <td className="py-2.5 px-4 text-right font-mono whitespace-nowrap">{formatIDR(r.avg_cost)}</td>
                         <td className="py-2.5 px-4 text-right font-mono whitespace-nowrap">{formatIDR(r.max_cost)}</td>
@@ -586,6 +648,21 @@ export default function WorkOrderItems() {
                               <p className="text-xs text-rose-600 py-2">{detail.error}</p>
                             ) : (
                               <div className="rounded-xl border border-slate-200 bg-white overflow-x-auto">
+                                {detail.unit && (
+                                  <div className="px-3 py-2 border-b border-slate-100 flex flex-wrap items-center justify-between gap-2 text-[11px] text-slate-600">
+                                    <span>
+                                      Item dengan satuan <b className="text-slate-800">{detail.unit.unit}</b>:
+                                      {' '}{detail.unit.item_count.toLocaleString('id-ID')} item, total {formatNum(detail.unit.volume)} {detail.unit.unit}, urut dari volume terbesar
+                                    </span>
+                                    <button
+                                      type="button"
+                                      onClick={e => { e.stopPropagation(); loadGroupDetail(r); }}
+                                      className="font-semibold text-indigo-600 hover:text-indigo-700 rounded outline-none focus-visible:ring-2 focus-visible:ring-indigo-500/40"
+                                    >
+                                      Tampilkan semua satuan
+                                    </button>
+                                  </div>
+                                )}
                                 <table className="w-full text-[11px]">
                                   <thead className="bg-slate-50 text-slate-400 uppercase tracking-wide text-[9px]">
                                     <tr>
@@ -636,7 +713,7 @@ export default function WorkOrderItems() {
                                   <div className="px-3 py-2 border-t border-slate-100 flex items-center justify-between text-[11px] text-slate-500">
                                     <span>Menampilkan {detail.rows.length} dari {detail.total.toLocaleString('id-ID')} item</span>
                                     <button
-                                      onClick={e => { e.stopPropagation(); loadGroupDetail(r, detail.limit + 50); }}
+                                      onClick={e => { e.stopPropagation(); loadGroupDetail(r, detail.limit + 50, detail.unit); }}
                                       className="font-semibold text-indigo-600 hover:text-indigo-700"
                                     >
                                       Muat 50 lagi
