@@ -48,7 +48,10 @@ const mapSummaryWorkOrder = (item: any) => ({
   m_ship_name: item.ship_name || 'N/A',
   m_vendor_name: item.vendor_name || 'Tanpa Vendor',
   status_approval: item.status_approval || item.derived_status || 'Waiting',
-  min_approval_level: item.derived_status === 'Approval Level 5' ? 5 : 0,
+  // Keep the level itself: the badge reads derived_status, and levels 1-4
+  // showed as "Waiting" when only Level 5 was carried over.
+  derived_status: item.derived_status || '',
+  min_approval_level: Number(/^Approval Level (\d+)$/.exec(item.derived_status || '')?.[1] || 0),
   total_cost: item.total_cost || 0,
   created_at: item.created_at || '',
   updated_at: item.updated_at || '',
