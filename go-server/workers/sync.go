@@ -813,8 +813,8 @@ func processLocationsIncremental(configId, baseUrl string, headers map[string]st
 			break
 		}
 
-		stmt, err := tx.Prepare(`INSERT INTO master_locations (id, name, size, description, status) VALUES (?, ?, ?, ?, ?) 
-			ON CONFLICT(id) DO UPDATE SET name=excluded.name, size=excluded.size, description=excluded.description, status=excluded.status`)
+		stmt, err := tx.Prepare(db.FormatQuery(`INSERT INTO master_locations (id, name, size, description, status) VALUES (?, ?, ?, ?, ?) 
+			ON CONFLICT(id) DO UPDATE SET name=excluded.name, size=excluded.size, description=excluded.description, status=excluded.status`))
 
 		if err == nil {
 			for _, item := range items {
@@ -986,8 +986,8 @@ func processServicesIncremental(configId, baseUrl string, headers map[string]str
 			break
 		}
 
-		stmt, err := tx.Prepare(`INSERT INTO master_services (id, code, name, status) VALUES (?, ?, ?, ?) 
-			ON CONFLICT(id) DO UPDATE SET code=excluded.code, name=excluded.name, status=excluded.status`)
+		stmt, err := tx.Prepare(db.FormatQuery(`INSERT INTO master_services (id, code, name, status) VALUES (?, ?, ?, ?) 
+			ON CONFLICT(id) DO UPDATE SET code=excluded.code, name=excluded.name, status=excluded.status`))
 
 		if err != nil {
 			log.Printf("ServicesSync error preparing statement: %v", err)
@@ -1142,14 +1142,14 @@ func processEmployeesIncremental(configId, baseUrl string, headers map[string]st
 			break
 		}
 
-		stmt, err := tx.Prepare(`INSERT INTO master_employees 
+		stmt, err := tx.Prepare(db.FormatQuery(`INSERT INTO master_employees 
 			(id, code, name, address, email, phone, mobile_phone, is_active, position, m_branch_id, m_department_id, m_city_id, type) 
 			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) 
 			ON CONFLICT(id) DO UPDATE SET 
 				code=excluded.code, name=excluded.name, address=excluded.address, 
 				email=excluded.email, phone=excluded.phone, mobile_phone=excluded.mobile_phone, 
 				is_active=excluded.is_active, position=excluded.position, m_branch_id=excluded.m_branch_id, 
-				m_department_id=excluded.m_department_id, m_city_id=excluded.m_city_id, type=excluded.type`)
+				m_department_id=excluded.m_department_id, m_city_id=excluded.m_city_id, type=excluded.type`))
 
 		if err != nil {
 			log.Printf("EmployeesSync error preparing statement: %v", err)
@@ -1326,10 +1326,10 @@ func processVendorsIncremental(configId, baseUrl string, headers map[string]stri
 			break
 		}
 
-		stmt, err := tx.Prepare(`INSERT INTO vendors (id, vendor, nama_pt, whatapps, category, jumlah_anggota, status) 
+		stmt, err := tx.Prepare(db.FormatQuery(`INSERT INTO vendors (id, vendor, nama_pt, whatapps, category, jumlah_anggota, status) 
 			VALUES (?, ?, ?, ?, ?, ?, ?) ON CONFLICT(id) DO UPDATE SET 
 			vendor=excluded.vendor, nama_pt=excluded.nama_pt, whatapps=excluded.whatapps, 
-			category=excluded.category, jumlah_anggota=excluded.jumlah_anggota, status=excluded.status`)
+			category=excluded.category, jumlah_anggota=excluded.jumlah_anggota, status=excluded.status`))
 
 		if err == nil {
 			for _, item := range items {
@@ -1491,9 +1491,9 @@ func processCompaniesIncremental(configId, baseUrl string, headers map[string]st
 			break
 		}
 
-		stmt, err := tx.Prepare(`INSERT INTO companies (id, company_type, company_name, status) 
+		stmt, err := tx.Prepare(db.FormatQuery(`INSERT INTO companies (id, company_type, company_name, status) 
 			VALUES (?, ?, ?, ?) ON CONFLICT(id) DO UPDATE SET 
-			company_type=excluded.company_type, company_name=excluded.company_name, status=excluded.status`)
+			company_type=excluded.company_type, company_name=excluded.company_name, status=excluded.status`))
 
 		if err == nil {
 			for _, item := range items {
@@ -1640,10 +1640,10 @@ func processShipsIncremental(configId, baseUrl string, headers map[string]string
 			break
 		}
 
-		stmt, err := tx.Prepare(`INSERT INTO ships (id, type, shipname, company, loa, breadth, depth, draft, gt, buid) 
+		stmt, err := tx.Prepare(db.FormatQuery(`INSERT INTO ships (id, type, shipname, company, loa, breadth, depth, draft, gt, buid) 
 			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(id) DO UPDATE SET 
 			type=excluded.type, shipname=excluded.shipname, company=excluded.company, loa=excluded.loa, 
-			breadth=excluded.breadth, depth=excluded.depth, draft=excluded.draft, gt=excluded.gt, buid=excluded.buid`)
+			breadth=excluded.breadth, depth=excluded.depth, draft=excluded.draft, gt=excluded.gt, buid=excluded.buid`))
 
 		if err == nil {
 			for _, item := range items {
@@ -1825,9 +1825,9 @@ func processShipTypesIncremental(configId, baseUrl string, headers map[string]st
 			break
 		}
 
-		stmt, err := tx.Prepare(`INSERT INTO dropdown_configs (id, category, label, value, is_active) 
-			VALUES (?, 'ship_types', ?, ?, 1) ON CONFLICT(id) DO UPDATE SET 
-			label=excluded.label, value=excluded.value`)
+		stmt, err := tx.Prepare(db.FormatQuery(`INSERT INTO dropdown_configs (id, category, label, value, is_active) 
+			VALUES (?, 'ship_types', ?, ?, true) ON CONFLICT(id) DO UPDATE SET 
+			label=excluded.label, value=excluded.value`))
 
 		if err == nil {
 			for _, item := range items {
