@@ -423,8 +423,11 @@ var equivalentDerivedVersions = map[string]bool{
 	// pass that runs before maybeRebuildDerived; items and ledger are unchanged.
 	"2026-10-12.status-from-items": true,
 	// Versions shipped in between and never completed in production.
-	"2026-10-22.status-from-api":                                true,
-	"2026-11-03.status-from-api+item-parse/" + itemparse.Version: true,
+	// Written out: a marker is a fixed string, and following the parser
+	// version would stop recognizing it (and rebuild) after a parser change.
+	// New parser versions are applied by backfillParsedItems instead.
+	"2026-10-22.status-from-api":                         true,
+	"2026-11-03.status-from-api+item-parse/2026-11-03.1": true,
 }
 
 type rebuildProgress struct {

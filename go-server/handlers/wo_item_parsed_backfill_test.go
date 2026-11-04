@@ -73,7 +73,7 @@ func TestBackfillParsedItems(t *testing.T) {
 		`Replating bilge kanan , Fr. 0 -1/2 <br> Uk. 2000 mm x 820 mm x 12 mm x 1 lbr = 154.49 Kg`,
 		`Dilaksanakan press test gate valve uk. 6"- 10k, 2 unit (material lama)`,
 		`Ganti baru mur dan baut steel uk. 5/8" x 2", 16 pcs (supply dock)`,
-		`Ultrasonic`,
+		`TANGGAL 5 JULI 2024, 1 kali`,
 	}
 	for i, l := range labels {
 		if _, err := db.Exec("INSERT INTO wo_items (wo_id, item_id, label) VALUES (?, ?, ?)", "980", fmt.Sprintf("it-%d", i), l); err != nil {

@@ -16,7 +16,7 @@ const workTypeDetail = `{"data": {"id": 410, "code": "WO-410", "min_approval_lev
 	"repair_list": [{"id": "act-1", "path": "1", "parameter": {"path_name": "PERPIPAAN > Packing"}, "material": [
 		{"id": "it-1", "path": "1.1", "label": "Ganti baru packing , bahan karet dia. 2\" x 3 mm, jumlah 4 unit (supply dock)", "unit": "Unit", "volume": 4, "volume_cost_final": 4000, "approved_level": 5, "status_approval": "approved", "date_approval": "2026-09-10 08:00:00"},
 		{"id": "it-2", "path": "1.2", "label": "Ganti baru packing , bahan karet dia. 3\" x 3 mm, jumlah 2 unit (supply dock)", "unit": "Unit", "volume": 2, "volume_cost_final": 5000, "approved_level": 5, "status_approval": "approved", "date_approval": "2026-09-11 08:00:00"},
-		{"id": "it-3", "path": "1.3", "label": "Ultrasonic", "unit": "Ls", "volume": 1, "volume_cost_final": 90000, "approved_level": 5, "status_approval": "approved", "date_approval": "2026-09-12 08:00:00"}
+		{"id": "it-3", "path": "1.3", "label": "TANGGAL 5 JULI 2024, 1 kali", "unit": "Ls", "volume": 1, "volume_cost_final": 90000, "approved_level": 5, "status_approval": "approved", "date_approval": "2026-09-12 08:00:00"}
 	]}]}}`
 
 func TestWorkOrderItemsWorkType(t *testing.T) {

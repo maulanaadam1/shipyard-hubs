@@ -19,7 +19,7 @@ func TestParsedItemsStoredWithItems(t *testing.T) {
 			{"id": "a", "path": "1.1", "label": "Ganti baru packing , bahan karet dia. 2\" x 3 mm, jumlah 4 unit (supply dock)", "unit": "Unit", "volume": 4, "volume_cost_final": 4000, "approved_level": 5, "status_approval": "approved"},
 			{"id": "b", "path": "1.2", "label": "Replating bilge kanan , Fr. 0 -1/2 <br> Uk. 2000 mm x 820 mm x 12 mm x 1 lbr = 154.49 Kg, (supply dock)", "unit": "Kg", "volume": 154.49, "volume_cost_final": 3500, "approved_level": 5, "status_approval": "approved"},
 			{"id": "c", "path": "1.3", "label": "Ganti baru pipa seamless sch. 40, Dia. 2\", 300 mm (supply dock) Elbow, 1 unit (supply dock) Flange, 2 unit (supply dock)", "unit": "Set", "volume": 1, "volume_cost_final": 50000, "approved_level": 5, "status_approval": "approved"},
-			{"id": "d", "path": "1.4", "label": "Ultrasonic", "unit": "Titik", "volume": 1, "volume_cost_final": 1000, "approved_level": 5, "status_approval": "approved"}
+			{"id": "d", "path": "1.4", "label": "TANGGAL 5 JULI 2024, 1 kali", "unit": "Titik", "volume": 1, "volume_cost_final": 1000, "approved_level": 5, "status_approval": "approved"}
 		]}]}}`
 	if _, err := db.Exec("INSERT INTO work_order_details (wo_id, raw_json) VALUES (?, ?)", "960", detail); err != nil {
 		t.Fatal(err)

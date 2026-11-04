@@ -102,12 +102,60 @@ func TestParseHull(t *testing.T) {
 }
 
 func TestUnrecognized(t *testing.T) {
-	p := Parse(`Ultrasonic`)
+	p := Parse(`TANGGAL 5 JULI 2024, 1 kali`)
 	if p.Rules != RulesGeneral || p.Recognized {
 		t.Errorf("nothing to recognize: %+v", p)
 	}
 	if p := Parse(""); p.Recognized || p.WorkType != "" {
 		t.Errorf("empty label: %+v", p)
+	}
+}
+
+// Coverage of all SIAGA categories (Nov 2026): real descriptions from deck
+// machinery, painting, tank cleaning, scaffolding, labour, payments and
+// services, plus the title-first rule.
+func TestParseAllCategories(t *testing.T) {
+	cases := []struct{ label, rules, work string }{
+		// The title names the work; details below may mention other parts.
+		{`Kampas rem rampdoor haluan posisi kanan, 1 unit <br>-bongkar servis ganti baru dan pasang<br>-kampas re uk. 2400 mm x 100 mm x 10 mm. 1 unit<br>-baut M16`,
+			RulesHull, "Perawatan / service kampas rem"},
+		{`Plat rumah kampas rem rampdoor haluan kanan (bawah), 1 unit <br>-bongkar dan buat baru<br>-plat uk. 1200 mm x 90 mm x 10 mm. 1 unit`,
+			RulesHull, "Fabrikasi rumah kampas rem"},
+		{`Bongkar pasang perancah (5 x 5 x 2), posisi dalam tangki void 2 kiri sebanyak 2 unit (u/ repipe pipa dalam tangki void 2 kiri)`,
+			RulesGeneral, "Bongkar pasang perancah (scaffolding)"},
+		// "sandblasting" is not welding ("las"); "ac" here is anti-corrosive paint.
+		{`Sandblasting, luasan 211 m2 (Sandblasting Plat Bottom)`, RulesGeneral, "Sandblasting plat"},
+		{`Pengecatan lapis ke- 2, luasan 211 m2 (Pengecatan ac lapis ke-2 Plat Bottom)`, RulesGeneral, "Pengecatan plat"},
+		{`Sweepblasting, luasan 350 m2`, RulesGeneral, "Sandblasting permukaan (per m2)"},
+		// What is cleaned out (sludge) gives way to where (the tank).
+		{`Cleaning lumpur tanki 1 kanan, kapasitas 6 m3 dibuang lewat lubang temporari bottom`, RulesGeneral, "Pembersihan tangki"},
+		// A labour line stays labour whatever task it mentions.
+		{`Dikerjakan hari senin. (bantu siapkan beban Load Test Rescue Boat), 4 oktober 2021,(08.00 - 17.00) sebanyak 2 orang ()`,
+			RulesGeneral, "Lembur (tenaga harian) tenaga kerja"},
+		{`Bongkar pasang hydrant valve uk. 10K-50, 4 unit  (material lama)`, RulesGeneral, "Bongkar pasang valve (lain)"},
+		{`Pemasangan lampu sorot buritan, 2 unit (supply dock)`, RulesGeneral, "Pasang lampu"},
+		{`Bongkar pasang rantai jangkar kanan, 1 unit`, RulesGeneral, "Bongkar pasang jangkar & rantai"},
+		{`Asisteni konek diskonek dan bongkar pasang Socket Kabel LAN Kamar Kapten, 1 unit`, RulesGeneral, "Sambung / lepas kabel"},
+		{`Perhitungan Fabrikasi pondasi windlass rantai jangkar no. 3 sisi kiri. 2100mmx 500mm x 16mm, 1 set`, RulesHull, "Fabrikasi pondasi"},
+		{`pipa seamless sch. 40,<br>Dia. 2 1/2", 2050 mm (supply dock)<br>Elbow, 1 unit (supply dock)`, RulesGeneral, "Pekerjaan pipa seamless"},
+		// Payments, bills, freight, rentals, tests and services.
+		{`Termin 4 Progres 55%, 1`, RulesCost, "Pembayaran termin / progres paket pekerjaan"},
+		{`Pekerjaan Interior Kapal DP 50%, 1`, RulesCost, "Pembayaran termin / progres paket pekerjaan"},
+		{`Tahap 1 Biaya Docking Kapal, 1`, RulesCost, "Biaya docking kapal"},
+		{`Negosiasi Final Biaya Docking Repair, 1`, RulesCost, "Biaya docking kapal"},
+		{`Ocean Freight Pengiriman Hatch Cover, 1`, RulesCost, "Pengiriman / transport barang / material"},
+		{`Sewa Mobile Crane 50 Ton, 3 hari`, RulesCost, "Sewa alat crane"},
+		{`Ultrasonic`, RulesCost, "Pengujian / pengukuran ketebalan (ut)"},
+		{`Telah dilaksanakan supply listrik dengan 380V 3P 160A, tanggal 24 September 2021 - ,  hari`, RulesCost, "Biaya / jasa listrik darat (shore power)"},
+	}
+	for _, c := range cases {
+		p := Parse(c.label)
+		if !p.Recognized || p.Rules != c.rules || p.WorkType != c.work {
+			t.Errorf("%.60q\n  got  %s %q (recognized %v)\n  want %s %q", c.label, p.Rules, p.WorkType, p.Recognized, c.rules, c.work)
+		}
+	}
+	if !CostWithoutUnitPrice[Parse(`Termin 4 Progres 55%, 1`).Action] || CostWithoutUnitPrice[Parse(`Sewa Mobile Crane 50 Ton, 3 hari`).Action] {
+		t.Error("payments have no unit price, rentals do")
 	}
 }
 
