@@ -72,6 +72,7 @@ import MasterDockStatus from '../components/MasterDockStatus';
 import MasterLayout from '../components/MasterLayout';
 import WorkOrderDashboard from '../components/WorkOrderDashboard';
 import WorkOrderItems from '../components/WorkOrderItems';
+import DataFindings from '../components/DataFindings';
 import FinancialDashboard from '../components/FinancialDashboard';
 import ApiSyncManagement from '../components/ApiSyncManagement';
 import MasterService from '../components/MasterService';
@@ -224,8 +225,13 @@ createRoot(document.getElementById('root')!).render(
                 <WorkOrderItems />
               </ProtectedRoute>
             } />
+            <Route path="data-findings" element={
+              <ProtectedRoute resource="Data Perlu Dicek">
+                <DataFindings />
+              </ProtectedRoute>
+            } />
             <Route path="financial-dashboard" element={
-              <ProtectedRoute resource="Work Order">
+              <ProtectedRoute resource="Financial Dashboard">
                 <FinancialDashboard />
               </ProtectedRoute>
             } />

@@ -65,21 +65,33 @@ func Init() {
 	createTables()
 	seedAdmin()
 	MigrateWorkOrderItemsPermission()
+	MigrateItemFindingsPermission()
 }
 
 // MigrateWorkOrderItemsPermission runs once (called from Init): the Item Pekerjaan WO menu used to
 // share the "Work Order" permission, so each role gets the same rights on the
 // new "Item Pekerjaan WO" resource and nobody loses access when it is split out.
 func MigrateWorkOrderItemsPermission() {
-	const marker = "rbac_item_pekerjaan_wo"
+	copyResourcePermissions("rbac_item_pekerjaan_wo", "Work Order", "Item Pekerjaan WO")
+}
+
+// MigrateItemFindingsPermission runs once: the Data Perlu Dicek menu starts
+// with the rights each role has on Item Pekerjaan WO, whose items it checks.
+func MigrateItemFindingsPermission() {
+	copyResourcePermissions("rbac_data_perlu_dicek", "Item Pekerjaan WO", "Data Perlu Dicek")
+}
+
+// copyResourcePermissions gives every role the same actions on resource to as
+// it has on from, once (recorded under marker in app_meta).
+func copyResourcePermissions(marker, from, to string) {
 	var done string
 	if DB.QueryRow(FormatQuery("SELECT value FROM app_meta WHERE key = ?"), marker).Scan(&done) == nil {
 		return
 	}
 
-	rows, err := DB.Query(FormatQuery("SELECT role_id, action, is_allowed FROM role_permissions WHERE resource = ?"), "Work Order")
+	rows, err := DB.Query(FormatQuery("SELECT role_id, action, is_allowed FROM role_permissions WHERE resource = ?"), from)
 	if err != nil {
-		log.Printf("Item Pekerjaan WO permission migration: %v", err)
+		log.Printf("%s permission migration: %v", to, err)
 		return
 	}
 	type perm struct {
@@ -99,19 +111,19 @@ func MigrateWorkOrderItemsPermission() {
 	for _, p := range perms {
 		var exists int
 		DB.QueryRow(FormatQuery("SELECT COUNT(*) FROM role_permissions WHERE role_id = ? AND resource = ? AND action = ?"),
-			p.roleID, "Item Pekerjaan WO", p.action).Scan(&exists)
+			p.roleID, to, p.action).Scan(&exists)
 		if exists > 0 {
 			continue
 		}
 		if _, err := DB.Exec(FormatQuery("INSERT INTO role_permissions (id, role_id, resource, action, is_allowed) VALUES (?, ?, ?, ?, ?)"),
-			uuid.New().String(), p.roleID, "Item Pekerjaan WO", p.action, p.allowed); err != nil {
-			log.Printf("Item Pekerjaan WO permission migration: %v", err)
+			uuid.New().String(), p.roleID, to, p.action, p.allowed); err != nil {
+			log.Printf("%s permission migration: %v", to, err)
 			return
 		}
 		copied++
 	}
 	DB.Exec(FormatQuery("INSERT INTO app_meta (key, value) VALUES (?, ?)"), marker, "done")
-	log.Printf("Item Pekerjaan WO: copied %d Work Order permission(s) to the new resource", copied)
+	log.Printf("%s: copied %d %s permission(s) to the new resource", to, copied, from)
 }
 
 // FormatQuery dynamically replaces ? with $1, $2 for PostgreSQL compatibility
@@ -586,6 +598,49 @@ func createTables() {
 		PRIMARY KEY (wo_id, item_id)
 	);`)
 	DB.Exec("CREATE INDEX IF NOT EXISTS idx_wo_item_parsed_work ON wo_item_parsed(work_type, size)")
+
+	// Reference unit costs per work type, size and unit (from wo_item_parsed),
+	// rebuilt by the findings job from approved items.
+	DB.Exec(`CREATE TABLE IF NOT EXISTS wo_item_reference (
+		work_type TEXT NOT NULL,
+		size TEXT NOT NULL,
+		unit TEXT NOT NULL,
+		n INTEGER DEFAULT 0,
+		p25 NUMERIC DEFAULT 0,
+		median NUMERIC DEFAULT 0,
+		p75 NUMERIC DEFAULT 0,
+		min_cost NUMERIC DEFAULT 0,
+		max_cost NUMERIC DEFAULT 0,
+		basis TEXT,
+		date_from TEXT,
+		date_to TEXT,
+		PRIMARY KEY (work_type, size, unit)
+	);`)
+
+	// Work items the findings job flags for a check (price far above the
+	// reference, implausible pipe length). status: open, ignored (by a user,
+	// with a note) or resolved (no longer flagged, e.g. fixed in SIAGA).
+	DB.Exec(`CREATE TABLE IF NOT EXISTS wo_item_findings (
+		wo_id TEXT NOT NULL,
+		item_id TEXT NOT NULL,
+		rule TEXT NOT NULL,
+		status TEXT DEFAULT 'open',
+		detail TEXT,
+		work_type TEXT,
+		size TEXT,
+		unit TEXT,
+		unit_cost NUMERIC DEFAULT 0,
+		reference NUMERIC DEFAULT 0,
+		excess NUMERIC DEFAULT 0,
+		first_seen TEXT,
+		last_seen TEXT,
+		resolved_at TEXT,
+		note TEXT,
+		ignored_by TEXT,
+		ignored_at TEXT,
+		PRIMARY KEY (wo_id, item_id, rule)
+	);`)
+	DB.Exec("CREATE INDEX IF NOT EXISTS idx_wo_item_findings_status ON wo_item_findings(status, rule, excess)")
 
 	// Small key/value store for app-level markers (e.g. derived-data version).
 	DB.Exec(`CREATE TABLE IF NOT EXISTS app_meta (
