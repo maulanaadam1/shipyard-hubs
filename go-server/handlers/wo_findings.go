@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"log"
 	"math"
+	"regexp"
 	"sort"
 	"strings"
 	"sync"
@@ -45,6 +46,30 @@ type pricedItem struct {
 	unitCost, volume     float64
 	status, approvalDate string
 	pipeMM               *float64
+	// noUnitPrice: the cost isn't a unit price comparable within its work
+	// type (see unitPriceComparable); such items neither build references
+	// nor get price or pipe findings.
+	noUnitPrice bool
+}
+
+// partPayment matches descriptions of a payment instalment for a whole job:
+// "Pembayaran Termin X 10%", "(DP 40%)", "TERM II 30%".
+var partPayment = regexp.MustCompile(`(?i)pembayaran|\btermin\b|\b(dp|term)\b[^%]{0,20}\d+\s*%`)
+
+// unitPriceComparable reports whether an item's cost can be compared with
+// others of its work type. Not so for labour (overtime is paid per hour,
+// which the reference doesn't split), for job packages described over several
+// lines, with a scope of work or at great length (the parser reads only their
+// first action), and for payment instalments.
+func unitPriceComparable(object, label string) bool {
+	if object == "Tenaga kerja" {
+		return false
+	}
+	low := strings.ToLower(label)
+	if strings.Count(low, "<br") >= 2 || strings.Contains(low, "ruang lingkup") || len([]rune(label)) >= 200 {
+		return false
+	}
+	return !partPayment.MatchString(label)
 }
 
 type referenceKey struct{ workType, size, unit string }
@@ -117,7 +142,7 @@ func buildReferences(items []pricedItem) map[referenceKey]itemReference {
 	all := map[referenceKey][]datedCost{}
 	recent := map[referenceKey][]datedCost{}
 	for _, it := range items {
-		if it.status != "approved" || it.unitCost <= 0 || it.workType == "" {
+		if it.status != "approved" || it.unitCost <= 0 || it.workType == "" || it.noUnitPrice {
 			continue
 		}
 		k := referenceKey{it.workType, it.size, it.unit}
@@ -170,6 +195,9 @@ func formatRupiah(v float64) string { return "Rp " + formatThousands(v) }
 func evaluateFindings(items []pricedItem, refs map[referenceKey]itemReference) []itemFinding {
 	var out []itemFinding
 	for _, it := range items {
+		if it.noUnitPrice {
+			continue
+		}
 		if it.pipeMM != nil && *it.pipeMM > maxPipeMM {
 			out = append(out, itemFinding{
 				woID: it.woID, itemID: it.itemID, rule: RulePipeLength,
@@ -203,7 +231,8 @@ func evaluateFindings(items []pricedItem, refs map[referenceKey]itemReference) [
 
 func loadPricedItems() ([]pricedItem, error) {
 	rows, err := db.Query(`SELECT i.wo_id, i.item_id, COALESCE(p.work_type, ''), COALESCE(p.size, ''), COALESCE(i.unit, ''),
-			COALESCE(i.unit_cost, 0), COALESCE(i.volume, 0), COALESCE(i.status, ''), COALESCE(i.approval_date, ''), p.pipe_mm
+			COALESCE(i.unit_cost, 0), COALESCE(i.volume, 0), COALESCE(i.status, ''), COALESCE(i.approval_date, ''), p.pipe_mm,
+			COALESCE(p.object, ''), COALESCE(i.label, '')
 		FROM wo_items i JOIN wo_item_parsed p ON p.wo_id = i.wo_id AND p.item_id = i.item_id
 		WHERE p.recognized`)
 	if err != nil {
@@ -214,10 +243,12 @@ func loadPricedItems() ([]pricedItem, error) {
 	for rows.Next() {
 		var it pricedItem
 		var pipe *float64
+		var object, label string
 		if err := rows.Scan(&it.woID, &it.itemID, &it.workType, &it.size, &it.unit, &it.unitCost, &it.volume,
-			&it.status, &it.approvalDate, &pipe); err != nil {
+			&it.status, &it.approvalDate, &pipe, &object, &label); err != nil {
 			return nil, err
 		}
+		it.noUnitPrice = !unitPriceComparable(object, label)
 		it.unit = unitKey(it.unit)
 		it.approvalDate = dateOnly(it.approvalDate)
 		it.pipeMM = pipe
@@ -261,13 +292,15 @@ func saveReferences(refs map[referenceKey]itemReference) error {
 }
 
 // findingsSync is what syncFindings changed.
-type findingsSync struct{ Opened, Updated, Resolved int }
+type findingsSync struct{ Opened, Updated, Resolved, Removed int }
 
 // syncFindings brings wo_item_findings in line with the computed findings:
 // new ones open, resolved ones that match again reopen, open and ignored ones
 // get fresh values, and open or ignored ones that no longer match resolve.
-// Ignored findings stay ignored. Writes go in small batches with a pause.
-func syncFindings(found []itemFinding, now string) (findingsSync, error) {
+// Ignored findings stay ignored. Findings of items the rules no longer cover
+// (outOfScope, by wo_id and item_id) are removed rather than shown as solved.
+// Writes go in small batches with a pause.
+func syncFindings(found []itemFinding, outOfScope map[[2]string]bool, now string) (findingsSync, error) {
 	var res findingsSync
 	type stored struct {
 		status              string
@@ -322,6 +355,11 @@ func syncFindings(found []itemFinding, now string) (findingsSync, error) {
 		}
 	}
 	for k, old := range existing {
+		if !seen[k] && outOfScope[[2]string{k[0], k[1]}] {
+			res.Removed++
+			writes = append(writes, write{`DELETE FROM wo_item_findings WHERE wo_id = ? AND item_id = ? AND rule = ?`, []interface{}{k[0], k[1], k[2]}})
+			continue
+		}
 		if !seen[k] && old.status != "resolved" {
 			res.Resolved++
 			writes = append(writes, write{`UPDATE wo_item_findings SET status = 'resolved', resolved_at = ? WHERE wo_id = ? AND item_id = ? AND rule = ?`,
@@ -385,13 +423,19 @@ func RunItemFindings() (findingsSync, error) {
 		return findingsSync{}, err
 	}
 	now := time.Now().Format("2006-01-02 15:04:05")
-	res, err := syncFindings(evaluateFindings(items, refs), now)
+	outOfScope := map[[2]string]bool{}
+	for _, it := range items {
+		if it.noUnitPrice {
+			outOfScope[[2]string{it.woID, it.itemID}] = true
+		}
+	}
+	res, err := syncFindings(evaluateFindings(items, refs), outOfScope, now)
 	if err != nil {
 		return res, err
 	}
 	setAppMeta("wo_findings_last_run", now)
-	log.Printf("[WO FINDINGS] %d items, %d references; findings opened %d, updated %d, resolved %d in %s",
-		len(items), len(refs), res.Opened, res.Updated, res.Resolved, time.Since(start).Round(time.Second))
+	log.Printf("[WO FINDINGS] %d items, %d references; findings opened %d, updated %d, resolved %d, removed %d in %s",
+		len(items), len(refs), res.Opened, res.Updated, res.Resolved, res.Removed, time.Since(start).Round(time.Second))
 	InvalidateWorkOrderCache()
 	return res, nil
 }

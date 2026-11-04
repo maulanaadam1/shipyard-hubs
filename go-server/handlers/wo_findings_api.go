@@ -188,13 +188,26 @@ func GetItemFindingsSummary(w http.ResponseWriter, r *http.Request) {
 		}
 		rows.Close()
 	}
+	// Open findings on items not approved yet: the ones still fixable in SIAGA.
+	openPending := map[string]int{}
+	if rows, err := db.Query(`SELECT f.rule, COUNT(*) FROM wo_item_findings f JOIN wo_items i ON i.wo_id = f.wo_id AND i.item_id = f.item_id
+		WHERE COALESCE(f.status, 'open') = 'open' AND i.status = 'pending' GROUP BY 1`); err == nil {
+		for rows.Next() {
+			var rule string
+			var n int
+			if rows.Scan(&rule, &n) == nil {
+				openPending[rule] = n
+			}
+		}
+		rows.Close()
+	}
 	var lastRun string
 	db.QueryRow(`SELECT COALESCE(value, '') FROM app_meta WHERE key = 'wo_findings_last_run'`).Scan(&lastRun)
 	var refs int
 	db.QueryRow(`SELECT COUNT(*) FROM wo_item_reference`).Scan(&refs)
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]interface{}{
-		"counts": counts, "open_excess": excess, "rules": findingRuleLabels, "last_run": lastRun, "references": refs,
+		"counts": counts, "open_excess": excess, "open_pending": openPending, "rules": findingRuleLabels, "last_run": lastRun, "references": refs,
 	})
 }
 
