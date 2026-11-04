@@ -104,16 +104,36 @@ func backfillParsedItems() (int, error) {
 
 // startParsedItemsBackfill runs the backfill in the background and logs the
 // outcome; rows it skips cost one indexed read per batch.
+//
+// A failed run (database restarting, disk full) is tried again every
+// WO_PARSE_RETRY_MINUTES (5) until it completes; it resumes where it stopped.
+// It used to wait for the next start, which left items half re-parsed.
 func startParsedItemsBackfill() {
+	retry := time.Duration(envInt("WO_PARSE_RETRY_MINUTES", 5)) * time.Minute
 	go func() {
 		start := time.Now()
-		n, err := backfillParsedItems()
-		if err != nil {
-			log.Printf("[WO PARSE] backfill stopped after %d rows: %v (resumes on next start)", n, err)
-			return
-		}
-		if n > 0 {
-			log.Printf("[WO PARSE] parsed %d work items (parser %s) in %s", n, itemparse.Version, time.Since(start).Round(time.Second))
+		total := 0
+		retryUntilDone(func() error {
+			n, err := backfillParsedItems()
+			total += n
+			if err != nil {
+				log.Printf("[WO PARSE] backfill paused after %d rows: %v (retrying in %s)", total, err, retry)
+			}
+			return err
+		}, retry, time.Sleep)
+		if total > 0 {
+			log.Printf("[WO PARSE] parsed %d work items (parser %s) in %s", total, itemparse.Version, time.Since(start).Round(time.Second))
 		}
 	}()
+}
+
+// retryUntilDone runs run until it returns nil, waiting between attempts, and
+// returns the number of attempts.
+func retryUntilDone(run func() error, wait time.Duration, sleep func(time.Duration)) int {
+	for attempt := 1; ; attempt++ {
+		if run() == nil {
+			return attempt
+		}
+		sleep(wait)
+	}
 }

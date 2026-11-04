@@ -455,13 +455,19 @@ func setAppMeta(key, value string) {
 
 // StartItemFindingsWorker checks the items a few minutes after start (once
 // parsed descriptions are in) and then every WO_FINDINGS_HOURS hours (6).
+//
+// A failed run (database restarting, disk full) is tried again after
+// WO_FINDINGS_RETRY_MINUTES (30) instead of waiting for the next 6-hour turn.
 func StartItemFindingsWorker() {
 	every := time.Duration(envInt("WO_FINDINGS_HOURS", 6)) * time.Hour
+	retry := time.Duration(envInt("WO_FINDINGS_RETRY_MINUTES", 30)) * time.Minute
 	go func() {
 		time.Sleep(time.Duration(envInt("WO_FINDINGS_DELAY_SECONDS", 300)) * time.Second)
 		for {
 			if _, err := RunItemFindings(); err != nil {
-				log.Printf("[WO FINDINGS] %v", err)
+				log.Printf("[WO FINDINGS] %v (retrying in %s)", err, retry)
+				time.Sleep(retry)
+				continue
 			}
 			time.Sleep(every)
 		}
