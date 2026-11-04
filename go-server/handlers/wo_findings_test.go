@@ -157,3 +157,45 @@ func TestItemFindingsLifecycle(t *testing.T) {
 		t.Errorf("references = %d", refs)
 	}
 }
+
+func TestUnitPriceComparable(t *testing.T) {
+	for _, c := range []struct {
+		object, label string
+		want          bool
+	}{
+		{"Packing", `Ganti baru packing , bahan karet dia. 2" x 3 mm, jumlah 4 unit`, true},
+		{"Tenaga kerja", "Lembur 5 orang x 4 jam", false},
+		{"Crane", "buat baru crane store, 1 unit <br>-pipa tiang d 3 inch<br>-plat 10 mm", false},
+		{"Kapal", "Jasa Turun Kapal Tongkang 180 Feet Ruang Lingkup Perkerjaan: 1. Mobilisasi", false},
+		{"Blasting", "Pekerjaan Blasting dan Painting 2 Kapal Tongkang, Pembayaran Termin X 10%, 1", false},
+		{"Pipa", "Pekerjaan sistem pipa, ventilasi, electrical (DP 40%), 1", false},
+		{"Pipa", "Pekerjaan sistem pipa, ventilasi (TERM II 30%), 1", false},
+		{"Plat", "Potong Tekuk Plat 8 mm dan Laser, 1", true},
+		{"Cat", "Pengecatan lambung, thinner 10%", true}, // a percentage alone is fine
+		{"Plat", strings.Repeat("Replating plat lambung kanan ", 8), false},
+	} {
+		if got := unitPriceComparable(c.object, c.label); got != c.want {
+			t.Errorf("unitPriceComparable(%q, %.40q) = %v, want %v", c.object, c.label, got, c.want)
+		}
+	}
+}
+
+// A finding on an item the rules no longer cover is removed, not shown as solved.
+func TestFindingOutOfScopeRemoved(t *testing.T) {
+	resetWorkOrderTables(t)
+	t.Setenv("WO_FINDINGS_PAUSE_MS", "1")
+	seedFindingItems(t, 450)
+	RunItemFindings()
+	if findingStatus(t) != "open" {
+		t.Fatal("no finding to start with")
+	}
+	db.Exec(`UPDATE wo_item_parsed SET object = 'Tenaga kerja' WHERE item_id = 'it-x'`)
+	if res, _ := RunItemFindings(); res.Removed != 1 || res.Resolved != 0 {
+		t.Errorf("run: %+v", res)
+	}
+	var n int
+	db.QueryRow(`SELECT COUNT(*) FROM wo_item_findings`).Scan(&n)
+	if n != 0 {
+		t.Errorf("%d findings left", n)
+	}
+}

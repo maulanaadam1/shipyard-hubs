@@ -23,6 +23,7 @@ const ITEM_STATUS_LABELS: Record<string, string> = { approved: 'Approved', pendi
 type Summary = {
   counts: Record<string, Record<string, number>>;
   open_excess: Record<string, number>;
+  open_pending: Record<string, number>;
   rules: Record<string, string>;
   last_run: string;
   references: number;
@@ -36,7 +37,8 @@ export default function DataFindings() {
   const [summary, setSummary] = useState<Summary | null>(null);
   const [rule, setRule] = useState('all');
   const [status, setStatus] = useState('open');
-  const [itemStatus, setItemStatus] = useState('all');
+  // Items not approved yet come first: those can still be fixed before approval.
+  const [itemStatus, setItemStatus] = useState('pending');
   const [searchTerm, setSearchTerm] = useState('');
   const [search, setSearch] = useState('');
   const [sort, setSort] = useState('excess');
@@ -185,11 +187,11 @@ export default function DataFindings() {
     </th>
   );
 
-  const filtersActive = rule !== 'all' || status !== 'open' || itemStatus !== 'all' || !!searchTerm;
+  const filtersActive = rule !== 'all' || status !== 'open' || itemStatus !== 'pending' || !!searchTerm;
   const resetFilters = () => {
     setRule('all');
     setStatus('open');
-    setItemStatus('all');
+    setItemStatus('pending');
     setSearchTerm('');
     setSearch('');
   };
@@ -226,11 +228,12 @@ export default function DataFindings() {
             return (
               <button
                 key={key}
-                onClick={() => { setRule(active ? 'all' : key); setStatus('open'); }}
+                onClick={() => { setRule(active ? 'all' : key); setStatus('open'); setItemStatus('pending'); }}
                 className={`text-left p-5 rounded-2xl border bg-white shadow-sm transition hover:shadow-md ${active ? 'border-indigo-500 ring-2 ring-indigo-500/20' : 'border-slate-200'}`}
               >
                 <p className="text-sm font-semibold text-slate-600">{summary?.rules[key]}</p>
-                <p className="mt-1 text-2xl font-bold text-slate-800">{(c.open || 0).toLocaleString('id-ID')} <span className="text-sm font-semibold text-slate-500">perlu dicek</span></p>
+                <p className="mt-1 text-2xl font-bold text-slate-800">{(summary?.open_pending?.[key] || 0).toLocaleString('id-ID')} <span className="text-sm font-semibold text-slate-500">belum approved, perlu dicek</span></p>
+                <p className="mt-1 text-xs text-slate-500">{(c.open || 0).toLocaleString('id-ID')} temuan terbuka termasuk item yang sudah approved</p>
                 <p className="mt-1 text-xs text-slate-500">
                   {summary?.open_excess?.[key] ? `Selisih dari acuan ${formatIDR(summary.open_excess[key])} · ` : ''}
                   {(c.ignored || 0).toLocaleString('id-ID')} diabaikan · {(c.resolved || 0).toLocaleString('id-ID')} selesai
@@ -325,7 +328,7 @@ export default function DataFindings() {
                 <tbody className="divide-y divide-slate-100">
                   {!loading && rows.length === 0 && (
                     <tr><td colSpan={9} className="p-8 text-center text-slate-500">
-                      {status === 'open' && rule === 'all' && !search ? 'Tidak ada data yang perlu dicek.' : 'Tidak ada temuan yang cocok dengan filter.'}
+                      {status === 'open' && rule === 'all' && !search && itemStatus === 'pending' ? 'Tidak ada item belum approved yang perlu dicek.' : 'Tidak ada temuan yang cocok dengan filter.'}
                     </td></tr>
                   )}
                   {rows.map(r => (
