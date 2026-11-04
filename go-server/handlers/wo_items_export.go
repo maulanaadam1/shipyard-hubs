@@ -148,7 +148,7 @@ func writeWoItemList(sw *excelize.StreamWriter, styles exportStyles, q url.Value
 		{"Kode WO", 16}, {"Kode JO", 18}, {"Proyek", 34}, {"Jenis Project", 12}, {"Vendor", 28},
 		{"Kategori", 22}, {"Aktivitas", 44}, {"Path", 11}, {"Item Pekerjaan", 44}, {"Satuan", 9},
 		{"Volume", 11}, {"Biaya Satuan", 16}, {"Total Biaya", 18},
-		{"Jenis Pekerjaan", 36}, {"Ukuran", 14}, {"Bahan", 14}, {"Sumber Material", 16},
+		{"Jenis Pekerjaan", 36}, {"Jenis Pekerjaan Dari", 14}, {"Ukuran", 14}, {"Bahan", 14}, {"Sumber Material", 16},
 	}
 	if err := startSheet(sw, styles, columns); err != nil {
 		return 0, false, err
@@ -179,7 +179,7 @@ func writeWoItemList(sw *excelize.StreamWriter, styles exportStyles, q url.Value
 			excelize.Cell{StyleID: styles.number, Value: it.Volume},
 			excelize.Cell{StyleID: styles.money, Value: it.UnitCost},
 			excelize.Cell{StyleID: styles.money, Value: it.TotalCost},
-			workTypeLabel(it.WorkType), it.Size, it.Material, it.Source,
+			workTypeLabel(it.WorkType), workTypeBasis(it), it.Size, it.Material, it.Source,
 		}); err != nil {
 			return n, false, err
 		}

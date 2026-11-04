@@ -618,7 +618,10 @@ export default function WorkOrderItems() {
                         <td className="py-2.5 px-4 max-w-md">
                           <p className="font-semibold text-slate-800">{r.label || '-'}</p>
                           {r.recognized
-                            ? <p className="text-[11px] text-indigo-700 mt-0.5">{r.work_type}{r.size ? ` · ${r.size}` : ''}{r.material ? ` · ${r.material}` : ''}</p>
+                            ? <p className="text-[11px] text-indigo-700 mt-0.5">
+                                {r.work_type}{r.size ? ` · ${r.size}` : ''}{r.material ? ` · ${r.material}` : ''}
+                                {r.from_activity && <span className="text-slate-500" title="Deskripsi item tidak menyebut pekerjaannya; jenis pekerjaan diambil dari nama aktivitas"> (dari aktivitas)</span>}
+                              </p>
                             : <p className="text-[11px] text-slate-500 italic mt-0.5">{NO_WORK_TYPE}</p>}
                           <p className="text-[10px] text-slate-400 mt-0.5">{r.activity_name}</p>
                         </td>

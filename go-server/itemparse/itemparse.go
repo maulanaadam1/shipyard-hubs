@@ -26,7 +26,7 @@ import (
 )
 
 // Version identifies the rule set; stored with every parsed row.
-const Version = "2026-11-04.1"
+const Version = "2026-11-04.2"
 
 // Rule sets.
 const (
@@ -52,6 +52,9 @@ type Result struct {
 	Frame      string // hull frame numbers, e.g. "16/17-17/18"
 	Side       string // "kiri" | "kanan" | "kiri & kanan"
 	WeightKg   *float64
+	// FromActivity: the description itself named no work, so the work type
+	// comes from the name of the activity it belongs to (ParseItem).
+	FromActivity bool
 }
 
 type rule struct {
@@ -749,6 +752,45 @@ func Parse(label string) Result {
 		return parseHull(low, title)
 	}
 	return parseGeneral(low, title)
+}
+
+// ParseItem reads a work item in its activity. The item's own description
+// decides; only when it names no work ("Uk. 1200 mm x 600 mm x 10 mm x 1 lbr"
+// under "Ganti baru plat bottom") does the activity name give the work type.
+// An activity that is a project or cost heading rather than work ("Pembangunan
+// 1 unit kapal baru ...", "Labour cost") is not used. activity is the path
+// "Category > ... > Activity"; its last part names the work.
+func ParseItem(label, activity string) Result {
+	r := Parse(label)
+	if r.Recognized || strings.TrimSpace(activity) == "" {
+		return r
+	}
+	parts := strings.Split(activity, ">")
+	a := Parse(parts[len(parts)-1])
+	if !a.Recognized || a.Action == noVerbAction || a.Object == "Kapal (layanan umum)" || a.Object == labourObject {
+		return r
+	}
+	// The work from the activity; quantity, source and sizes from the item.
+	low := strings.ToLower(Clean(label))
+	a.Qty, a.Source = parseQty(low), first(sources, low)
+	if m := first(materials, low); m != "" {
+		a.Material = m
+	}
+	if a.Rules == RulesHull || plateThickness(low) != "" {
+		a.Size = plateThickness(low)
+	} else {
+		a.Size = parseSize(low, a.Object)
+	}
+	a.PipeMM, a.Elbows, a.Flanges = nil, nil, nil
+	if pipeObjects[a.Object] {
+		a.PipeMM, a.Elbows, a.Flanges = pipeDetails(low)
+	}
+	a.Frame, a.Side, a.WeightKg = "", "", nil
+	if a.Rules == RulesHull {
+		a.Frame, a.Side, a.WeightKg = hullLocation(low)
+	}
+	a.FromActivity = true
+	return a
 }
 
 // findTitleFirst matches the title first and the whole text only when the

@@ -167,18 +167,21 @@ type woItemRow struct {
 	Material   string `json:"material"`
 	Source     string `json:"source"`
 	Recognized bool   `json:"recognized"`
+	// FromActivity: the description named no work; the work type is the
+	// activity's.
+	FromActivity bool `json:"from_activity"`
 }
 
 // woItemParsedColumns adds the cleaned-up description to woItemColumns (export).
 const woItemParsedColumns = `, ` + woItemWorkTypeExpr + `, ` + woItemSizeExpr + `,
 		CASE WHEN p.recognized THEN COALESCE(p.material, '') ELSE '' END, CASE WHEN p.recognized THEN COALESCE(p.source, '') ELSE '' END,
-		COALESCE(p.recognized, false)`
+		COALESCE(p.recognized, false), COALESCE(p.from_activity, false)`
 
 func scanWoItemParsed(rows *sql.Rows) (woItemRow, error) {
 	var it woItemRow
 	err := rows.Scan(&it.WOID, &it.ItemID, &it.Category, &it.ActivityName, &it.Path, &it.Label, &it.Unit, &it.Volume, &it.UnitCost,
 		&it.TotalCost, &it.Level, &it.Status, &it.ApprovalDate, &it.WOCode, &it.JOCode, &it.ProjectName, &it.VendorName,
-		&it.ShipName, &it.ProjectType, &it.ItemDate, &it.WorkType, &it.Size, &it.Material, &it.Source, &it.Recognized)
+		&it.ShipName, &it.ProjectType, &it.ItemDate, &it.WorkType, &it.Size, &it.Material, &it.Source, &it.Recognized, &it.FromActivity)
 	return it, err
 }
 
@@ -196,7 +199,8 @@ func attachParsed(items []woItemRow) {
 		args = append(args, it.WOID, it.ItemID)
 		at[[2]string{it.WOID, it.ItemID}] = i
 	}
-	rows, err := db.Query(`SELECT wo_id, item_id, COALESCE(work_type, ''), COALESCE(size, ''), COALESCE(material, ''), COALESCE(source, ''), COALESCE(recognized, false)
+	rows, err := db.Query(`SELECT wo_id, item_id, COALESCE(work_type, ''), COALESCE(size, ''), COALESCE(material, ''), COALESCE(source, ''),
+			COALESCE(recognized, false), COALESCE(from_activity, false)
 		FROM wo_item_parsed WHERE (wo_id, item_id) IN (`+strings.Join(marks, ", ")+`)`, args...)
 	if err != nil {
 		return
@@ -204,12 +208,13 @@ func attachParsed(items []woItemRow) {
 	defer rows.Close()
 	for rows.Next() {
 		var wo, item, work, size, material, source string
-		var recognized bool
-		if rows.Scan(&wo, &item, &work, &size, &material, &source, &recognized) != nil || !recognized {
+		var recognized, fromActivity bool
+		if rows.Scan(&wo, &item, &work, &size, &material, &source, &recognized, &fromActivity) != nil || !recognized {
 			continue
 		}
 		if i, ok := at[[2]string{wo, item}]; ok {
 			items[i].WorkType, items[i].Size, items[i].Material, items[i].Source, items[i].Recognized = work, size, material, source, true
+			items[i].FromActivity = fromActivity
 		}
 	}
 }

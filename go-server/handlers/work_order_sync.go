@@ -365,7 +365,7 @@ func writeDetailDerived(items []detailDerived) error {
 			}
 			if len(parsedRows) > 0 {
 				_, err = tx.Exec(db.FormatQuery(`INSERT INTO wo_item_parsed (wo_id, item_id, rules, action, object, material, size, qty,
-					source, work_type, recognized, pipe_mm, elbows, flanges, frame, side, weight_kg, parser_version) VALUES `+strings.Join(parsedRows, ", ")+`
+					source, work_type, recognized, pipe_mm, elbows, flanges, frame, side, weight_kg, from_activity, parser_version) VALUES `+strings.Join(parsedRows, ", ")+`
 					ON CONFLICT(wo_id, item_id) DO NOTHING`), parsedArgs...)
 				parsedRows, parsedArgs = parsedRows[:0], parsedArgs[:0]
 			}
@@ -380,10 +380,10 @@ func writeDetailDerived(items []detailDerived) error {
 				itemRows = append(itemRows, "(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")
 				itemArgs = append(itemArgs, d.summary.WOID, id, it.ActivityPath, it.ActivityName, it.Category, it.Path, it.Label, it.Unit,
 					it.Volume, it.UnitCost, it.TotalCost, it.Level, it.Status, it.ApprovalDate)
-				p := itemparse.Parse(it.Label)
-				parsedRows = append(parsedRows, "(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")
+				p := itemparse.ParseItem(it.Label, it.ActivityName)
+				parsedRows = append(parsedRows, "(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")
 				parsedArgs = append(parsedArgs, d.summary.WOID, id, p.Rules, p.Action, p.Object, p.Material, p.Size, p.Qty,
-					p.Source, p.WorkType, p.Recognized, p.PipeMM, p.Elbows, p.Flanges, p.Frame, p.Side, p.WeightKg, itemparse.Version)
+					p.Source, p.WorkType, p.Recognized, p.PipeMM, p.Elbows, p.Flanges, p.Frame, p.Side, p.WeightKg, p.FromActivity, itemparse.Version)
 				if len(itemRows) >= itemBatch {
 					if err := flushItems(); err != nil {
 						return err

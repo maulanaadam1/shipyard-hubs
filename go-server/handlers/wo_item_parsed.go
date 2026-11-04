@@ -20,7 +20,7 @@ func backfillParsedItems() (int, error) {
 	batchSize := envInt("WO_PARSE_BATCH", 500)
 	pause := time.Duration(envInt("WO_PARSE_PAUSE_MS", 1000)) * time.Millisecond
 
-	type todo struct{ wo, item, label string }
+	type todo struct{ wo, item, label, activity string }
 	written := 0
 	lastWO, lastItem := "", ""
 	for {
@@ -28,7 +28,7 @@ func backfillParsedItems() (int, error) {
 		// walk wo_item_parsed's index from the start on every batch (123 ms
 		// mid-table on production, growing as the table fills).
 		fromWO, fromItem := lastWO, lastItem
-		rows, err := db.Query(`SELECT wo_id, item_id, COALESCE(label, '') FROM wo_items
+		rows, err := db.Query(`SELECT wo_id, item_id, COALESCE(label, ''), COALESCE(activity_name, '') FROM wo_items
 			WHERE (wo_id, item_id) > (?, ?) ORDER BY wo_id, item_id LIMIT ?`, fromWO, fromItem, batchSize)
 		if err != nil {
 			return written, err
@@ -36,7 +36,7 @@ func backfillParsedItems() (int, error) {
 		var batch []todo
 		for rows.Next() {
 			var t todo
-			if err := rows.Scan(&t.wo, &t.item, &t.label); err != nil {
+			if err := rows.Scan(&t.wo, &t.item, &t.label, &t.activity); err != nil {
 				rows.Close()
 				return written, err
 			}
@@ -72,22 +72,22 @@ func backfillParsedItems() (int, error) {
 
 		if len(pending) > 0 {
 			marks := make([]string, 0, len(pending))
-			args := make([]interface{}, 0, len(pending)*18)
+			args := make([]interface{}, 0, len(pending)*19)
 			for _, t := range pending {
-				p := itemparse.Parse(t.label)
-				marks = append(marks, "(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")
+				p := itemparse.ParseItem(t.label, t.activity)
+				marks = append(marks, "(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")
 				args = append(args, t.wo, t.item, p.Rules, p.Action, p.Object, p.Material, p.Size, p.Qty, p.Source,
-					p.WorkType, p.Recognized, p.PipeMM, p.Elbows, p.Flanges, p.Frame, p.Side, p.WeightKg, itemparse.Version)
+					p.WorkType, p.Recognized, p.PipeMM, p.Elbows, p.Flanges, p.Frame, p.Side, p.WeightKg, p.FromActivity, itemparse.Version)
 			}
 			// A WO rewritten meanwhile by the detail worker already has current
 			// rows; the WHERE leaves those alone.
 			if _, err := db.Exec(`INSERT INTO wo_item_parsed (wo_id, item_id, rules, action, object, material, size, qty,
-				source, work_type, recognized, pipe_mm, elbows, flanges, frame, side, weight_kg, parser_version) VALUES `+strings.Join(marks, ", ")+`
+				source, work_type, recognized, pipe_mm, elbows, flanges, frame, side, weight_kg, from_activity, parser_version) VALUES `+strings.Join(marks, ", ")+`
 				ON CONFLICT(wo_id, item_id) DO UPDATE SET rules = excluded.rules, action = excluded.action, object = excluded.object,
 					material = excluded.material, size = excluded.size, qty = excluded.qty, source = excluded.source,
 					work_type = excluded.work_type, recognized = excluded.recognized, pipe_mm = excluded.pipe_mm,
 					elbows = excluded.elbows, flanges = excluded.flanges, frame = excluded.frame, side = excluded.side,
-					weight_kg = excluded.weight_kg, parser_version = excluded.parser_version
+					weight_kg = excluded.weight_kg, from_activity = excluded.from_activity, parser_version = excluded.parser_version
 				WHERE COALESCE(wo_item_parsed.parser_version, '') <> excluded.parser_version`, args...); err != nil {
 				return written, err
 			}
