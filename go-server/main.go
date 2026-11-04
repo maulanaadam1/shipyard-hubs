@@ -52,6 +52,9 @@ func main() {
 	} else {
 		workers.StartSyncWorker()
 		handlers.StartWorkOrderDetailWorker()
+		// Reference costs and Data Perlu Dicek findings, a few minutes after
+		// start and then every 6 hours.
+		handlers.StartItemFindingsWorker()
 	}
 	// Per process (it fills this instance's response cache), so it runs either way.
 	handlers.StartWorkOrderItemPrewarm()
@@ -102,6 +105,14 @@ func main() {
 		r.With(itemsView, itemsCache).Get("/api/wo-items/summary", handlers.GetWorkOrderItemSummary)
 		r.With(itemsView, itemsCache).Get("/api/wo-items/facets", handlers.GetWorkOrderItemFacets)
 		r.With(handlers.RequirePermission(handlers.ResourceWorkOrderItems, "export")).Get("/api/wo-items/export", handlers.ExportWorkOrderItems)
+		// Data Perlu Dicek: work items flagged against reference costs. Ignoring a
+		// finding needs edit, the Excel file export.
+		findingsView := handlers.RequirePermission(handlers.ResourceItemFindings, "view")
+		r.With(findingsView).Get("/api/wo-findings", handlers.GetItemFindings)
+		r.With(findingsView).Get("/api/wo-findings/summary", handlers.GetItemFindingsSummary)
+		r.With(findingsView).Get("/api/wo-reference", handlers.GetItemReferences)
+		r.With(handlers.RequirePermission(handlers.ResourceItemFindings, "edit")).Post("/api/wo-findings/status", handlers.UpdateItemFindingStatus)
+		r.With(handlers.RequirePermission(handlers.ResourceItemFindings, "export")).Get("/api/wo-findings/export", handlers.ExportItemFindings)
 		// Financial Dashboard: billing transactions from the daily approval ledger.
 		financeView := handlers.RequirePermission(handlers.ResourceFinancialDashboard, "view")
 		r.With(financeView, woCache).Get("/api/finance/summary", handlers.GetFinanceSummary)
@@ -116,6 +127,7 @@ func main() {
 		// Heavy full-table jobs: Admin only.
 		r.With(appMiddleware.RequireRole("Admin")).Post("/api/system/work-orders/backfill-summary", handlers.BackfillWorkOrderSummariesHandler)
 		r.With(appMiddleware.RequireRole("Admin")).Post("/api/system/work-orders/rebuild-derived", handlers.RebuildWorkOrderDerivedHandler)
+		r.With(appMiddleware.RequireRole("Admin")).Post("/api/system/wo-findings/run", handlers.RunItemFindingsHandler)
 		r.With(appMiddleware.RequireRole("Admin")).Post("/api/system/work-orders/reprocess-list", handlers.ReprocessStoredWorkOrderListHandler)
 
 		// Export (all authenticated roles)

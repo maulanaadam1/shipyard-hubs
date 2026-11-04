@@ -32,7 +32,7 @@ func TestMain(m *testing.M) {
 // resetWorkOrderTables empties the tables the WO sync tests touch.
 func resetWorkOrderTables(t *testing.T) {
 	t.Helper()
-	for _, table := range []string{"work_order_summary", "work_order_details", "work_order_daily_costs", "wo_items", "wo_item_parsed", "app_meta"} {
+	for _, table := range []string{"work_order_summary", "work_order_details", "work_order_daily_costs", "wo_items", "wo_item_parsed", "wo_item_reference", "wo_item_findings", "app_meta"} {
 		if _, err := db.Exec("DELETE FROM " + table); err != nil {
 			t.Fatalf("clear %s: %v", table, err)
 		}

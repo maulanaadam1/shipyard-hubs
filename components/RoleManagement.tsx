@@ -27,6 +27,7 @@ const RESOURCES = [
   { id: 'Job Order', type: 'menu' },
   { id: 'Work Order', type: 'menu' },
   { id: 'Item Pekerjaan WO', type: 'menu' },
+  { id: 'Data Perlu Dicek', type: 'menu' },
   { id: 'Ship Docking', type: 'menu' },
   { id: 'Request', type: 'menu' },
   { id: 'Release', type: 'menu' },
