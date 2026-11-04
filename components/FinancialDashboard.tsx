@@ -24,17 +24,16 @@ import {
   ArrowUpDown
 } from 'lucide-react';
 import { api, getHeaders } from '@/lib/api-client';
-import { useData } from '@/context/DataContext';
 import { SearchableSelect } from './SearchableSelect';
 
 const MOCK_DATA: any[] = [];
 
 export default function FinancialDashboard() {
-  const { syncCache, setSyncCache, syncDates, setSyncDates } = useData();
-  const [rawData, setRawData] = useState<any[]>(syncCache['WorkOrders'] || []);
+  const [finance, setFinance] = useState<any>(null);
+  const [isLoadingFinance, setIsLoadingFinance] = useState(true);
+  const [financeError, setFinanceError] = useState<string | null>(null);
   const [isSyncing, setIsSyncing] = useState(false);
-  const [lastSyncDate, setLastSyncDate] = useState<string>(syncDates['WorkOrders'] || '');
-  const [financialData, setFinancialData] = useState<Record<string, { pending: number, final_cost: number, latest_date: string }>>({});
+  const [lastSyncDate, setLastSyncDate] = useState<string>('');
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 10;
   
@@ -299,80 +298,57 @@ export default function FinancialDashboard() {
     return { cumPoints, dailyPoints, cumPathD, cumAreaD, dailyPathD, width, height, maxCost, unapprovedCost };
   }, [detailedRowData]);
 
-  const fetchSyncData = async () => {
+  // Everything on this page comes from /api/finance/summary: one billing
+  // transaction per WO per approval day, from the same derived tables as the
+  // Work Order dashboard. Filters, cross-filters, sorting and paging run there.
+  const fetchFinance = async (signal?: AbortSignal) => {
+    const params = new URLSearchParams({
+      preset: datePreset,
+      group: timeGroupBy,
+      year: globalYear,
+      ship: globalProject,
+      vendor: globalVendor,
+      status: selectedApprovalFilter,
+      sort: sortColumn,
+      dir: sortDirection,
+      page: String(currentPage),
+      limit: String(itemsPerPage),
+    });
+    if (datePreset === 'custom') {
+      if (customStartDate) params.set('start', customStartDate);
+      if (customEndDate) params.set('end', customEndDate);
+    }
+    if (selectedTimeFilter) params.set('pick_period', selectedTimeFilter);
+    if (selectedVendorFilter) params.set('pick_vendor', selectedVendorFilter);
+    if (selectedShipFilter) params.set('pick_ship', selectedShipFilter);
+
+    setIsLoadingFinance(true);
     try {
-      // 1. Coba ambil dari Redis via API Go Server (Lebih cepat)
       const headers = await getHeaders();
-      let res = await fetch('/api/cache/WorkOrders', { headers });
-      
-      let rawParsed = null;
-      let lastSync = '';
-      
-      if (res.ok) {
-        const responseJson = await res.json();
-        rawParsed = responseJson.data;
-        lastSync = responseJson.last_sync || '';
-      } else {
-        // 2. Fallback: ambil dari SQLite/Supabase jika API gagal (misal server belum direstart)
-        const { data } = await api.from('sync_configs').select('*').eq('id', 'WorkOrders');
-        if (data && data.length > 0) {
-          const syncConfig = data[0];
-          lastSync = syncConfig.last_sync || '';
-          if (syncConfig.last_response) {
-            rawParsed = JSON.parse(syncConfig.last_response);
-          }
-        }
-      }
-
-      if (rawParsed) {
-        let list = [];
-        if (Array.isArray(rawParsed)) list = rawParsed;
-        else if (rawParsed.data && Array.isArray(rawParsed.data)) list = rawParsed.data;
-        
-        if (list.length > 0) {
-          setRawData(list);
-          setLastSyncDate(lastSync || '');
-
-          // Update global cache
-          setSyncCache(prev => ({ ...prev, WorkOrders: list }));
-          setSyncDates(prev => ({ ...prev, WorkOrders: lastSync || '' }));
-        }
-      }
-    } catch(e) {
-      console.error("Gagal narik data dari cache/db:", e);
+      const res = await fetch(`/api/finance/summary?${params.toString()}`, { headers, signal });
+      if (!res.ok) throw new Error(`API Error ${res.status}`);
+      const result = await res.json();
+      setFinance(result);
+      setLastSyncDate(result.last_sync || '');
+      setFinanceError(null);
+    } catch (e: any) {
+      if (e?.name !== 'AbortError') setFinanceError(e?.message || 'Gagal memuat data');
+    } finally {
+      if (!signal?.aborted) setIsLoadingFinance(false);
     }
   };
 
   useEffect(() => {
-    let isMounted = true;
-    
-    const performAutoSync = async () => {
-      setIsSyncing(true);
-      try {
-        const headers = await getHeaders();
-        const body = JSON.stringify({ id: 'WorkOrders' });
-        const res = await fetch('/api/sync/trigger', { method: 'POST', headers, body });
-        if (res.ok && isMounted) {
-          await fetchSyncData();
-        }
-      } catch (e) {
-        // Silently ignore
-      } finally {
-        if (isMounted) setIsSyncing(false);
-      }
-    };
+    const controller = new AbortController();
+    fetchFinance(controller.signal);
+    return () => controller.abort();
+  }, [datePreset, customStartDate, customEndDate, timeGroupBy, globalYear, globalProject, globalVendor, selectedApprovalFilter,
+      selectedTimeFilter, selectedVendorFilter, selectedShipFilter, sortColumn, sortDirection, currentPage]);
 
-    if (syncCache['WorkOrders']) {
-      performAutoSync();
-    } else {
-      fetchSyncData().then(() => {
-        if (isMounted) performAutoSync();
-      });
-    }
-
-    return () => { isMounted = false; };
-  }, []);
-
+  // Any filter change starts again on the first page.
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [globalYear, globalProject, globalVendor, selectedApprovalFilter, selectedTimeFilter, selectedVendorFilter, selectedShipFilter, sortColumn, sortDirection]);
 
   const triggerManualSync = async () => {
     setIsSyncing(true);
@@ -381,7 +357,7 @@ export default function FinancialDashboard() {
       const body = JSON.stringify({ id: 'WorkOrders' });
       const res = await fetch('/api/sync/trigger', { method: 'POST', headers, body });
       if (!res.ok) throw new Error("Gagal");
-      await fetchSyncData();
+      await fetchFinance();
     } catch (e) {
       alert("Gagal melakukan sinkronisasi.");
     } finally {
@@ -389,178 +365,18 @@ export default function FinancialDashboard() {
     }
   };
 
-  useEffect(() => {
-    if (rawData.length === 0) return;
-    const fetchFinances = async () => {
-      const ids = rawData.map(d => d.id);
-      // Batch in groups of 50
-      for (let i = 0; i < ids.length; i += 50) {
-        const chunk = ids.slice(i, i + 50);
-        try {
-          const headers = await getHeaders();
-          const res = await fetch('/api/work-orders/bulk-pending-approvals', {
-            method: 'POST',
-            headers,
-            body: JSON.stringify({ ids: chunk.map(String) })
-          });
-          if (res.ok) {
-            const map = await res.json();
-            setFinancialData(prev => ({...prev, ...map}));
-          }
-        } catch (e) {}
-      }
-    };
-    fetchFinances();
-  }, [rawData]);
-
-  const validData = useMemo(() => {
-    return rawData.filter(item => {
-      const fin = financialData[item.id];
-      // Hapus syarat fin.latest_date agar nominal tetap muncul meski tanggal kosong
-      return fin && fin.final_cost > 0;
-    }).map(item => {
-      const fin = financialData[item.id];
-      const jo = item.jo_code || "N/A";
-      const ship = item.m_ship_name || "N/A";
-      
-      const levelStatus = item.min_approval_level >= 5 ? "Approved Level 5" : 
-                         (item.min_approval_level > 0 ? `Approved Level ${item.min_approval_level}` : "Waiting");
-      const combProjectName = `${jo.toUpperCase()} - ${ship.toUpperCase()}`;
-      
-      return {
-        ...item,
-        shipName: ship,
-        joCode: jo.toUpperCase(),
-        woCode: item.code || "N/A",
-        vendorName: item.m_vendor_name || "Tanpa Vendor",
-        final_cost: fin.latest_cost !== undefined ? fin.latest_cost : fin.final_cost, // Menggunakan latest_cost agar grafik murni delta
-        previous_cost: fin.previous_cost !== undefined ? fin.previous_cost : 0,
-        latest_date: fin.latest_date,
-        pending: fin.pending,
-        derivedStatus: levelStatus,
-        totalCostNum: fin.final_cost, // totalCostNum bisa mempertahankan nilai full WO jika dibutuhkan, atau pakai item.total_cost
-        projectName: combProjectName,
-        createdAtStr: item.created_at ? item.created_at.split(' ')[0] : 'N/A'
-      };
-    }).sort((a, b) => new Date(b.latest_date).getTime() - new Date(a.latest_date).getTime());
-  }, [rawData, financialData]);
-
-  const latestDatasetDate = useMemo(() => {
-    if (validData.length === 0) return new Date();
-    return new Date(validData[0].latest_date);
-  }, [validData]);
-
-  const filterOptions = useMemo(() => {
-    const years = new Set<string>();
-    const projects = new Set<string>();
-    const vendors = new Set<string>();
-    const approvals = new Set<string>();
-
-    validData.forEach(item => {
-      if (item.latest_date) years.add(item.latest_date.substring(0, 4));
-      if (item.shipName) projects.add(item.shipName);
-      if (item.vendorName) vendors.add(item.vendorName);
-      if (item.derivedStatus) approvals.add(item.derivedStatus);
-    });
-
-    return {
-      years: Array.from(years).sort().reverse(),
-      projects: Array.from(projects).sort(),
-      vendors: Array.from(vendors).sort(),
-      approvals: Array.from(approvals).sort()
-    };
-  }, [validData]);
-
-  const dateFilteredData = useMemo(() => {
-    const end = new Date(latestDatasetDate);
-    const start = new Date(latestDatasetDate);
-
-    if (datePreset === "1week") start.setDate(end.getDate() - 6);
-    else if (datePreset === "2weeks") start.setDate(end.getDate() - 13);
-    else if (datePreset === "3weeks") start.setDate(end.getDate() - 20);
-    else if (datePreset === "1month") start.setMonth(end.getMonth() - 1);
-    else if (datePreset === "2months") start.setMonth(end.getMonth() - 2);
-    else if (datePreset === "3months") start.setMonth(end.getMonth() - 3);
-    else if (datePreset === "6months") start.setMonth(end.getMonth() - 6);
-    else if (datePreset === "custom") {
-      const s = customStartDate ? new Date(customStartDate) : null;
-      const e = customEndDate ? new Date(customEndDate) : null;
-      if (s) start.setTime(s.getTime());
-      if (e) end.setTime(e.getTime());
-    }
-
-    return validData.filter(item => {
-      // Global filters
-      if (globalYear !== "all" && !item.latest_date.startsWith(globalYear)) return false;
-      if (globalProject !== "all" && item.shipName !== globalProject) return false;
-      if (globalVendor !== "all" && item.vendorName !== globalVendor) return false;
-      if (selectedApprovalFilter !== "all") {
-        if (item.derivedStatus !== selectedApprovalFilter) return false;
-      }
-
-      if (datePreset === "all") return true;
-      // Jika tanggal kosong, berikan opsi untuk tetap menampilkannya jika filter adalah 'all'
-      // Untuk filter spesifik, jika tidak punya tanggal, kita skip (atau sesuai preferensi, tapi masuk akal diskip)
-      if (!item.latest_date) return false;
-
-      const d = new Date(item.latest_date.replace(' ', 'T')).getTime();
-      
-      if (datePreset === "custom") {
-        const sTime = customStartDate ? new Date(customStartDate).getTime() : 0;
-        const eTime = customEndDate ? new Date(customEndDate).setHours(23, 59, 59, 999) : Infinity;
-        return d >= sTime && d <= eTime;
-      }
-      
-      return d >= start.getTime() && d <= end.getTime();
-    });
-  }, [validData, datePreset, customStartDate, customEndDate, latestDatasetDate, globalYear, globalProject, globalVendor, selectedApprovalFilter]);
-
-  const getStartOfPeriod = (dateStr: string, period: 'day' | 'week' | 'month') => {
-    if (!dateStr) return null;
-    const cleanStr = dateStr.replace(' ', 'T');
-    const d = new Date(cleanStr);
-    if (isNaN(d.getTime())) return null;
-    
-    if (period === 'day') {
-      return d.toISOString().split('T')[0];
-    } else if (period === 'month') {
-      const year = d.getFullYear();
-      const month = String(d.getMonth() + 1).padStart(2, '0');
-      return `${year}-${month}-01`;
-    } else {
-      const day = d.getDay();
-      // Week starts on Saturday (6)
-      const daysToSubtract = (day + 1) % 7;
-      const startOfWeek = new Date(d.setDate(d.getDate() - daysToSubtract));
-      return startOfWeek.toISOString().split('T')[0];
-    }
+  const filterOptions = {
+    years: finance?.options?.years || [],
+    projects: finance?.options?.ships || [],
+    vendors: finance?.options?.vendors || [],
+    approvals: finance?.options?.statuses || [],
   };
 
-  const crossFilteredData = useMemo(() => {
-    return dateFilteredData.filter(item => {
-      let pass = true;
-      if (selectedTimeFilter && getStartOfPeriod(item.latest_date, timeGroupBy) !== selectedTimeFilter) pass = false;
-      if (selectedVendorFilter && (item.vendorName || "Tanpa Vendor") !== selectedVendorFilter) pass = false;
-      if (selectedShipFilter && (item.shipName || "Tanpa Proyek") !== selectedShipFilter) pass = false;
-      return pass;
-    });
-  }, [dateFilteredData, selectedTimeFilter, selectedVendorFilter, selectedShipFilter, timeGroupBy]);
-
   const timeTrend = useMemo(() => {
-    const groups: Record<string, number> = {};
-    crossFilteredData.forEach(item => {
-      const p = getStartOfPeriod(item.latest_date, timeGroupBy);
-      if (p) {
-        groups[p] = (groups[p] || 0) + item.final_cost;
-      }
-    });
-
-    return Object.keys(groups).sort().map(pStr => {
-      const startD = new Date(pStr);
+    const formatShort = (d: Date) => d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
+    return (finance?.trend || []).map((point: { period: string; cost: number }) => {
+      const startD = new Date(point.period);
       let label = "";
-      
-      const formatShort = (d: Date) => d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
-      
       if (timeGroupBy === 'day') {
         label = formatShort(startD);
       } else if (timeGroupBy === 'month') {
@@ -570,100 +386,33 @@ export default function FinancialDashboard() {
         endD.setDate(startD.getDate() + 6);
         label = `${formatShort(startD)} - ${formatShort(endD)}`;
       }
-
-      return {
-        period: pStr,
-        label: label,
-        cost: groups[pStr]
-      };
+      return { period: point.period, label, cost: point.cost };
     });
-  }, [crossFilteredData, timeGroupBy]);
+  }, [finance, timeGroupBy]);
 
-  const vendorTrend = useMemo(() => {
-    const groups: Record<string, number> = {};
-    crossFilteredData.forEach(item => {
-      const vendorName = item.vendorName || "Tanpa Vendor";
-      groups[vendorName] = (groups[vendorName] || 0) + item.final_cost;
-    });
+  const vendorTrend: { label: string; cost: number }[] = finance?.vendors || [];
+  const projectTrend: { label: string; cost: number; percentage: number }[] = finance?.ships || [];
 
-    return Object.keys(groups)
-      .map(vendor => ({
-        label: vendor,
-        cost: groups[vendor]
-      }))
-      .sort((a, b) => b.cost - a.cost);
-  }, [crossFilteredData]);
+  // Rows keep the field names the table and the detail modal read.
+  const paginatedData = useMemo(() => (finance?.rows || []).map((row: any) => {
+    const level = Number(/^Approval Level (\d+)$/.exec(row.derived_status || '')?.[1] || 0);
+    return {
+      ...row,
+      code: row.wo_code,
+      woCode: row.wo_code || 'N/A',
+      joCode: (row.jo_code || 'N/A').toUpperCase(),
+      shipName: row.ship_name,
+      vendorName: row.vendor_name,
+      projectName: row.project_name,
+      derivedStatus: row.derived_status || 'Waiting',
+      min_approval_level: level,
+      totalCostNum: row.wo_final_cost,
+      createdAtStr: row.created_at ? row.created_at.split(' ')[0] : 'N/A',
+    };
+  }), [finance]);
 
-  const projectTrend = useMemo(() => {
-    const groups: Record<string, number> = {};
-    let total = 0;
-    crossFilteredData.forEach(item => {
-      const proj = item.shipName || "Tanpa Proyek";
-      groups[proj] = (groups[proj] || 0) + item.final_cost;
-      total += item.final_cost;
-    });
-
-    return Object.keys(groups)
-      .map(proj => ({
-        label: proj,
-        cost: groups[proj],
-        percentage: total > 0 ? (groups[proj] / total) * 100 : 0
-      }))
-      .sort((a, b) => b.cost - a.cost);
-  }, [crossFilteredData]);
-
-  const sortedData = useMemo(() => {
-    return [...crossFilteredData].sort((a, b) => {
-      let aVal: any = '';
-      let bVal: any = '';
-      
-      switch (sortColumn) {
-        case 'latest_date':
-          aVal = new Date(a.latest_date).getTime();
-          bVal = new Date(b.latest_date).getTime();
-          break;
-        case 'woCode':
-          aVal = a.woCode || a.code || '';
-          bVal = b.woCode || b.code || '';
-          break;
-        case 'joCode':
-          aVal = a.joCode || '';
-          bVal = b.joCode || '';
-          break;
-        case 'shipName':
-          aVal = a.shipName || '';
-          bVal = b.shipName || '';
-          break;
-        case 'vendorName':
-          aVal = a.vendorName || '';
-          bVal = b.vendorName || '';
-          break;
-        case 'statusApproval':
-          aVal = a.derivedStatus || '';
-          bVal = b.derivedStatus || '';
-          break;
-        case 'prevCost':
-          aVal = Number(a.total_cost || 0);
-          bVal = Number(b.total_cost || 0);
-          break;
-        case 'finalCost':
-          aVal = Number(a.final_cost || 0);
-          bVal = Number(b.final_cost || 0);
-          break;
-      }
-
-      if (aVal < bVal) return sortDirection === 'asc' ? -1 : 1;
-      if (aVal > bVal) return sortDirection === 'asc' ? 1 : -1;
-      return 0;
-    });
-  }, [crossFilteredData, sortColumn, sortDirection]);
-
-  const paginatedData = useMemo(() => {
-    const startIndex = (currentPage - 1) * itemsPerPage;
-    return sortedData.slice(startIndex, startIndex + itemsPerPage);
-  }, [sortedData, currentPage]);
-
-  const totalPages = Math.ceil(sortedData.length / itemsPerPage) || 1;
+  const totalRows: number = finance?.total || 0;
+  const totalPages = Math.ceil(totalRows / itemsPerPage) || 1;
 
   const formatIDR = (value: number) => {
     if (isNominalHidden) return 'Rp ****';
@@ -674,15 +423,9 @@ export default function FinancialDashboard() {
     }).format(value);
   };
 
-  const totalPaymentValue = crossFilteredData.reduce((acc, curr) => acc + curr.final_cost, 0);
-
-  const totalJO = useMemo(() => {
-    const joSet = new Set<string>();
-    crossFilteredData.forEach(item => {
-      if (item.joCode) joSet.add(item.joCode);
-    });
-    return joSet.size;
-  }, [crossFilteredData]);
+  const totalPaymentValue: number = finance?.totals?.cost || 0;
+  const totalWO: number = finance?.totals?.wo_count || 0;
+  const totalJO: number = finance?.totals?.jo_count || 0;
 
   // Chart Rendering (SVG)
   const renderChart = () => {
@@ -892,7 +635,7 @@ export default function FinancialDashboard() {
           </div>
           <div className="min-w-0 flex-1">
             <p className="text-[10px] md:text-xs font-semibold text-slate-400 uppercase tracking-wider leading-tight">Jumlah Transaksi (WO)</p>
-            <h3 className="text-lg md:text-xl lg:text-2xl font-bold mt-1 text-slate-800 leading-none break-words">{crossFilteredData.length} Dokumen</h3>
+            <h3 className="text-lg md:text-xl lg:text-2xl font-bold mt-1 text-slate-800 leading-none break-words">{totalWO} Dokumen</h3>
           </div>
         </div>
 
@@ -1112,7 +855,7 @@ export default function FinancialDashboard() {
             <tbody className="divide-y divide-slate-50 text-sm">
               {paginatedData.length === 0 ? (
                 <tr>
-                  <td colSpan={8} className="py-12 text-center text-slate-400 text-xs">Belum ada data tagihan riil yang ditarik.</td>
+                  <td colSpan={8} className="py-12 text-center text-slate-400 text-xs">{financeError ? `Gagal memuat data: ${financeError}` : isLoadingFinance ? 'Memuat data tagihan...' : 'Tidak ada tagihan pada filter ini.'}</td>
                 </tr>
               ) : (
                 paginatedData.map(item => (
@@ -1150,7 +893,7 @@ export default function FinancialDashboard() {
         
         <div className="px-6 py-4 border-t border-slate-100 bg-slate-50/30 flex items-center justify-between gap-4">
           <span className="text-xs text-slate-400">
-            Menampilkan {Math.min(crossFilteredData.length, (currentPage - 1) * itemsPerPage + 1)}-{Math.min(crossFilteredData.length, currentPage * itemsPerPage)} dari {crossFilteredData.length} data
+            Menampilkan {Math.min(totalRows, (currentPage - 1) * itemsPerPage + 1)}-{Math.min(totalRows, currentPage * itemsPerPage)} dari {totalRows} data
           </span>
 
           <div className="flex items-center gap-2">
@@ -1381,22 +1124,22 @@ export default function FinancialDashboard() {
                   <div className="grid grid-cols-2 gap-y-4 gap-x-6 text-sm">
                     <div>
                       <span className="text-xs text-slate-400 block mb-1">Tipe Billing:</span>
-                      <p className="font-semibold text-slate-800">{selectedRow.billing_type || '-'}</p>
+                      <p className="font-semibold text-slate-800">{selectedRow.billing_type || detailedRowData?.billing_type || '-'}</p>
                     </div>
                     <div>
                       <span className="text-xs text-slate-400 block mb-1">Jumlah Man Power:</span>
-                      <p className="font-bold text-slate-800">{selectedRow.man_power} Orang</p>
+                      <p className="font-bold text-slate-800">{selectedRow.man_power ?? detailedRowData?.man_power ?? 0} Orang</p>
                     </div>
                     <div>
                       <span className="text-xs text-slate-400 block mb-1">Dibuat Oleh:</span>
-                      <p className="font-semibold text-slate-800">{selectedRow.created_name || 'N/A'}</p>
+                      <p className="font-semibold text-slate-800">{selectedRow.created_name || detailedRowData?.created_name || 'N/A'}</p>
                     </div>
                     <div>
                       <span className="text-xs text-slate-400 block mb-1">
                         {selectedRow.derivedStatus === 'Waiting' ? 'Dibuat Pada:' : 'Disetujui Terakhir:'}
                       </span>
                       <p className={`font-semibold ${selectedRow.derivedStatus === 'Waiting' ? 'text-amber-500' : 'text-emerald-500'}`}>
-                        {selectedRow.derivedStatus === 'Waiting' ? (selectedRow.createdAtStr || '-') : (selectedRow.last_approved || '-')}
+                        {selectedRow.derivedStatus === 'Waiting' ? (selectedRow.createdAtStr || '-') : (selectedRow.last_approved || detailedRowData?.last_approved || selectedRow.latest_date || '-')}
                       </p>
                     </div>
                   </div>

@@ -102,6 +102,9 @@ func main() {
 		r.With(itemsView, itemsCache).Get("/api/wo-items/summary", handlers.GetWorkOrderItemSummary)
 		r.With(itemsView, itemsCache).Get("/api/wo-items/facets", handlers.GetWorkOrderItemFacets)
 		r.With(handlers.RequirePermission(handlers.ResourceWorkOrderItems, "export")).Get("/api/wo-items/export", handlers.ExportWorkOrderItems)
+		// Financial Dashboard: billing transactions from the daily approval ledger.
+		financeView := handlers.RequirePermission(handlers.ResourceFinancialDashboard, "view")
+		r.With(financeView, woCache).Get("/api/finance/summary", handlers.GetFinanceSummary)
 		r.Get("/api/work-orders/sync-status", handlers.GetWorkOrderSyncStatus)
 		r.Get("/api/work-orders/{id}/detail", handlers.GetWorkOrderDetail)
 		r.Post("/api/work-orders/{id}/sync", handlers.SyncWorkOrderDetail)
