@@ -3,6 +3,7 @@ package handlers
 import (
 	"fmt"
 	"testing"
+	"time"
 
 	"shipyard/db"
 	"shipyard/itemparse"
@@ -115,5 +116,21 @@ func TestBackfillParsedItems(t *testing.T) {
 	// Nothing left: a second run only reads.
 	if n, err := backfillParsedItems(); err != nil || n != 0 {
 		t.Errorf("second run wrote %d rows (err %v)", n, err)
+	}
+}
+
+// A failing background run is tried again (after a wait) until it succeeds.
+func TestRetryUntilDone(t *testing.T) {
+	calls := 0
+	var waits []time.Duration
+	attempts := retryUntilDone(func() error {
+		calls++
+		if calls < 3 {
+			return fmt.Errorf("disk full")
+		}
+		return nil
+	}, 5*time.Minute, func(d time.Duration) { waits = append(waits, d) })
+	if attempts != 3 || calls != 3 || len(waits) != 2 || waits[0] != 5*time.Minute {
+		t.Errorf("attempts %d, calls %d, waits %v", attempts, calls, waits)
 	}
 }
