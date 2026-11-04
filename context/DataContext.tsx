@@ -376,6 +376,27 @@ const DataContext = createContext<DataContextType | undefined>(undefined);
 
 // --- Provider ---
 
+// sessionUser maps the user of /api/auth/session or /api/auth/login to
+// currentUser. Both answers carry roles and extra_roles, which canAccess (and
+// so the menu) needs.
+export function sessionUser(userData: any): User {
+  return {
+    id: userData.id || '',
+    name: userData.name || userData.email?.split('@')[0] || 'Unknown',
+    email: userData.email || '',
+    username: userData.username || '',
+    // Role comes directly from the Go JWT token — no env var lookup needed
+    role: (userData.role || 'Staff') as 'Admin' | 'Manager' | 'Staff',
+    jabatan: userData.jabatan || '',
+    department: userData.department || '',
+    branch: userData.branch || '',
+    city: userData.city || '',
+    roles: userData.roles || '',
+    extra_roles: userData.extra_roles || '',
+    avatar: userData.image || ''
+  } as User;
+}
+
 export function DataProvider({ children }: { children: ReactNode }) {
   const [fleet, setFleet] = useState<Equipment[]>([]);
   const [loans, setLoans] = useState<LoanRequest[]>([]);
@@ -609,24 +630,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
           }
           localStorage.setItem('lastActivity', now.toString());
 
-          // Role comes directly from the Go JWT token — no env var lookup needed
-          const finalRole = (session.user as any)?.role || 'Staff';
-
-          const userData = session.user as any;
-          setCurrentUser({
-            id: userData.id || '',
-            name: userData.name || userData.email?.split('@')[0] || 'Unknown',
-            email: userData.email || '',
-            username: userData.username || '',
-            role: finalRole as 'Admin' | 'Manager' | 'Staff',
-            jabatan: userData.jabatan || '',
-            department: userData.department || '',
-            branch: userData.branch || '',
-            city: userData.city || '',
-            roles: userData.roles || '',
-            extra_roles: userData.extra_roles || '',
-            avatar: userData.image || ''
-          });
+          setCurrentUser(sessionUser(session.user));
         } else {
           setCurrentUser(null);
         }
