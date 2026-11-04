@@ -352,9 +352,6 @@ func RunSyncJob(force bool, targetId string) error {
 
 func processJobOrdersIncremental(configId, baseUrl string, headers map[string]string, lastSyncStr string) {
 	baseUrl = normalizeSyncURL(baseUrl)
-	// Drop old 3-column schema if exists to upgrade to flattened 46-column AI-ready table
-	db.Exec("DROP TABLE IF EXISTS sync_job_orders")
-
 	_, err := db.Exec(`CREATE TABLE IF NOT EXISTS sync_job_orders (
 		id TEXT PRIMARY KEY,
 		code TEXT,
@@ -494,7 +491,31 @@ func processJobOrdersIncremental(configId, baseUrl string, headers map[string]st
 			adjusted_total, adjusted_total_additional, price_adjustment, price_adjustment_additional, 
 			t_quotation_id, t_quotation_code, t_repair_list_id, latest_version, flag_rq, 
 			created_at, created_by, updated_at, modified_by
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`))
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+			ON CONFLICT(id) DO UPDATE SET
+				code=excluded.code, project=excluded.project, approval_status=excluded.approval_status,
+				m_customer_id=excluded.m_customer_id, m_customer_name=excluded.m_customer_name,
+				m_ship_id=excluded.m_ship_id, m_ship_name=excluded.m_ship_name, m_service_id=excluded.m_service_id,
+				m_slipway_id=excluded.m_slipway_id, m_branch_id=excluded.m_branch_id,
+				m_employee_id=excluded.m_employee_id, agent=excluded.agent, est_start=excluded.est_start,
+				est_finish=excluded.est_finish, est_arrival_date=excluded.est_arrival_date,
+				est_departure_date=excluded.est_departure_date, est_docking_date=excluded.est_docking_date,
+				est_undocking_date=excluded.est_undocking_date, est_trial_date=excluded.est_trial_date,
+				act_start_date=excluded.act_start_date, act_finish_date=excluded.act_finish_date,
+				act_arrival_date=excluded.act_arrival_date, act_departure_date=excluded.act_departure_date,
+				act_trial_date=excluded.act_trial_date, docking_date=excluded.docking_date,
+				undocking_date=excluded.undocking_date, floating_before_docking=excluded.floating_before_docking,
+				floating_after_docking=excluded.floating_after_docking,
+				floating_before_undocking=excluded.floating_before_undocking,
+				floating_after_undocking=excluded.floating_after_undocking, total_price=excluded.total_price,
+				total_price_additional=excluded.total_price_additional, adjusted_total=excluded.adjusted_total,
+				adjusted_total_additional=excluded.adjusted_total_additional,
+				price_adjustment=excluded.price_adjustment,
+				price_adjustment_additional=excluded.price_adjustment_additional,
+				t_quotation_id=excluded.t_quotation_id, t_quotation_code=excluded.t_quotation_code,
+				t_repair_list_id=excluded.t_repair_list_id, latest_version=excluded.latest_version,
+				flag_rq=excluded.flag_rq, created_at=excluded.created_at, created_by=excluded.created_by,
+				updated_at=excluded.updated_at, modified_by=excluded.modified_by`))
 
 		stmtProjects, errProj := tx.Prepare(db.FormatQuery(`INSERT INTO projects (
 			id, id_siaga, idproject, shipname, cust_company, approval_status, 

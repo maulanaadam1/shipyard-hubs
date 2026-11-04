@@ -598,8 +598,9 @@ func createTables() {
 	DB.Exec("CREATE INDEX IF NOT EXISTS idx_wo_summary_status_date ON work_order_summary(status_approval, latest_date)")
 	DB.Exec("CREATE INDEX IF NOT EXISTS idx_wo_summary_derived_status_date ON work_order_summary(derived_status, latest_date)")
 
-	// Migration: Flatten sync_job_orders table into 46 AI-ready columns (force drop old schema)
-	DB.Exec("DROP TABLE IF EXISTS sync_job_orders CASCADE")
+	// sync_job_orders: flattened 46-column Job Order table. It used to be
+	// dropped here on every start to replace an old 3-column schema; that
+	// migration has long run, and the sync now upserts into it.
 	DB.Exec(`CREATE TABLE IF NOT EXISTS sync_job_orders (
 		id TEXT PRIMARY KEY,
 		code TEXT,

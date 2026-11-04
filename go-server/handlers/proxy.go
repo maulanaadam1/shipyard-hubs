@@ -458,11 +458,17 @@ func PostBulkPendingApprovals(w http.ResponseWriter, r *http.Request) {
 
 	// Semaphore to limit concurrent API requests (max 3 at a time)
 	sem := make(chan struct{}, 3)
+	// Limits the whole per-WO work too: the dashboards post 50 IDs at a time,
+	// and reading and parsing 50 detail JSONs at once kept a dozen database
+	// connections busy per request.
+	work := make(chan struct{}, 4)
 
 	for _, woID := range reqBody.IDs {
 		wg.Add(1)
 		go func(id string) {
 			defer wg.Done()
+			work <- struct{}{}
+			defer func() { <-work }()
 
 			// Inisialisasi default agar selalu ada balikan
 			mu.Lock()
