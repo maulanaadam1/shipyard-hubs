@@ -61,16 +61,24 @@ func Login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	writeJSON(w, 200, map[string]any{
-		"token": tokenStr,
-		"user": map[string]any{
+	// The same user as /api/auth/session, with roles and extra_roles: the
+	// menu is built from them, and without them a fresh login showed only
+	// the menus of Admin until the page was reloaded.
+	email, _ := user["email"].(string)
+	publicUser := db.GetUserPublicByEmail(email)
+	if publicUser == nil {
+		publicUser = map[string]any{
 			"id":       user["id"],
 			"email":    user["email"],
 			"username": user["username"],
 			"name":     user["name"],
 			"role":     user["role"],
 			"image":    user["avatar_url"],
-		},
+		}
+	}
+	writeJSON(w, 200, map[string]any{
+		"token": tokenStr,
+		"user":  publicUser,
 	})
 }
 

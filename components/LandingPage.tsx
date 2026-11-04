@@ -3,7 +3,7 @@
 import React, { useState } from 'react';
 import { motion } from 'motion/react';
 import { Ship, Lock, Mail, User, ArrowRight, AlertCircle } from 'lucide-react';
-import { useData } from '@/context/DataContext';
+import { useData, sessionUser } from '@/context/DataContext';
 import { api } from '@/lib/api-client';
 
 export default function LandingPage() {
@@ -33,8 +33,10 @@ export default function LandingPage() {
       }
 
       if (data?.user) {
-        console.log('Login successful, user data:', data.user);
-        setCurrentUser(data.user);
+        // A fresh sign-in starts a fresh idle period (the 12-hour check
+        // would otherwise count from the previous session).
+        try { localStorage.setItem('lastActivity', Date.now().toString()); } catch { /* storage unavailable */ }
+        setCurrentUser(sessionUser(data.user));
       }
       
       // The DataContext has an effect that triggers fetchData when currentUser is set
