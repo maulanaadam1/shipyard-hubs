@@ -19,7 +19,18 @@ import (
 // items not approved yet, the date its WO was last updated in SIAGA.
 const itemDateExpr = "COALESCE(NULLIF(i.approval_date, ''), SUBSTR(COALESCE(s.updated_source_at, ''), 1, 10))"
 
-const woItemFrom = ` FROM wo_items i JOIN work_order_summary s ON s.wo_id = i.wo_id WHERE `
+// The parsed description (wo_item_parsed, by primary key) is a LEFT JOIN:
+// queries that use none of its columns don't pay for it, since PostgreSQL
+// removes an unused LEFT JOIN on a unique key.
+const woItemFrom = ` FROM wo_items i JOIN work_order_summary s ON s.wo_id = i.wo_id
+	LEFT JOIN wo_item_parsed p ON p.wo_id = i.wo_id AND p.item_id = i.item_id WHERE `
+
+// Work type and size of the cleaned-up description, only for recognized
+// items; the rest group together under an empty work type ("belum dikenali").
+const (
+	woItemWorkTypeExpr = "CASE WHEN p.recognized THEN COALESCE(p.work_type, '') ELSE '' END"
+	woItemSizeExpr     = "CASE WHEN p.recognized THEN COALESCE(p.size, '') ELSE '' END"
+)
 
 // woItemFilters builds the WHERE clause shared by the item list and summaries.
 func woItemFilters(q url.Values) (string, []interface{}) {
@@ -48,6 +59,21 @@ func woItemFilters(q url.Values) (string, []interface{}) {
 			args = append(args, k)
 		}
 		where = append(where, woItemUnitKey+" IN ("+strings.Join(marks, ", ")+")")
+	}
+	if workType := strings.TrimSpace(q.Get("work_type")); workType != "" && workType != "All" {
+		where = append(where, "p.recognized AND p.work_type = ?")
+		args = append(args, workType)
+	}
+	// size is matched even when empty (a work type without a size).
+	if size, ok := q["size"]; ok {
+		where = append(where, woItemSizeExpr+" = ?")
+		args = append(args, strings.TrimSpace(size[0]))
+	}
+	switch q.Get("parse") {
+	case "recognized":
+		where = append(where, "p.recognized")
+	case "unrecognized":
+		where = append(where, "NOT COALESCE(p.recognized, false)")
 	}
 	if vendor := strings.TrimSpace(q.Get("vendor")); vendor == noVendorLabel {
 		where = append(where, "COALESCE(s.vendor_name, '') = ''")
@@ -135,6 +161,57 @@ type woItemRow struct {
 	ShipName     string  `json:"ship_name"`
 	ProjectType  string  `json:"project_type"`
 	ItemDate     string  `json:"item_date"`
+	// From the cleaned-up description (wo_item_parsed); empty when not recognized.
+	WorkType   string `json:"work_type"`
+	Size       string `json:"size"`
+	Material   string `json:"material"`
+	Source     string `json:"source"`
+	Recognized bool   `json:"recognized"`
+}
+
+// woItemParsedColumns adds the cleaned-up description to woItemColumns (export).
+const woItemParsedColumns = `, ` + woItemWorkTypeExpr + `, ` + woItemSizeExpr + `,
+		CASE WHEN p.recognized THEN COALESCE(p.material, '') ELSE '' END, CASE WHEN p.recognized THEN COALESCE(p.source, '') ELSE '' END,
+		COALESCE(p.recognized, false)`
+
+func scanWoItemParsed(rows *sql.Rows) (woItemRow, error) {
+	var it woItemRow
+	err := rows.Scan(&it.WOID, &it.ItemID, &it.Category, &it.ActivityName, &it.Path, &it.Label, &it.Unit, &it.Volume, &it.UnitCost,
+		&it.TotalCost, &it.Level, &it.Status, &it.ApprovalDate, &it.WOCode, &it.JOCode, &it.ProjectName, &it.VendorName,
+		&it.ShipName, &it.ProjectType, &it.ItemDate, &it.WorkType, &it.Size, &it.Material, &it.Source, &it.Recognized)
+	return it, err
+}
+
+// attachParsed fills the cleaned-up description of a page of items with one
+// keyed read, so the list query itself doesn't join and sort through it.
+func attachParsed(items []woItemRow) {
+	if len(items) == 0 {
+		return
+	}
+	marks := make([]string, len(items))
+	args := make([]interface{}, 0, len(items)*2)
+	at := map[[2]string]int{}
+	for i, it := range items {
+		marks[i] = "(?, ?)"
+		args = append(args, it.WOID, it.ItemID)
+		at[[2]string{it.WOID, it.ItemID}] = i
+	}
+	rows, err := db.Query(`SELECT wo_id, item_id, COALESCE(work_type, ''), COALESCE(size, ''), COALESCE(material, ''), COALESCE(source, ''), COALESCE(recognized, false)
+		FROM wo_item_parsed WHERE (wo_id, item_id) IN (`+strings.Join(marks, ", ")+`)`, args...)
+	if err != nil {
+		return
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var wo, item, work, size, material, source string
+		var recognized bool
+		if rows.Scan(&wo, &item, &work, &size, &material, &source, &recognized) != nil || !recognized {
+			continue
+		}
+		if i, ok := at[[2]string{wo, item}]; ok {
+			items[i].WorkType, items[i].Size, items[i].Material, items[i].Source, items[i].Recognized = work, size, material, source, true
+		}
+	}
 }
 
 func scanWoItem(rows *sql.Rows) (woItemRow, error) {
@@ -176,6 +253,7 @@ func GetWorkOrderItems(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	<-totalsDone
+	attachParsed(data)
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]interface{}{
@@ -216,6 +294,9 @@ var woItemGroups = map[string]woItemGroup{
 	"project_activity": {[]string{"COALESCE(s.project_name, '')", "COALESCE(i.activity_name, '')"}, []string{"project_name", "activity_name"}},
 	"project_item":     {[]string{"COALESCE(s.project_name, '')", "COALESCE(i.label, '')", "COALESCE(i.unit, '')"}, []string{"project_name", "label", "unit"}},
 	"vendor_activity":  {[]string{"COALESCE(s.vendor_name, '')", "COALESCE(i.activity_name, '')"}, []string{"vendor_name", "activity_name"}},
+	// Cleaned-up descriptions: ~1,500 work types instead of ~345,000 names.
+	"work_type":      {[]string{woItemWorkTypeExpr}, []string{"work_type"}},
+	"work_type_size": {[]string{woItemWorkTypeExpr, woItemSizeExpr, "COALESCE(i.unit, '')"}, []string{"work_type", "size", "unit"}},
 }
 
 // woItemSummarySQL is the grouped query of a summary view, without paging:
@@ -351,6 +432,7 @@ func GetWorkOrderItemFacets(w http.ResponseWriter, r *http.Request) {
 	}
 	collect("categories", `SELECT DISTINCT category FROM wo_items WHERE COALESCE(category, '') <> '' ORDER BY 1`)
 	collect("units", `SELECT unit FROM wo_items WHERE COALESCE(unit, '') <> '' GROUP BY unit ORDER BY COUNT(*) DESC LIMIT 50`)
+	collect("workTypes", `SELECT work_type FROM wo_item_parsed WHERE recognized AND COALESCE(work_type, '') <> '' GROUP BY work_type ORDER BY COUNT(*) DESC, work_type`)
 	var items, wos int
 	db.QueryRow(`SELECT COUNT(*), COUNT(DISTINCT wo_id) FROM wo_items`).Scan(&items, &wos)
 	result["itemCount"] = items

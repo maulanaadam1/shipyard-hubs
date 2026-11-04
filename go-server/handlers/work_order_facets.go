@@ -41,6 +41,16 @@ func vendorLabel(name string) string {
 	return name
 }
 
+// noWorkTypeLabel names items whose description the parser didn't recognize.
+const noWorkTypeLabel = "Belum dikenali"
+
+func workTypeLabel(workType string) string {
+	if workType == "" {
+		return noWorkTypeLabel
+	}
+	return workType
+}
+
 // withoutFilters copies the query and drops the given filter keys, so a card can
 // be narrowed by every active filter except the one it controls.
 func withoutFilters(q url.Values, keys ...string) url.Values {
