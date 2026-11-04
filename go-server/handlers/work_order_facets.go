@@ -44,6 +44,17 @@ func vendorLabel(name string) string {
 // noWorkTypeLabel names items whose description the parser didn't recognize.
 const noWorkTypeLabel = "Belum dikenali"
 
+// workTypeBasis says where an item's work type was read from.
+func workTypeBasis(it woItemRow) string {
+	switch {
+	case !it.Recognized:
+		return ""
+	case it.FromActivity:
+		return "Aktivitas"
+	}
+	return "Deskripsi item"
+}
+
 func workTypeLabel(workType string) string {
 	if workType == "" {
 		return noWorkTypeLabel

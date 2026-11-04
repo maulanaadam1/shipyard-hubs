@@ -111,6 +111,8 @@ func main() {
 		r.With(findingsView).Get("/api/wo-findings", handlers.GetItemFindings)
 		r.With(findingsView).Get("/api/wo-findings/summary", handlers.GetItemFindingsSummary)
 		r.With(findingsView).Get("/api/wo-reference", handlers.GetItemReferences)
+		r.With(findingsView).Get("/api/wo-findings/unrecognized", handlers.GetUnrecognizedActivities)
+		r.With(findingsView).Get("/api/wo-findings/unrecognized/items", handlers.GetUnrecognizedActivityItems)
 		r.With(handlers.RequirePermission(handlers.ResourceItemFindings, "edit")).Post("/api/wo-findings/status", handlers.UpdateItemFindingStatus)
 		r.With(handlers.RequirePermission(handlers.ResourceItemFindings, "export")).Get("/api/wo-findings/export", handlers.ExportItemFindings)
 		// Financial Dashboard: billing transactions from the daily approval ledger.

@@ -598,6 +598,8 @@ func createTables() {
 		PRIMARY KEY (wo_id, item_id)
 	);`)
 	DB.Exec("CREATE INDEX IF NOT EXISTS idx_wo_item_parsed_work ON wo_item_parsed(work_type, size)")
+	// The work type came from the activity name, the description named none.
+	DB.Exec("ALTER TABLE wo_item_parsed ADD COLUMN from_activity BOOLEAN DEFAULT false")
 
 	// Reference unit costs per work type, size and unit (from wo_item_parsed),
 	// rebuilt by the findings job from approved items.

@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { Search, SearchCheck, ChevronLeft, ChevronRight, ArrowDown, ArrowUp, Eye, EyeOff, FileSpreadsheet, RotateCcw, X } from 'lucide-react';
 import { getHeaders } from '@/lib/api-client';
 import { useData } from '@/context/DataContext';
+import UnrecognizedActivities from './UnrecognizedActivities';
 
 // Work items the server flags for a check against reference unit costs
 // (wo_item_findings). ShipHub only points at them: fixes happen in SIAGA, and
@@ -35,6 +36,7 @@ export default function DataFindings() {
   const canExport = canAccess(RESOURCE, 'export');
 
   const [summary, setSummary] = useState<Summary | null>(null);
+  const [tab, setTab] = useState<'findings' | 'unrecognized'>('findings');
   const [rule, setRule] = useState('all');
   const [status, setStatus] = useState('open');
   // Items not approved yet come first: those can still be fixed before approval.
@@ -221,6 +223,23 @@ export default function DataFindings() {
       </header>
 
       <main className="w-full p-4 md:p-8 space-y-6">
+        <div role="tablist" aria-label="Jenis data" className="flex flex-wrap gap-2">
+          {([['findings', 'Temuan harga & isian'], ['unrecognized', 'Item belum dikenali (per aktivitas)']] as const).map(([key, label]) => (
+            <button
+              key={key}
+              role="tab"
+              aria-selected={tab === key}
+              onClick={() => setTab(key)}
+              className={`px-3 py-1.5 rounded-lg text-sm font-semibold transition ${tab === key ? 'bg-indigo-600 text-white shadow-sm' : 'bg-white border border-slate-200 text-slate-700 hover:bg-slate-100'}`}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+
+        {tab === 'unrecognized' && <UnrecognizedActivities formatIDR={formatIDR} formatNum={formatNum} />}
+
+        {tab === 'findings' && (<>
         <section className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {ruleKeys.map(key => {
             const c = summary?.counts?.[key] || {};
@@ -398,6 +417,7 @@ export default function DataFindings() {
             </div>
           </div>
         </section>
+        </>)}
       </main>
 
       {ignoreTarget && (

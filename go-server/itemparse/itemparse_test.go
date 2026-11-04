@@ -191,3 +191,20 @@ func derefInt(n *int) interface{} {
 	}
 	return *n
 }
+
+// The item's description decides; its activity only when the description
+// names no work, and never a project or cost heading.
+func TestParseItem(t *testing.T) {
+	plate := `Uk. 1200 mm x 600 mm x 10 mm x 1 lbr = 56.52 Kg, (supply dock)`
+	if p := ParseItem(plate, "HULL > Ganti baru plat bottom"); !p.FromActivity || p.WorkType != "Ganti baru plat" || p.Size != "plat 10 mm" || p.Source != "supply dock" {
+		t.Errorf("from activity: %+v", p)
+	}
+	if p := ParseItem(`Ganti baru mur dan baut steel uk. M24 x 80, 32 pcs`, "PIPA > Ganti baru pipa pendingin stern tube"); p.FromActivity || p.WorkType != "Ganti baru mur & baut steel" {
+		t.Errorf("the item decides: %+v", p)
+	}
+	for _, heading := range []string{"PEMBANGUNAN 1 UNIT KAPAL BARU MULTI PURPOSE CONTAINER", "Labour cost", "Perawatan fasilitas galangan", ""} {
+		if p := ParseItem(`TANGGAL 5 JULI 2024, 1 kali`, heading); p.Recognized || p.FromActivity {
+			t.Errorf("heading %q used: %+v", heading, p)
+		}
+	}
+}
