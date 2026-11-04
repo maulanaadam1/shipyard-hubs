@@ -7,7 +7,7 @@ import { useData } from '@/context/DataContext';
 // Work items flattened from every WO detail (wo_items), searchable by item,
 // cost, project, vendor or activity, with per-group cost summaries.
 
-type View = 'list' | 'project_item' | 'project_activity' | 'activity' | 'category' | 'item' | 'vendor_activity';
+type View = 'list' | 'project_item' | 'project_activity' | 'activity' | 'category' | 'item' | 'vendor_activity' | 'work_type' | 'work_type_size';
 
 const VIEWS: { key: View; label: string }[] = [
   { key: 'list', label: 'Daftar Item' },
@@ -17,6 +17,8 @@ const VIEWS: { key: View; label: string }[] = [
   { key: 'item', label: 'Per Item (Biaya)' },
   { key: 'category', label: 'Per Kategori' },
   { key: 'vendor_activity', label: 'Per Vendor per Aktivitas' },
+  { key: 'work_type', label: 'Per Jenis Pekerjaan' },
+  { key: 'work_type_size', label: 'Per Jenis Pekerjaan & Ukuran' },
 ];
 
 // Columns that identify a group in each summary view.
@@ -27,6 +29,9 @@ const GROUP_COLUMNS: Record<Exclude<View, 'list'>, { key: string; label: string 
   item: [{ key: 'label', label: 'Item' }, { key: 'unit', label: 'Satuan' }],
   category: [{ key: 'category', label: 'Kategori' }],
   vendor_activity: [{ key: 'vendor_name', label: 'Vendor' }, { key: 'activity_name', label: 'Aktivitas' }],
+  // Item names cleaned up into work types (wo_item_parsed); '' = not recognized.
+  work_type: [{ key: 'work_type', label: 'Jenis Pekerjaan' }],
+  work_type_size: [{ key: 'work_type', label: 'Jenis Pekerjaan' }, { key: 'size', label: 'Ukuran' }, { key: 'unit', label: 'Satuan' }],
 };
 
 // Summary group column -> /api/wo-items filter used to list that group's items.
@@ -37,7 +42,11 @@ const GROUP_FILTER_PARAM: Record<string, string> = {
   category: 'category',
   label: 'label',
   unit: 'unit',
+  work_type: 'work_type',
+  size: 'size',
 };
+
+const NO_WORK_TYPE = 'Belum dikenali';
 
 const DETAIL_PAGE_SIZE = 20;
 
@@ -105,13 +114,16 @@ export default function WorkOrderItems() {
   const [category, setCategory] = useState('All');
   const [project, setProject] = useState('All');
   const [vendor, setVendor] = useState('All');
+  const [workType, setWorkType] = useState('All');
+  // Cleaned-up name: All, recognized or unrecognized (no work type yet).
+  const [parse, setParse] = useState('All');
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
   const [pageSize, setPageSize] = useState(25);
   // The page belongs to the filters it was chosen under: when any filter, the
   // view or the page size changes, the page is 1 in that same render (an effect
   // resetting it would fetch the old page first, then page 1).
-  const filterKey = [debouncedSearch, projectType, status, category, project, vendor, startDate, endDate, view, pageSize].join('\u0001');
+  const filterKey = [debouncedSearch, projectType, status, category, project, vendor, workType, parse, startDate, endDate, view, pageSize].join('\u0001');
   const [pageState, setPageState] = useState({ key: filterKey, page: 1 });
   const page = pageState.key === filterKey ? pageState.page : 1;
   const setPage = (p: number) => setPageState({ key: filterKey, page: p });
@@ -126,7 +138,7 @@ export default function WorkOrderItems() {
   const [totalCost, setTotalCost] = useState(0);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-  const [facets, setFacets] = useState<{ categories: string[]; itemCount: number; woCount: number } | null>(null);
+  const [facets, setFacets] = useState<{ categories: string[]; workTypes?: string[]; itemCount: number; woCount: number } | null>(null);
   // Per-group item details in the summary views, keyed by the group's values.
   const [details, setDetails] = useState<Record<string, GroupDetail>>({});
   const [showAllDetails, setShowAllDetails] = useState(false);
@@ -155,6 +167,8 @@ export default function WorkOrderItems() {
     if (category !== 'All') params.set('category', category);
     if (project !== 'All') params.set('project', project);
     if (vendor !== 'All') params.set('vendor', vendor);
+    if (workType !== 'All') params.set('work_type', workType);
+    if (parse !== 'All') params.set('parse', parse);
     if (startDate) params.set('start_date', startDate);
     if (endDate) params.set('end_date', endDate);
     return params;
@@ -177,8 +191,10 @@ export default function WorkOrderItems() {
         const param = GROUP_FILTER_PARAM[c.key];
         const value = row[c.key] ?? '';
         if (!param) return;
-        // An empty vendor group is the "no vendor" bucket.
+        // An empty vendor group is the "no vendor" bucket, an empty work type
+        // the items not recognized yet.
         if (param === 'vendor' && value === '') params.set('vendor', 'Tanpa Vendor');
+        else if (param === 'work_type' && value === '') params.set('parse', 'unrecognized');
         else params.set(param, value);
       });
       unit?.unit_keys.forEach(k => params.append('unit_key', k));
@@ -280,6 +296,8 @@ export default function WorkOrderItems() {
         if (category !== 'All') params.set('category', category);
         if (project !== 'All') params.set('project', project);
         if (vendor !== 'All') params.set('vendor', vendor);
+        if (workType !== 'All') params.set('work_type', workType);
+        if (parse !== 'All') params.set('parse', parse);
         if (startDate) params.set('start_date', startDate);
         if (endDate) params.set('end_date', endDate);
         if (view !== 'list') params.set('group', view);
@@ -299,7 +317,7 @@ export default function WorkOrderItems() {
       }
     })();
     return () => controller.abort();
-  }, [page, pageSize, sort, dir, debouncedSearch, projectType, status, category, project, vendor, startDate, endDate, view]);
+  }, [page, pageSize, sort, dir, debouncedSearch, projectType, status, category, project, vendor, workType, parse, startDate, endDate, view]);
 
   // Excel export of the current view: every matching row with the current
   // filters and sort, built on the server (not just the visible page).
@@ -357,7 +375,7 @@ export default function WorkOrderItems() {
   const goToPage = (p: number) => setPage(Math.min(totalPages, Math.max(1, p)));
 
   const filtersActive = !!(searchTerm || projectType !== 'All' || status !== 'All' || category !== 'All' || project !== 'All'
-    || vendor !== 'All' || startDate || endDate);
+    || vendor !== 'All' || workType !== 'All' || parse !== 'All' || startDate || endDate);
   const resetFilters = () => {
     setSearchTerm('');
     setDebouncedSearch('');
@@ -366,6 +384,8 @@ export default function WorkOrderItems() {
     setCategory('All');
     setProject('All');
     setVendor('All');
+    setWorkType('All');
+    setParse('All');
     setStartDate('');
     setEndDate('');
     setShowAllDetails(false);
@@ -492,6 +512,18 @@ export default function WorkOrderItems() {
               <SearchableSelect value={vendor} onChange={setVendor} options={options.vendors} allLabel="Semua Vendor" />
             </div>
             <div className="space-y-1">
+              <label className={FIELD_LABEL}>Jenis Pekerjaan</label>
+              <SearchableSelect value={workType} onChange={setWorkType} options={facets?.workTypes || []} allLabel="Semua Jenis Pekerjaan" />
+            </div>
+            <div className="space-y-1">
+              <label htmlFor="wi-parse" className={FIELD_LABEL}>Nama Item Dirapikan</label>
+              <select id="wi-parse" value={parse} onChange={e => setParse(e.target.value)} className={FIELD_INPUT}>
+                <option value="All">Semua</option>
+                <option value="recognized">Sudah dikenali</option>
+                <option value="unrecognized">Belum dikenali</option>
+              </select>
+            </div>
+            <div className="space-y-1">
               <label className={FIELD_LABEL}>Tanggal Approval Dari</label>
               <input type="date" value={startDate} onChange={e => setStartDate(e.target.value)} className={FIELD_INPUT} />
             </div>
@@ -585,6 +617,9 @@ export default function WorkOrderItems() {
                       <tr key={`${r.wo_id}-${r.item_id}`} className="hover:bg-slate-50 align-top">
                         <td className="py-2.5 px-4 max-w-md">
                           <p className="font-semibold text-slate-800">{r.label || '-'}</p>
+                          {r.recognized
+                            ? <p className="text-[11px] text-indigo-700 mt-0.5">{r.work_type}{r.size ? ` · ${r.size}` : ''}{r.material ? ` · ${r.material}` : ''}</p>
+                            : <p className="text-[11px] text-slate-500 italic mt-0.5">{NO_WORK_TYPE}</p>}
                           <p className="text-[10px] text-slate-400 mt-0.5">{r.activity_name}</p>
                         </td>
                         <td className="py-2.5 px-4">
@@ -623,9 +658,13 @@ export default function WorkOrderItems() {
                         </td>
                         {groupColumns.map(c => (
                           <td key={c.key} className={`py-2.5 px-4 ${c.key === 'unit' ? 'whitespace-nowrap' : 'max-w-md'}`}>
-                            <span className={c.key === groupColumns[groupColumns.length - 1].key && c.key !== 'unit' ? 'font-semibold text-slate-800' : 'text-slate-600'}>
-                              {r[c.key] || '-'}
-                            </span>
+                            {c.key === 'work_type' && !r.work_type
+                              ? <span className="italic text-slate-500">{NO_WORK_TYPE}</span>
+                              : (
+                                <span className={c.key === groupColumns[groupColumns.length - 1].key && c.key !== 'unit' ? 'font-semibold text-slate-800' : 'text-slate-600'}>
+                                  {r[c.key] || '-'}
+                                </span>
+                              )}
                           </td>
                         ))}
                         <td className="py-2.5 px-4 text-right font-mono">{formatNum(r.item_count)}</td>

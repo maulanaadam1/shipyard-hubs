@@ -31,6 +31,8 @@ var woItemViewLabels = map[string]string{
 	"item":             "Per Item (Biaya)",
 	"category":         "Per Kategori",
 	"vendor_activity":  "Per Vendor per Aktivitas",
+	"work_type":        "Per Jenis Pekerjaan",
+	"work_type_size":   "Per Jenis Pekerjaan & Ukuran",
 }
 
 var woItemColumnLabels = map[string]string{
@@ -40,6 +42,8 @@ var woItemColumnLabels = map[string]string{
 	"activity_name": "Aktivitas",
 	"category":      "Kategori",
 	"vendor_name":   "Vendor",
+	"work_type":     "Jenis Pekerjaan",
+	"size":          "Ukuran",
 }
 
 var woItemStatusLabels = map[string]string{"approved": "Approved", "pending": "Pending", "rejected": "Rejected"}
@@ -144,13 +148,14 @@ func writeWoItemList(sw *excelize.StreamWriter, styles exportStyles, q url.Value
 		{"Kode WO", 16}, {"Kode JO", 18}, {"Proyek", 34}, {"Jenis Project", 12}, {"Vendor", 28},
 		{"Kategori", 22}, {"Aktivitas", 44}, {"Path", 11}, {"Item Pekerjaan", 44}, {"Satuan", 9},
 		{"Volume", 11}, {"Biaya Satuan", 16}, {"Total Biaya", 18},
+		{"Jenis Pekerjaan", 36}, {"Ukuran", 14}, {"Bahan", 14}, {"Sumber Material", 16},
 	}
 	if err := startSheet(sw, styles, columns); err != nil {
 		return 0, false, err
 	}
 
 	where, args := woItemFilters(q)
-	rows, err := db.Query(woItemColumns+woItemFrom+where+` ORDER BY `+woItemOrder(q)+` LIMIT ?`, append(args, woItemExportMaxRows+1)...)
+	rows, err := db.Query(woItemColumns+woItemParsedColumns+woItemFrom+where+` ORDER BY `+woItemOrder(q)+` LIMIT ?`, append(args, woItemExportMaxRows+1)...)
 	if err != nil {
 		return 0, false, err
 	}
@@ -161,7 +166,7 @@ func writeWoItemList(sw *excelize.StreamWriter, styles exportStyles, q url.Value
 		if n == woItemExportMaxRows {
 			return n, true, nil
 		}
-		it, err := scanWoItem(rows)
+		it, err := scanWoItemParsed(rows)
 		if err != nil {
 			return n, false, err
 		}
@@ -174,6 +179,7 @@ func writeWoItemList(sw *excelize.StreamWriter, styles exportStyles, q url.Value
 			excelize.Cell{StyleID: styles.number, Value: it.Volume},
 			excelize.Cell{StyleID: styles.money, Value: it.UnitCost},
 			excelize.Cell{StyleID: styles.money, Value: it.TotalCost},
+			workTypeLabel(it.WorkType), it.Size, it.Material, it.Source,
 		}); err != nil {
 			return n, false, err
 		}
@@ -233,6 +239,8 @@ func writeWoItemSummary(sw *excelize.StreamWriter, styles exportStyles, q url.Va
 		for i, name := range group.labels {
 			if name == "vendor_name" {
 				values = append(values, vendorLabel(s.Keys[i]))
+			} else if name == "work_type" {
+				values = append(values, workTypeLabel(s.Keys[i]))
 			} else {
 				values = append(values, s.Keys[i])
 			}
@@ -292,6 +300,8 @@ func writeExportFilterSheet(f *excelize.File, q url.Values, viewLabel string, ro
 		{"Status Approval", orAll(statusLabel(q.Get("status")), "Semua Status")},
 		{"Proyek", orAll(q.Get("project"), "Semua Proyek")},
 		{"Vendor", orAll(q.Get("vendor"), "Semua Vendor")},
+		{"Jenis Pekerjaan", orAll(q.Get("work_type"), "Semua Jenis Pekerjaan")},
+		{"Hasil Rapikan Nama", orAll(map[string]string{"recognized": "Dikenali", "unrecognized": "Belum dikenali"}[q.Get("parse")], "Semua")},
 		{"Tanggal Approval Dari", orAll(q.Get("start_date"), "-")},
 		{"Tanggal Approval Sampai", orAll(q.Get("end_date"), "-")},
 		{"Urutan", sortBy + " " + strings.ToLower(sortDir(q))},

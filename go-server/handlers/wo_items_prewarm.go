@@ -33,6 +33,8 @@ var woItemDefaultRequests = []struct {
 	{"/api/wo-items/summary", summaryDefault("item"), GetWorkOrderItemSummary},
 	{"/api/wo-items/summary", summaryDefault("category"), GetWorkOrderItemSummary},
 	{"/api/wo-items/summary", summaryDefault("vendor_activity"), GetWorkOrderItemSummary},
+	{"/api/wo-items/summary", summaryDefault("work_type"), GetWorkOrderItemSummary},
+	{"/api/wo-items/summary", summaryDefault("work_type_size"), GetWorkOrderItemSummary},
 }
 
 func summaryDefault(group string) url.Values {
