@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"shipyard/db"
+	"shipyard/itemparse"
 )
 
 // ResourceItemFindings is the RBAC resource of the Data Perlu Dicek menu.
@@ -60,9 +61,10 @@ var partPayment = regexp.MustCompile(`(?i)pembayaran|\btermin\b|\b(dp|term)\b[^%
 // others of its work type. Not so for labour (overtime is paid per hour,
 // which the reference doesn't split), for job packages described over several
 // lines, with a scope of work or at great length (the parser reads only their
-// first action), and for payment instalments.
-func unitPriceComparable(object, label string) bool {
-	if object == "Tenaga kerja" {
+// first action), and for payment instalments, docking bills, freight and fees
+// (itemparse.CostWithoutUnitPrice).
+func unitPriceComparable(action, object, label string) bool {
+	if object == "Tenaga kerja" || itemparse.CostWithoutUnitPrice[action] {
 		return false
 	}
 	low := strings.ToLower(label)
@@ -232,7 +234,7 @@ func evaluateFindings(items []pricedItem, refs map[referenceKey]itemReference) [
 func loadPricedItems() ([]pricedItem, error) {
 	rows, err := db.Query(`SELECT i.wo_id, i.item_id, COALESCE(p.work_type, ''), COALESCE(p.size, ''), COALESCE(i.unit, ''),
 			COALESCE(i.unit_cost, 0), COALESCE(i.volume, 0), COALESCE(i.status, ''), COALESCE(i.approval_date, ''), p.pipe_mm,
-			COALESCE(p.object, ''), COALESCE(i.label, '')
+			COALESCE(p.action, ''), COALESCE(p.object, ''), COALESCE(i.label, '')
 		FROM wo_items i JOIN wo_item_parsed p ON p.wo_id = i.wo_id AND p.item_id = i.item_id
 		WHERE p.recognized`)
 	if err != nil {
@@ -243,12 +245,12 @@ func loadPricedItems() ([]pricedItem, error) {
 	for rows.Next() {
 		var it pricedItem
 		var pipe *float64
-		var object, label string
+		var action, object, label string
 		if err := rows.Scan(&it.woID, &it.itemID, &it.workType, &it.size, &it.unit, &it.unitCost, &it.volume,
-			&it.status, &it.approvalDate, &pipe, &object, &label); err != nil {
+			&it.status, &it.approvalDate, &pipe, &action, &object, &label); err != nil {
 			return nil, err
 		}
-		it.noUnitPrice = !unitPriceComparable(object, label)
+		it.noUnitPrice = !unitPriceComparable(action, object, label)
 		it.unit = unitKey(it.unit)
 		it.approvalDate = dateOnly(it.approvalDate)
 		it.pipeMM = pipe

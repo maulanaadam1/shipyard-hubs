@@ -163,6 +163,7 @@ func TestUnitPriceComparable(t *testing.T) {
 		object, label string
 		want          bool
 	}{
+		{"Paket pekerjaan", "Termin 4 Progres 55%, 1", false},
 		{"Packing", `Ganti baru packing , bahan karet dia. 2" x 3 mm, jumlah 4 unit`, true},
 		{"Tenaga kerja", "Lembur 5 orang x 4 jam", false},
 		{"Crane", "buat baru crane store, 1 unit <br>-pipa tiang d 3 inch<br>-plat 10 mm", false},
@@ -174,7 +175,11 @@ func TestUnitPriceComparable(t *testing.T) {
 		{"Cat", "Pengecatan lambung, thinner 10%", true}, // a percentage alone is fine
 		{"Plat", strings.Repeat("Replating plat lambung kanan ", 8), false},
 	} {
-		if got := unitPriceComparable(c.object, c.label); got != c.want {
+		action := ""
+		if c.object == "Paket pekerjaan" {
+			action = "Pembayaran termin / progres"
+		}
+		if got := unitPriceComparable(action, c.object, c.label); got != c.want {
 			t.Errorf("unitPriceComparable(%q, %.40q) = %v, want %v", c.object, c.label, got, c.want)
 		}
 	}
