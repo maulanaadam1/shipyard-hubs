@@ -154,8 +154,9 @@ func TestParseAllCategories(t *testing.T) {
 			t.Errorf("%.60q\n  got  %s %q (recognized %v)\n  want %s %q", c.label, p.Rules, p.WorkType, p.Recognized, c.rules, c.work)
 		}
 	}
-	if !CostWithoutUnitPrice[Parse(`Termin 4 Progres 55%, 1`).Action] || CostWithoutUnitPrice[Parse(`Sewa Mobile Crane 50 Ton, 3 hari`).Action] {
-		t.Error("payments have no unit price, rentals do")
+	if !CostWithoutUnitPrice[Parse(`Termin 4 Progres 55%, 1`).Action] || !CostWithoutUnitPrice[Parse(`Rental Crane Bulan Mei 2025, 1`).Action] ||
+		CostWithoutUnitPrice[Parse(`Ultrasonic`).Action] {
+		t.Error("payments and rentals have no unit price, tests do")
 	}
 }
 
