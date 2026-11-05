@@ -93,7 +93,10 @@ export default function AIAssistant() {
     }
   };
   useEffect(() => { loadStatus(); }, []);
-  useEffect(() => { endRef.current?.scrollIntoView({ behavior: sending ? 'auto' : 'smooth', block: 'end' }); }, [messages, sending]);
+  // Follow the conversation; with no messages yet, stay at the top (the examples).
+  useEffect(() => {
+    if (messages.length) endRef.current?.scrollIntoView({ behavior: sending ? 'auto' : 'smooth', block: 'end' });
+  }, [messages, sending]);
 
   // updateLast changes the last message (the answer being written).
   const updateLast = (fn: (m: Message) => Message) =>
