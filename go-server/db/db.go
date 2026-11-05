@@ -608,6 +608,25 @@ func createTables() {
 	// The work type came from the activity name, the description named none.
 	DB.Exec("ALTER TABLE wo_item_parsed ADD COLUMN from_activity BOOLEAN DEFAULT false")
 
+	// AI Asisten: every question, the tools used and the answer (audit, daily
+	// limit, token use).
+	DB.Exec(`CREATE TABLE IF NOT EXISTS ai_chat_log (
+		id TEXT PRIMARY KEY,
+		user_id TEXT,
+		user_email TEXT,
+		question TEXT,
+		answer TEXT,
+		tools TEXT,
+		model TEXT,
+		stop_reason TEXT,
+		error TEXT,
+		input_tokens INTEGER DEFAULT 0,
+		output_tokens INTEGER DEFAULT 0,
+		cache_read_tokens INTEGER DEFAULT 0,
+		created_at TEXT
+	);`)
+	DB.Exec("CREATE INDEX IF NOT EXISTS idx_ai_chat_log_user ON ai_chat_log(user_id, created_at)")
+
 	// Reference unit costs per work type, size and unit (from wo_item_parsed),
 	// rebuilt by the findings job from approved items.
 	DB.Exec(`CREATE TABLE IF NOT EXISTS wo_item_reference (
