@@ -55,9 +55,10 @@ type aiTurn struct {
 
 // aiSession holds one answer's conversation in the provider's own format.
 // Next sends the results of the previous turn's calls (none on the first
-// turn) and returns the model's next turn.
+// turn) and returns the model's next turn. With onText the response is
+// streamed and each piece of text is passed to onText as it arrives.
 type aiSession interface {
-	Next(ctx context.Context, results []aiCallResult) (aiTurn, error)
+	Next(ctx context.Context, results []aiCallResult, onText func(string)) (aiTurn, error)
 }
 
 // aiRateLimitError: the provider asked us to slow down (HTTP 429).

@@ -626,6 +626,9 @@ func createTables() {
 		created_at TEXT
 	);`)
 	DB.Exec("CREATE INDEX IF NOT EXISTS idx_ai_chat_log_user ON ai_chat_log(user_id, created_at)")
+	// How long an answer took, and the asker's thumbs up/down on it.
+	DB.Exec("ALTER TABLE ai_chat_log ADD COLUMN duration_ms INTEGER DEFAULT 0")
+	DB.Exec("ALTER TABLE ai_chat_log ADD COLUMN feedback TEXT DEFAULT ''")
 	// AI Asisten provider settings (one row, edited by Admins in Pengaturan
 	// AI). The API key is stored encrypted.
 	DB.Exec(`CREATE TABLE IF NOT EXISTS ai_settings (
