@@ -66,6 +66,12 @@ type MovementActivity = {
 
 export default function ShipDocking() {
   const { projects, locations, dockStatuses, fetchData, canAccess } = useData();
+  // Job Orders synced from SIAGA hold the location id ("1"), ones edited here its name.
+  const locationName = (loc?: string | number | null) => {
+    if (loc === null || loc === undefined || loc === '') return '';
+    const found = (locations || []).find((l: any) => String(l.id) === String(loc));
+    return found?.name || String(loc);
+  };
 
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
@@ -376,7 +382,7 @@ export default function ShipDocking() {
                             </div>
                             <div>
                               <p className="text-sm font-bold text-slate-700">{project.shipname || '-'}</p>
-                              <p className="text-[10px] text-slate-400">{project.idproject} · {project.location || 'No Location'}</p>
+                              <p className="text-[10px] text-slate-400">{project.idproject} · {locationName(project.location) || 'No Location'}</p>
                             </div>
                           </div>
                         </td>

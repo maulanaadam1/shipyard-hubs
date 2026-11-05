@@ -78,6 +78,19 @@ func TestQueryAppData(t *testing.T) {
 		t.Errorf("secret column returned: %s", b)
 	}
 
+	// A Job Order's location id gets the location's name.
+	db.Exec("DELETE FROM master_locations WHERE id = 'ailoc-1'")
+	db.Exec("DELETE FROM projects WHERE id = 'aijo-1'")
+	defer db.Exec("DELETE FROM master_locations WHERE id = 'ailoc-1'")
+	defer db.Exec("DELETE FROM projects WHERE id = 'aijo-1'")
+	db.Exec(`INSERT INTO master_locations (id, name) VALUES ('ailoc-1', 'Slipway Uji')`)
+	db.Exec(`INSERT INTO projects (id, shipname, location) VALUES ('aijo-1', 'KM Uji Lokasi', 'ailoc-1')`)
+	out, err = run("ai-admin", `{"source": "job_orders", "search": "slipway uji", "columns": ["shipname", "location_name"]}`)
+	rows, _ = out["rows"].([]interface{})
+	if err != nil || len(rows) != 1 || rows[0].(map[string]interface{})["location_name"] != "Slipway Uji" {
+		t.Fatalf("location name: %v %v", out, err)
+	}
+
 	// Users, roles, permissions and credentials are not sources.
 	for _, src := range []string{"profiles", "users", "roles_master", "role_permissions", "sync_configs", "ai_settings", "ai_chat_log"} {
 		if _, err := run("ai-admin", `{"source": "`+src+`"}`); err == nil {
