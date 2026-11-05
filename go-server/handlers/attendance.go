@@ -1,11 +1,9 @@
 package handlers
 
 import (
-	"crypto/subtle"
 	"encoding/json"
 	"fmt"
 	"net/http"
-	"os"
 	"regexp"
 	"sort"
 	"strconv"
@@ -15,14 +13,12 @@ import (
 	"shipyard/db"
 )
 
-// Attendance: fingerprint punches from the attendance spreadsheet's
-// Master_RawData sheet. A separate Apps Script project
-// (apps-script/attendance-sync) reads the sheet and posts its rows here; the
-// spreadsheet's own script, which fills that sheet, is left untouched.
+// Attendance: fingerprint punches from ingest sources of kind "attendance",
+// e.g. the attendance spreadsheet's Master_RawData sheet, read by a separate
+// Apps Script project (apps-script/attendance-sync) that posts its rows to
+// /api/ingest/{source}. The spreadsheet's own script is left untouched.
 
 const (
-	attendanceMaxRows  = 5000
-	attendanceMaxBody  = 20 << 20
 	attendanceMaxDays  = 62
 	attendanceTimeForm = "2006-01-02 15:04:05"
 	// Punches before this hour belong to the previous day's shift.
@@ -51,7 +47,8 @@ func parsePunchTime(s string) (time.Time, bool) {
 	return time.Time{}, false
 }
 
-func attendanceString(v any) string {
+// cellString turns a JSON cell value into text (whole numbers without ".0").
+func cellString(v any) string {
 	switch x := v.(type) {
 	case nil:
 		return ""
@@ -65,15 +62,17 @@ func attendanceString(v any) string {
 	return strings.TrimSpace(fmt.Sprint(v))
 }
 
-// attendanceSyncToken is compared in constant time; an unset token turns the
-// endpoint off instead of leaving it open.
-func attendanceTokenOK(r *http.Request) (enabled, ok bool) {
-	want := os.Getenv("ATTENDANCE_SYNC_TOKEN")
-	if want == "" {
-		return false, false
+// columnName normalizes a header: "Kepala Subkon" and "kepala_subkon" match.
+func columnName(h string) string {
+	return attendanceHeaderClean.ReplaceAllString(strings.Join(strings.Fields(strings.ToLower(h)), "_"), "")
+}
+
+func normalizeRow(row map[string]any) map[string]any {
+	clean := make(map[string]any, len(row))
+	for k, v := range row {
+		clean[columnName(k)] = v
 	}
-	got := r.Header.Get("X-Sync-Token")
-	return true, subtle.ConstantTimeCompare([]byte(got), []byte(want)) == 1
+	return clean
 }
 
 type attendancePunch struct {
@@ -82,13 +81,8 @@ type attendancePunch struct {
 
 // attendancePunchFromRow maps one sheet row (header -> value) to a punch.
 func attendancePunchFromRow(row map[string]any) (attendancePunch, error) {
-	clean := make(map[string]any, len(row))
-	for k, v := range row {
-		// "Kepala Subkon" and "kepala_subkon" are the same column.
-		key := strings.Join(strings.Fields(strings.ToLower(k)), "_")
-		clean[attendanceHeaderClean.ReplaceAllString(key, "")] = v
-	}
-	get := func(k string) string { return attendanceString(clean[k]) }
+	clean := normalizeRow(row)
+	get := func(k string) string { return cellString(clean[k]) }
 
 	p := attendancePunch{
 		ID:           get("id"),
@@ -116,59 +110,27 @@ func attendancePunchFromRow(row map[string]any) (attendancePunch, error) {
 	return p, nil
 }
 
-// PostAttendanceSync upserts punches sent by the attendance Apps Script.
-// Auth: X-Sync-Token must equal ATTENDANCE_SYNC_TOKEN (no user session).
-func PostAttendanceSync(w http.ResponseWriter, r *http.Request) {
-	enabled, ok := attendanceTokenOK(r)
-	if !enabled {
-		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "sinkron absensi belum diaktifkan (ATTENDANCE_SYNC_TOKEN kosong)"})
-		return
-	}
-	if !ok {
-		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "token sinkron salah"})
-		return
-	}
-
-	var body struct {
-		Rows []map[string]any `json:"rows"`
-	}
-	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, attendanceMaxBody)).Decode(&body); err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "body JSON tidak valid: " + err.Error()})
-		return
-	}
-	if len(body.Rows) > attendanceMaxRows {
-		writeJSON(w, http.StatusRequestEntityTooLarge, map[string]string{"error": fmt.Sprintf("maksimal %d baris per kiriman", attendanceMaxRows)})
-		return
-	}
-
+// ingestAttendance stores rows for an "attendance" source.
+func ingestAttendance(sourceID string, rows []map[string]any) (ingestResult, error) {
+	res := ingestResult{Received: len(rows)}
 	var punches []attendancePunch
-	var problems []string
-	for _, row := range body.Rows {
+	for _, row := range rows {
 		p, err := attendancePunchFromRow(row)
 		if err != nil {
-			if len(problems) < 10 {
-				problems = append(problems, err.Error())
-			}
+			res.problem(err.Error())
 			continue
 		}
 		punches = append(punches, p)
 	}
-
-	changed, err := upsertAttendancePunches(punches)
+	changed, err := upsertAttendancePunches(sourceID, punches)
 	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "gagal menyimpan: " + err.Error()})
-		return
+		return res, err
 	}
-	writeJSON(w, http.StatusOK, map[string]any{
-		"received":  len(body.Rows),
-		"saved":     changed,                       // new or changed
-		"unchanged": len(punches) - changed,        // already stored as is
-		"skipped":   len(body.Rows) - len(punches), // unreadable rows, see problems
-		"problems":  problems,
-	})
+	res.Saved, res.Unchanged, res.Skipped = changed, len(punches)-changed, len(rows)-len(punches)
+	return res, nil
 }
 
-func upsertAttendancePunches(punches []attendancePunch) (int, error) {
+func upsertAttendancePunches(sourceID string, punches []attendancePunch) (int, error) {
 	if len(punches) == 0 {
 		return 0, nil
 	}
@@ -180,9 +142,9 @@ func upsertAttendancePunches(punches []attendancePunch) (int, error) {
 	// The script resends the last days every 5 minutes; rows whose content is
 	// unchanged are left alone, so a resend does not rewrite them.
 	stmt, err := tx.Prepare(db.FormatQuery(`INSERT INTO attendance_punches
-		(id, emp_code, first_name, last_name, kepala_subkon, nama_pt, punch_time, terminal_sn, raw, synced_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-		ON CONFLICT (id) DO UPDATE SET
+		(source_id, id, emp_code, first_name, last_name, kepala_subkon, nama_pt, punch_time, terminal_sn, raw, synced_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		ON CONFLICT (source_id, id) DO UPDATE SET
 			emp_code = excluded.emp_code, first_name = excluded.first_name, last_name = excluded.last_name,
 			kepala_subkon = excluded.kepala_subkon, nama_pt = excluded.nama_pt, punch_time = excluded.punch_time,
 			terminal_sn = excluded.terminal_sn, raw = excluded.raw, synced_at = excluded.synced_at
@@ -194,7 +156,7 @@ func upsertAttendancePunches(punches []attendancePunch) (int, error) {
 	now := time.Now().Format(time.RFC3339)
 	changed := 0
 	for _, p := range punches {
-		res, err := stmt.Exec(p.ID, p.EmpCode, p.FirstName, p.LastName, p.KepalaSubkon, p.NamaPT, p.PunchTime, p.TerminalSN, p.Raw, now)
+		res, err := stmt.Exec(sourceID, p.ID, p.EmpCode, p.FirstName, p.LastName, p.KepalaSubkon, p.NamaPT, p.PunchTime, p.TerminalSN, p.Raw, now)
 		if err != nil {
 			return 0, err
 		}
@@ -415,7 +377,7 @@ func attendanceHoursParam(v string, def float64) (float64, error) {
 }
 
 // GetAttendanceDaily: work hours per worker per day, and totals per vendor.
-// ?from=YYYY-MM-DD&to=YYYY-MM-DD (max 62 days), optional nama_pt, emp_code,
+// ?from=YYYY-MM-DD&to=YYYY-MM-DD (max 62 days), optional source, nama_pt, emp_code,
 // weekday_hours (default 8) and saturday_hours (default 4).
 func GetAttendanceDaily(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
@@ -448,7 +410,8 @@ func GetAttendanceDaily(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	rules := attendanceRules{WeekdayHours: weekday, SaturdayHours: sat}
-	days, err := loadAttendanceDays(from, to, q.Get("nama_pt"), q.Get("emp_code"), rules)
+	filters := map[string]string{"source_id": q.Get("source"), "nama_pt": q.Get("nama_pt"), "emp_code": q.Get("emp_code")}
+	days, err := loadAttendanceDays(from, to, filters, rules)
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
@@ -462,17 +425,17 @@ func GetAttendanceDaily(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-func loadAttendanceDays(from, to time.Time, namaPT, empCode string, rules attendanceRules) ([]attendanceDay, error) {
+// loadAttendanceDays reads the punches of the shift days from..to. filters
+// maps a column (source_id, nama_pt, emp_code) to the value it must equal.
+func loadAttendanceDays(from, to time.Time, filters map[string]string, rules attendanceRules) ([]attendanceDay, error) {
 	shift := time.Duration(attendanceShiftStartHour) * time.Hour
 	where := []string{"punch_time >= ?", "punch_time < ?"}
 	args := []any{from.Add(shift).Format(attendanceTimeForm), to.AddDate(0, 0, 1).Add(shift).Format(attendanceTimeForm)}
-	if namaPT != "" {
-		where = append(where, "nama_pt = ?")
-		args = append(args, namaPT)
-	}
-	if empCode != "" {
-		where = append(where, "emp_code = ?")
-		args = append(args, empCode)
+	for _, col := range []string{"source_id", "nama_pt", "emp_code"} {
+		if v := filters[col]; v != "" {
+			where = append(where, col+" = ?")
+			args = append(args, v)
+		}
 	}
 	rows, err := db.Query(`SELECT emp_code, COALESCE(first_name, ''), COALESCE(last_name, ''),
 		COALESCE(kepala_subkon, ''), COALESCE(nama_pt, ''), punch_time

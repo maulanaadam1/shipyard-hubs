@@ -1,10 +1,10 @@
 // Sends the attendance spreadsheet's Master_RawData rows to ShipHub
-// (POST /api/attendance/sync). Standalone project: it only reads the
+// (POST /api/ingest/<source>). Standalone project: it only reads the
 // spreadsheet and never touches the spreadsheet's own script (V3.js).
 //
 // Script properties (Project Settings > Script properties):
-//   SYNC_URL    https://<shiphub-domain>/api/attendance/sync
-//   SYNC_TOKEN  same value as ATTENDANCE_SYNC_TOKEN on the server
+//   SYNC_URL    https://<shiphub-domain>/api/ingest/<source id>
+//   SYNC_TOKEN  the source's token from Sumber Data Eksternal (shs_...)
 
 const SPREADSHEET_ID = '1YAF5qBOvwcJtoA_n3rWMfBjAZKXb9uUk68PnjYdup_U';
 const SHEET_NAME = 'Master_RawData';
@@ -68,7 +68,7 @@ function post_(rows) {
     const res = UrlFetchApp.fetch(cfg.url, {
       method: 'post',
       contentType: 'application/json',
-      headers: { 'X-Sync-Token': cfg.token },
+      headers: { Authorization: 'Bearer ' + cfg.token },
       payload: JSON.stringify({ rows: chunk }),
       muteHttpExceptions: true,
     });

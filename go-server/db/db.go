@@ -707,11 +707,38 @@ func createTables() {
 		value TEXT
 	);`)
 
-	// Fingerprint punches from the attendance spreadsheet (Master_RawData),
-	// pushed by apps-script/attendance-sync. id is the attendance machine's
-	// transaction id; raw keeps the whole sheet row as JSON.
-	DB.Exec(`CREATE TABLE IF NOT EXISTS attendance_punches (
+	// External data sources that push rows to POST /api/ingest/{id}, each with
+	// its own token (only the SHA-256 hash is stored). kind picks how rows are
+	// stored: "attendance" into attendance_punches, "records" into
+	// external_records keyed by key_column. Managed in Sumber Data Eksternal.
+	DB.Exec(`CREATE TABLE IF NOT EXISTS ingest_sources (
 		id TEXT PRIMARY KEY,
+		name TEXT NOT NULL,
+		kind TEXT NOT NULL,
+		key_column TEXT,
+		token_hash TEXT NOT NULL,
+		token_hint TEXT,
+		is_active INTEGER DEFAULT 1,
+		created_by TEXT,
+		created_at TEXT,
+		token_rotated_at TEXT,
+		last_received_at TEXT,
+		last_result TEXT
+	);`)
+	DB.Exec(`CREATE TABLE IF NOT EXISTS external_records (
+		source_id TEXT NOT NULL,
+		record_key TEXT NOT NULL,
+		data TEXT,
+		updated_at TEXT,
+		PRIMARY KEY (source_id, record_key)
+	);`)
+
+	// Fingerprint punches from attendance sources (e.g. the attendance
+	// spreadsheet's Master_RawData via apps-script/attendance-sync). id is the
+	// attendance machine's transaction id; raw keeps the whole row as JSON.
+	DB.Exec(`CREATE TABLE IF NOT EXISTS attendance_punches (
+		source_id TEXT NOT NULL,
+		id TEXT NOT NULL,
 		emp_code TEXT NOT NULL,
 		first_name TEXT,
 		last_name TEXT,
@@ -720,7 +747,8 @@ func createTables() {
 		punch_time TEXT NOT NULL,
 		terminal_sn TEXT,
 		raw TEXT,
-		synced_at TEXT
+		synced_at TEXT,
+		PRIMARY KEY (source_id, id)
 	);`)
 	DB.Exec("CREATE INDEX IF NOT EXISTS idx_attendance_punch_time ON attendance_punches(punch_time)")
 	DB.Exec("CREATE INDEX IF NOT EXISTS idx_attendance_emp_time ON attendance_punches(emp_code, punch_time)")

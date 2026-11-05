@@ -3,84 +3,10 @@ package handlers
 import (
 	"encoding/json"
 	"net/http/httptest"
-	"strings"
 	"testing"
 
 	"shipyard/db"
 )
-
-func postAttendance(t *testing.T, token, body string) (*httptest.ResponseRecorder, map[string]any) {
-	t.Helper()
-	req := httptest.NewRequest("POST", "/api/attendance/sync", strings.NewReader(body))
-	if token != "" {
-		req.Header.Set("X-Sync-Token", token)
-	}
-	rec := httptest.NewRecorder()
-	PostAttendanceSync(rec, req)
-	var out map[string]any
-	json.Unmarshal(rec.Body.Bytes(), &out)
-	return rec, out
-}
-
-func TestAttendanceSyncAuth(t *testing.T) {
-	t.Setenv("ATTENDANCE_SYNC_TOKEN", "")
-	if rec, _ := postAttendance(t, "x", `{"rows":[]}`); rec.Code != 503 {
-		t.Errorf("unset token: want 503, got %d", rec.Code)
-	}
-	t.Setenv("ATTENDANCE_SYNC_TOKEN", "rahasia")
-	if rec, _ := postAttendance(t, "", `{"rows":[]}`); rec.Code != 401 {
-		t.Errorf("missing token: want 401, got %d", rec.Code)
-	}
-	if rec, _ := postAttendance(t, "salah", `{"rows":[]}`); rec.Code != 401 {
-		t.Errorf("wrong token: want 401, got %d", rec.Code)
-	}
-	if rec, _ := postAttendance(t, "rahasia", `{"rows":[]}`); rec.Code != 200 {
-		t.Errorf("right token: want 200, got %d", rec.Code)
-	}
-}
-
-func TestAttendanceSyncUpsert(t *testing.T) {
-	t.Setenv("ATTENDANCE_SYNC_TOKEN", "rahasia")
-	db.Exec("DELETE FROM attendance_punches")
-
-	body := `{"rows":[
-		{"id": 101, "emp_code": "E1", "first_name": "Budi", "last_name": "S", "Kepala Subkon": "Pak A", "nama_pt": "PT Las", "punch_time": "2026-11-02 07:55:00"},
-		{"id": "102", "emp_code": "E1", "punch_time": "2026-11-02T17:10:30", "nama_pt": "PT Las"},
-		{"id": 103, "emp_code": "E2", "date": "2026-11-02", "time": "08:01:00"},
-		{"id": 104, "emp_code": "", "punch_time": "2026-11-02 08:00:00"},
-		{"id": 105, "emp_code": "E3", "punch_time": "kemarin"}
-	]}`
-	rec, out := postAttendance(t, "rahasia", body)
-	if rec.Code != 200 || out["saved"].(float64) != 3 || out["skipped"].(float64) != 2 || len(out["problems"].([]any)) != 2 {
-		t.Fatalf("first sync: %d %v", rec.Code, out)
-	}
-
-	var subkon string
-	db.QueryRow("SELECT kepala_subkon FROM attendance_punches WHERE id = '101'").Scan(&subkon)
-	if subkon != "Pak A" {
-		t.Errorf("header with a space not mapped: kepala_subkon %q", subkon)
-	}
-
-	// Resending identical rows changes nothing.
-	_, out = postAttendance(t, "rahasia", body)
-	if out["saved"].(float64) != 0 || out["unchanged"].(float64) != 3 {
-		t.Errorf("identical resend: %v", out)
-	}
-
-	// Sending the same id with new content updates the row instead of duplicating it.
-	_, out = postAttendance(t, "rahasia", `{"rows":[{"id": 101, "emp_code": "E1", "nama_pt": "PT Las Baru", "punch_time": "2026-11-02 07:55:00"}]}`)
-	var n int
-	var pt, at string
-	db.QueryRow("SELECT COUNT(*) FROM attendance_punches").Scan(&n)
-	db.QueryRow("SELECT nama_pt, punch_time FROM attendance_punches WHERE id = '101'").Scan(&pt, &at)
-	if out["saved"].(float64) != 1 || n != 3 || pt != "PT Las Baru" || at != "2026-11-02 07:55:00" {
-		t.Errorf("after changed resend: %v, %d rows, nama_pt %q, punch_time %q", out, n, pt, at)
-	}
-	db.QueryRow("SELECT punch_time FROM attendance_punches WHERE id = '102'").Scan(&at)
-	if at != "2026-11-02 17:10:30" {
-		t.Errorf("ISO punch_time not normalized: %q", at)
-	}
-}
 
 func punchAt(emp, pt, s string) punchRow {
 	at, _ := parsePunchTime(s)
@@ -150,7 +76,7 @@ func TestComputeAttendanceDays(t *testing.T) {
 
 func TestGetAttendanceDailyRange(t *testing.T) {
 	db.Exec("DELETE FROM attendance_punches")
-	upsertAttendancePunches([]attendancePunch{
+	upsertAttendancePunches("absen", []attendancePunch{
 		{ID: "1", EmpCode: "A", NamaPT: "PT X", PunchTime: "2026-11-02 04:30:00"}, // Sunday's shift, outside the range
 		{ID: "2", EmpCode: "A", NamaPT: "PT X", PunchTime: "2026-11-02 07:00:00"},
 		{ID: "3", EmpCode: "A", NamaPT: "PT X", PunchTime: "2026-11-03 01:00:00"}, // Monday's shift

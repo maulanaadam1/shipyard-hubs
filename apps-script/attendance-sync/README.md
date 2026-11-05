@@ -1,7 +1,7 @@
 # Sinkron absensi ke ShipHub
 
 Project Apps Script terpisah yang membaca sheet `Master_RawData` di spreadsheet absensi
-dan mengirim barisnya ke `POST /api/attendance/sync`. Script bawaan spreadsheet
+dan mengirim barisnya ke `POST /api/ingest/<id sumber>`. Script bawaan spreadsheet
 (menu "Sistem Absensi", `V3.js`) tidak diubah sama sekali; project ini hanya membaca.
 
 Jadwal:
@@ -12,8 +12,9 @@ Server menyimpan per `id` transaksi (upsert), jadi mengirim ulang tidak membuat 
 
 ## Pasang pertama kali
 
-1. Di server (EasyPanel), isi env `ATTENDANCE_SYNC_TOKEN` dengan string acak panjang
-   (`openssl rand -hex 32`), lalu deploy.
+1. Di ShipHub, buka **Sumber Data Eksternal** (Admin), tambah sumber jenis
+   **Absensi (fingerprint)**, lalu salin token yang muncul. Token hanya ditampilkan sekali;
+   kalau hilang, pakai **Ganti token**.
 2. Dari folder ini, buat project baru dan kirim kodenya:
    ```bash
    clasp create --type standalone --title "ShipHub Attendance Sync"
@@ -21,8 +22,8 @@ Server menyimpan per `id` transaksi (upsert), jadi mengirim ulang tidak membuat 
    ```
    `clasp create` menulis `.clasp.json` (berisi scriptId) di folder ini.
 3. `clasp open`, lalu di **Project Settings → Script properties** tambahkan:
-   - `SYNC_URL` = `https://<domain-shiphub>/api/attendance/sync`
-   - `SYNC_TOKEN` = nilai yang sama dengan `ATTENDANCE_SYNC_TOKEN`
+   - `SYNC_URL` = `https://<domain-shiphub>/api/ingest/<id sumber>` (tertulis di halaman sumber)
+   - `SYNC_TOKEN` = token dari langkah 1
 4. Di editor, jalankan `checkConfig` (harus selesai tanpa error), lalu `setupTriggers`
    sekali dan setujui izin akses (baca spreadsheet, akses URL luar, kelola trigger).
 5. Jalankan `syncAll` sekali untuk mengirim semua data lama.
@@ -34,7 +35,7 @@ Edit `Code.js` di sini, lalu `clasp push`. Trigger selalu menjalankan versi terb
 ## Melihat hasil
 
 `GET /api/attendance/daily?from=2026-11-01&to=2026-11-30` (login Admin) memberi jam kerja per
-karyawan per hari dan total per `nama_pt`. Parameter opsional: `nama_pt`, `emp_code`,
+karyawan per hari dan total per `nama_pt`. Parameter opsional: `source` (id sumber), `nama_pt`, `emp_code`,
 `weekday_hours` (default 8), `saturday_hours` (default 4).
 
 - `worked_minutes` hanya terisi bila absen masuk dan pulang ada (jam nyata).
