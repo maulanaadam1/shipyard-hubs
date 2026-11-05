@@ -47,6 +47,9 @@ type pricedItem struct {
 	unitCost, volume     float64
 	status, approvalDate string
 	pipeMM               *float64
+	// bundle: detail lines under the title (itemBundle). It counts towards
+	// references but gets no findings: its price covers more than the title.
+	bundle bool
 	// noUnitPrice: the cost isn't a unit price comparable within its work
 	// type (see unitPriceComparable); such items neither build references
 	// nor get price or pipe findings.
@@ -61,18 +64,33 @@ var partPayment = regexp.MustCompile(`(?i)pembayaran|\btermin\b|\b(dp|term)\b[^%
 // m3 (BORONGAN)", "Additional Work dan Rework ...", "Biaya Paket Uji Model".
 var lumpSum = regexp.MustCompile(`(?i)\bpaket\b|borongan|lump ?sum|additional work|\brework\b|\breward\b`)
 
+// reTitleEnd ends the title (first line) of a description.
+var reTitleEnd = regexp.MustCompile(`(?i)<br\s*/?>|\n`)
+
+// itemBundle: a description with detail lines under its title ("Kampas rem
+// rampdoor, 1 unit <br>- bongkar ... <br>- ganti baru ..."). Its price covers
+// the listed details too.
+func itemBundle(label string) bool {
+	return strings.Count(strings.ToLower(label), "<br") >= 2
+}
+
 // unitPriceComparable reports whether an item's cost can be compared with
-// others of its work type. Not so for labour (overtime is paid per hour,
-// which the reference doesn't split), for job packages described over several
-// lines, with a scope of work or at great length (the parser reads only their
-// first action), and for payment instalments, docking bills, freight and fees
-// (itemparse.CostWithoutUnitPrice).
+// others of its work type, i.e. counts towards its reference price. Not so
+// for labour (overtime is paid per hour, which the reference doesn't split),
+// job packages (a scope of work, a very long title, or detail lines under a
+// title that names no work: "ENGINE DEPARTMENT, 1 unit <br>- OH valve ..."),
+// payment instalments, lump sums, docking bills, freight, fees and rentals
+// (itemparse.CostWithoutUnitPrice). Detail lines under a title that names the
+// work are fine: the parser reads the title first.
 func unitPriceComparable(action, object, label string) bool {
 	if object == "Tenaga kerja" || itemparse.CostWithoutUnitPrice[action] {
 		return false
 	}
-	low := strings.ToLower(label)
-	if strings.Count(low, "<br") >= 2 || strings.Contains(low, "ruang lingkup") || len([]rune(label)) >= 200 {
+	parts := reTitleEnd.Split(label, 2)
+	if strings.Contains(strings.ToLower(label), "ruang lingkup") || len([]rune(itemparse.Clean(parts[0]))) >= 200 {
+		return false
+	}
+	if itemBundle(label) && !itemparse.Parse(parts[0]).Recognized {
 		return false
 	}
 	return !partPayment.MatchString(label) && !lumpSum.MatchString(label)
@@ -201,7 +219,7 @@ func formatRupiah(v float64) string { return "Rp " + formatThousands(v) }
 func evaluateFindings(items []pricedItem, refs map[referenceKey]itemReference) []itemFinding {
 	var out []itemFinding
 	for _, it := range items {
-		if it.noUnitPrice {
+		if it.noUnitPrice || it.bundle {
 			continue
 		}
 		if it.pipeMM != nil && *it.pipeMM > maxPipeMM {
@@ -255,6 +273,7 @@ func loadPricedItems() ([]pricedItem, error) {
 			return nil, err
 		}
 		it.noUnitPrice = !unitPriceComparable(action, object, label)
+		it.bundle = itemBundle(label)
 		it.unit = unitKey(it.unit)
 		it.approvalDate = dateOnly(it.approvalDate)
 		it.pipeMM = pipe
@@ -431,7 +450,7 @@ func RunItemFindings() (findingsSync, error) {
 	now := time.Now().Format("2006-01-02 15:04:05")
 	outOfScope := map[[2]string]bool{}
 	for _, it := range items {
-		if it.noUnitPrice {
+		if it.noUnitPrice || it.bundle {
 			outOfScope[[2]string{it.woID, it.itemID}] = true
 		}
 	}
