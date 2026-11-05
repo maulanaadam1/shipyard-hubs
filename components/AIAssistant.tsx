@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import {
   Bot, Send, Plus, Database, Copy, Check, ThumbsUp, ThumbsDown, Loader2, FileSpreadsheet, History, Trash2, X,
-  FileText, Receipt, Tags, AlertTriangle, ChevronDown, CornerDownRight,
+  FileText, Tags, Ship, Package, ChevronDown, CornerDownRight,
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { getHeaders } from '@/lib/api-client';
@@ -30,6 +30,7 @@ const TOOL_LABELS: Record<string, string> = {
   price_reference: 'Harga Acuan',
   data_findings: 'Data Perlu Dicek',
   unrecognized_activities: 'Item belum dikenali',
+  query_app_data: 'Data aplikasi',
 };
 
 const PROGRESS_LABELS: Record<string, string> = {
@@ -40,13 +41,14 @@ const PROGRESS_LABELS: Record<string, string> = {
   price_reference: 'Mengambil harga acuan',
   data_findings: 'Memeriksa data perlu dicek',
   unrecognized_activities: 'Memeriksa item belum dikenali',
+  query_app_data: 'Membaca data aplikasi',
 };
 
 const CATEGORIES = [
-  { icon: FileText, title: 'Work Order', questions: ['Berapa WO yang masih Waiting dan berapa nilainya?', 'WO terbesar bulan ini per kapal'] },
-  { icon: Receipt, title: 'Tagihan', questions: ['Tagihan approved sebulan terakhir, per minggu', 'Tagihan per vendor 3 bulan terakhir'] },
-  { icon: Tags, title: 'Harga acuan', questions: ['Berapa harga wajar bongkar & ganti baru kampas rem?', 'Harga acuan pekerjaan sandblasting'] },
-  { icon: AlertTriangle, title: 'Perlu dicek', questions: ['Item belum approved yang harganya perlu dicek', 'Aktivitas yang item-nya belum dikenali'] },
+  { icon: FileText, title: 'Work Order dan tagihan', questions: ['Berapa WO yang masih Waiting dan berapa nilainya?', 'Tagihan approved sebulan terakhir, per minggu'] },
+  { icon: Tags, title: 'Harga dan data perlu dicek', questions: ['Berapa harga wajar bongkar & ganti baru kampas rem?', 'Item belum approved yang harganya perlu dicek'] },
+  { icon: Ship, title: 'Job Order dan docking', questions: ['Kapal apa saja yang sedang docking?', 'Job Order yang aktif per lokasi dock'] },
+  { icon: Package, title: 'Material dan peralatan', questions: ['Request material yang belum dikirim per Job Order', 'Peralatan yang sedang dipinjam'] },
 ];
 
 const describeInput = (input: Record<string, unknown>) =>

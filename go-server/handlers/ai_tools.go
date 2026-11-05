@@ -34,6 +34,9 @@ type aiTool struct {
 	Description string
 	Schema      map[string]interface{}
 	Resource    string
+	// Available, when set, replaces the view check on Resource (a tool over
+	// several pages' data checks each page itself).
+	Available func(r *http.Request) bool
 	// Run decodes and validates input (an error is shown to the model as a
 	// tool error it can correct) and returns a JSON-serialisable result.
 	Run func(r *http.Request, input json.RawMessage) (interface{}, error)
@@ -165,10 +168,18 @@ func cleanForModel(v interface{}) interface{} {
 }
 
 // availableAITools are the tools the request's user may use.
+// allowed reports whether the user may use the tool.
+func (t aiTool) allowed(r *http.Request) bool {
+	if t.Available != nil {
+		return t.Available(r)
+	}
+	return HasResourcePermission(r, t.Resource, "view")
+}
+
 func availableAITools(r *http.Request) []aiTool {
 	var out []aiTool
 	for _, t := range aiTools() {
-		if HasResourcePermission(r, t.Resource, "view") {
+		if t.allowed(r) {
 			out = append(out, t)
 		}
 	}
@@ -205,7 +216,7 @@ func RunAITool(w http.ResponseWriter, r *http.Request) {
 		json.NewEncoder(w).Encode(map[string]interface{}{"error": "alat tidak dikenal: " + name, "is_error": true})
 		return
 	}
-	if !HasResourcePermission(r, tool.Resource, "view") {
+	if !tool.allowed(r) {
 		w.WriteHeader(http.StatusForbidden)
 		json.NewEncoder(w).Encode(map[string]interface{}{"error": "Anda tidak punya akses view untuk menu " + tool.Resource, "is_error": true})
 		return

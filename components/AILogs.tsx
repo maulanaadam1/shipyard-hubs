@@ -24,7 +24,7 @@ type Logs = {
 const TOOL_LABELS: Record<string, string> = {
   search_work_orders: 'Pencarian WO', get_work_order: 'Detail WO', billing_summary: 'Tagihan',
   search_work_items: 'Item Pekerjaan WO', price_reference: 'Harga Acuan', data_findings: 'Data Perlu Dicek',
-  unrecognized_activities: 'Item belum dikenali',
+  unrecognized_activities: 'Item belum dikenali', query_app_data: 'Data aplikasi',
 };
 
 const fmt = (n: number) => new Intl.NumberFormat('id-ID').format(n || 0);
