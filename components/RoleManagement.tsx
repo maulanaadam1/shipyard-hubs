@@ -29,6 +29,7 @@ const RESOURCES = [
   { id: 'Item Pekerjaan WO', type: 'menu' },
   { id: 'Data Perlu Dicek', type: 'menu' },
   { id: 'Harga Acuan', type: 'menu' },
+  { id: 'AI Asisten', type: 'menu' },
   { id: 'Ship Docking', type: 'menu' },
   { id: 'Request', type: 'menu' },
   { id: 'Release', type: 'menu' },
