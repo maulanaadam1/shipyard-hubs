@@ -45,6 +45,7 @@ func TestEvaluateFindings(t *testing.T) {
 		{woID: "1", itemID: "b", workType: "pipa", size: `2"`, unit: "m", unitCost: 400, volume: 3},  // far above
 		{woID: "1", itemID: "c", workType: "pipa", size: `3"`, unit: "m", unitCost: 9999, volume: 1}, // no reference
 		{woID: "1", itemID: "d", workType: "pipa", size: `2"`, unit: "m", pipeMM: &long},
+		{woID: "1", itemID: "e", workType: "pipa", size: `2"`, unit: "m", unitCost: 900, volume: 1, bundle: true, pipeMM: &long},
 	}
 	got := map[string]itemFinding{}
 	for _, f := range evaluateFindings(items, ref) {
@@ -166,7 +167,9 @@ func TestUnitPriceComparable(t *testing.T) {
 		{"Paket pekerjaan", "Termin 4 Progres 55%, 1", false},
 		{"Packing", `Ganti baru packing , bahan karet dia. 2" x 3 mm, jumlah 4 unit`, true},
 		{"Tenaga kerja", "Lembur 5 orang x 4 jam", false},
-		{"Crane", "buat baru crane store, 1 unit <br>-pipa tiang d 3 inch<br>-plat 10 mm", false},
+		{"Crane / hoist", "buat baru crane store, 1 unit <br>-pipa tiang d 3 inch<br>-plat 10 mm", true},
+		{"Kampas rem", "Kampas rem rampdoor haluan kanan, 1 unit <br>-bongkar servis ganti baru<br>-kampas uk. 2400 x 100 x 10 mm", true},
+		{"Valve (lain)", "ENGINE DEPARTMENT, 1 unit <br>-OH PV VALVE (10 Unit)<br>-OH A/E Fuel Injection Pump", false},
 		{"Kapal", "Jasa Turun Kapal Tongkang 180 Feet Ruang Lingkup Perkerjaan: 1. Mobilisasi", false},
 		{"Blasting", "Pekerjaan Blasting dan Painting 2 Kapal Tongkang, Pembayaran Termin X 10%, 1", false},
 		{"Pipa", "Pekerjaan sistem pipa, ventilasi, electrical (DP 40%), 1", false},
