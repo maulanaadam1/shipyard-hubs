@@ -123,6 +123,8 @@ func main() {
 		aiView := handlers.RequirePermission(handlers.ResourceAIAssistant, "view")
 		r.With(aiView).Get("/api/ai/status", handlers.GetAIStatus)
 		r.With(aiView).Post("/api/ai/chat", handlers.PostAIChat)
+		r.With(aiView).Post("/api/ai/feedback", handlers.PostAIFeedback)
+		r.With(handlers.RequireAdmin).Get("/api/ai/logs", handlers.GetAILogs)
 		r.Post("/api/ai/tools/{name}", handlers.RunAITool)
 		r.With(handlers.RequireAdmin).Get("/api/ai/settings", handlers.GetAISettings)
 		r.With(handlers.RequireAdmin).Put("/api/ai/settings", handlers.PutAISettings)

@@ -1,14 +1,19 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Bot, Send, RotateCcw, Database } from 'lucide-react';
+import { Bot, Send, RotateCcw, Database, Copy, Check, ThumbsUp, ThumbsDown, Loader2 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { getHeaders } from '@/lib/api-client';
+import AIMarkdown from './AIMarkdown';
 
-// AI Asisten: questions about ShipHub data, answered by the AI provider set in Pengaturan AI with the
-// read-only tools of the backend (/api/ai/chat). The conversation lives in
-// this page (text only); each answer lists the data it used.
+// AI Asisten: questions about ShipHub data, answered by the AI provider set in
+// Pengaturan AI with the read-only tools of the backend (/api/ai/chat,
+// streamed as server-sent events). The conversation lives in this page (text
+// only); each answer lists the data it used and can be rated.
 
 type ToolCall = { name: string; input: Record<string, unknown>; is_error: boolean };
-type Message = { role: 'user' | 'assistant'; content: string; tools?: ToolCall[]; error?: boolean };
+type Message = {
+  role: 'user' | 'assistant'; content: string; tools?: ToolCall[]; error?: boolean;
+  id?: string; feedback?: 'up' | 'down' | ''; streaming?: boolean; activity?: string[];
+};
 type Status = { enabled: boolean; provider: string; model: string; daily_limit: number; used_today: number; tools: string[]; is_admin: boolean };
 
 const TOOL_LABELS: Record<string, string> = {
@@ -21,6 +26,16 @@ const TOOL_LABELS: Record<string, string> = {
   unrecognized_activities: 'Item belum dikenali',
 };
 
+const PROGRESS_LABELS: Record<string, string> = {
+  search_work_orders: 'Mencari Work Order',
+  get_work_order: 'Membuka detail WO',
+  billing_summary: 'Menghitung tagihan',
+  search_work_items: 'Mencari item pekerjaan',
+  price_reference: 'Mengambil harga acuan',
+  data_findings: 'Memeriksa data perlu dicek',
+  unrecognized_activities: 'Memeriksa item belum dikenali',
+};
+
 const EXAMPLES = [
   'Berapa WO yang masih Waiting dan berapa nilainya?',
   'Berapa tagihan yang di-approve sebulan terakhir, per minggu?',
@@ -31,12 +46,39 @@ const EXAMPLES = [
 const describeInput = (input: Record<string, unknown>) =>
   Object.entries(input || {}).map(([k, v]) => `${k}: ${typeof v === 'string' ? v : JSON.stringify(v)}`).join(', ');
 
+// readEvents reads server-sent events from a fetch response.
+async function readEvents(res: Response, onEvent: (event: string, data: any) => void) {
+  const reader = res.body!.getReader();
+  const decoder = new TextDecoder();
+  let buffer = '';
+  for (;;) {
+    const { value, done } = await reader.read();
+    buffer += decoder.decode(value || new Uint8Array(), { stream: !done });
+    let sep: number;
+    while ((sep = buffer.indexOf('\n\n')) >= 0) {
+      const chunk = buffer.slice(0, sep);
+      buffer = buffer.slice(sep + 2);
+      let event = 'message';
+      const data: string[] = [];
+      for (const line of chunk.split('\n')) {
+        if (line.startsWith('event:')) event = line.slice(6).trim();
+        else if (line.startsWith('data:')) data.push(line.slice(5).trimStart());
+      }
+      if (data.length) {
+        try { onEvent(event, JSON.parse(data.join('\n'))); } catch { /* a malformed event is skipped */ }
+      }
+    }
+    if (done) break;
+  }
+}
+
 export default function AIAssistant() {
   const [status, setStatus] = useState<Status | null>(null);
   const [statusError, setStatusError] = useState('');
   const [messages, setMessages] = useState<Message[]>([]);
   const [draft, setDraft] = useState('');
   const [sending, setSending] = useState(false);
+  const [copied, setCopied] = useState<number | null>(null);
   const endRef = useRef<HTMLDivElement>(null);
 
   const loadStatus = async () => {
@@ -51,32 +93,80 @@ export default function AIAssistant() {
     }
   };
   useEffect(() => { loadStatus(); }, []);
-  useEffect(() => { endRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [messages, sending]);
+  useEffect(() => { endRef.current?.scrollIntoView({ behavior: sending ? 'auto' : 'smooth', block: 'end' }); }, [messages, sending]);
+
+  // updateLast changes the last message (the answer being written).
+  const updateLast = (fn: (m: Message) => Message) =>
+    setMessages(prev => (prev.length ? [...prev.slice(0, -1), fn(prev[prev.length - 1])] : prev));
 
   const send = async (text: string) => {
     const question = text.trim();
     if (!question || sending) return;
-    const history = messages.filter(m => !m.error);
-    const next: Message[] = [...messages, { role: 'user', content: question }];
-    setMessages(next);
+    const history = messages.filter(m => !m.error && !m.streaming);
+    setMessages([...messages, { role: 'user', content: question },
+      { role: 'assistant', content: '', streaming: true, activity: ['Membaca pertanyaan'] }]);
     setDraft('');
     setSending(true);
     try {
       const headers = await getHeaders();
       const res = await fetch('/api/ai/chat', {
         method: 'POST',
-        headers,
+        headers: { ...headers, Accept: 'text/event-stream' },
         body: JSON.stringify({ messages: [...history, { role: 'user', content: question }].map(m => ({ role: m.role, content: m.content })) }),
       });
-      const body = await res.json().catch(() => null);
-      if (!res.ok) throw new Error(body?.error || `server membalas HTTP ${res.status}`);
-      setMessages([...next, { role: 'assistant', content: body.answer, tools: body.tool_calls }]);
+      if (!res.ok) {
+        const body = await res.json().catch(() => null);
+        throw new Error(body?.error || `server membalas HTTP ${res.status}`);
+      }
+      if (!(res.headers.get('Content-Type') || '').includes('text/event-stream')) {
+        const body = await res.json();
+        updateLast(() => ({ role: 'assistant', content: body.answer, tools: body.tool_calls, id: body.id, feedback: '' }));
+        return;
+      }
+      let finished = false;
+      await readEvents(res, (event, data) => {
+        if (event === 'round') {
+          updateLast(m => ({ ...m, content: '' }));
+        } else if (event === 'tool') {
+          const label = PROGRESS_LABELS[data.name] || `Menjalankan ${data.name}`;
+          const detail = describeInput(data.input);
+          updateLast(m => ({ ...m, activity: [...(m.activity || []), detail ? `${label} (${detail})` : label] }));
+        } else if (event === 'text') {
+          updateLast(m => ({ ...m, content: m.content + (data.delta || '') }));
+        } else if (event === 'done') {
+          finished = true;
+          updateLast(() => ({ role: 'assistant', content: data.answer, tools: data.tool_calls, id: data.id, feedback: '' }));
+        } else if (event === 'error') {
+          finished = true;
+          updateLast(() => ({ role: 'assistant', content: data.error || 'Gagal menghubungi AI Asisten.', error: true }));
+        }
+      });
+      if (!finished) throw new Error('Koneksi terputus sebelum jawaban selesai. Coba lagi.');
     } catch (e: any) {
-      setMessages([...next, { role: 'assistant', content: e?.message || 'Gagal menghubungi AI Asisten.', error: true }]);
+      updateLast(() => ({ role: 'assistant', content: e?.message || 'Gagal menghubungi AI Asisten.', error: true }));
     } finally {
       setSending(false);
       loadStatus();
     }
+  };
+
+  const rate = async (index: number, rating: 'up' | 'down') => {
+    const m = messages[index];
+    if (!m?.id) return;
+    const next = m.feedback === rating ? '' : rating;
+    setMessages(prev => prev.map((x, i) => (i === index ? { ...x, feedback: next } : x)));
+    try {
+      const headers = await getHeaders();
+      await fetch('/api/ai/feedback', { method: 'POST', headers, body: JSON.stringify({ id: m.id, rating: next }) });
+    } catch { /* the rating is a hint; a failed save is not shown */ }
+  };
+
+  const copy = async (index: number) => {
+    try {
+      await navigator.clipboard.writeText(messages[index].content);
+      setCopied(index);
+      setTimeout(() => setCopied(c => (c === index ? null : c)), 1500);
+    } catch { /* clipboard blocked by the browser */ }
   };
 
   const remaining = status ? Math.max(0, status.daily_limit - status.used_today) : 0;
@@ -129,33 +219,65 @@ export default function AIAssistant() {
           </section>
         )}
 
-        <div className="flex flex-col gap-3" aria-live="polite">
+        <div className="flex flex-col gap-3" aria-live="polite" aria-busy={sending}>
           {messages.map((m, i) => (
             <div key={i} className={`flex ${m.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-              <div className={`max-w-[85%] rounded-2xl px-4 py-3 text-sm whitespace-pre-wrap ${
-                m.role === 'user' ? 'bg-indigo-600 text-white'
-                  : m.error ? 'bg-rose-50 text-rose-800 border border-rose-200'
+              <div className={`max-w-[92%] md:max-w-[85%] min-w-0 rounded-2xl px-4 py-3 text-sm ${
+                m.role === 'user' ? 'bg-indigo-600 text-white whitespace-pre-wrap'
+                  : m.error ? 'bg-rose-50 text-rose-800 border border-rose-200 whitespace-pre-wrap'
                   : 'bg-white text-slate-800 border border-slate-200'}`}>
-                {m.content}
-                {m.tools && m.tools.length > 0 && (
-                  <div className="mt-3 pt-2 border-t border-slate-100 flex flex-wrap items-center gap-1.5 text-xs text-slate-600 whitespace-normal">
+                {m.role === 'user' || m.error ? m.content : (
+                  <>
+                    {m.streaming && (
+                      <ul className="mb-2 flex flex-col gap-1 text-xs text-slate-500" aria-label="Progres jawaban">
+                        {(m.activity || []).map((a, j, all) => (
+                          <li key={j} className="flex items-start gap-1.5">
+                            {j === all.length - 1 && !m.content
+                              ? <Loader2 size={12} className="mt-0.5 animate-spin shrink-0" aria-hidden="true" />
+                              : <Check size={12} className="mt-0.5 text-emerald-600 shrink-0" aria-hidden="true" />}
+                            <span className="break-words min-w-0">{a}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                    {m.content && <AIMarkdown text={m.content} />}
+                    {m.streaming && m.content && <span className="inline-block w-1.5 h-4 align-text-bottom bg-slate-400 animate-pulse" aria-hidden="true" />}
+                  </>
+                )}
+                {!m.streaming && m.tools && m.tools.length > 0 && (
+                  <div className="mt-3 pt-2 border-t border-slate-100 flex flex-wrap items-center gap-1.5 text-xs text-slate-600">
                     <Database size={12} aria-hidden="true" /> Sumber data:
                     {m.tools.map((t, j) => (
                       <span key={j} title={describeInput(t.input)}
-                        className={`px-1.5 py-0.5 rounded ${t.is_error ? 'bg-rose-50 text-rose-700' : 'bg-slate-100 text-slate-700'}`}>
+                        className={`px-1.5 py-0.5 rounded break-words ${t.is_error ? 'bg-rose-50 text-rose-700' : 'bg-slate-100 text-slate-700'}`}>
                         {TOOL_LABELS[t.name] || t.name}{describeInput(t.input) ? ` (${describeInput(t.input)})` : ''}
                       </span>
                     ))}
                   </div>
                 )}
+                {m.role === 'assistant' && !m.error && !m.streaming && (
+                  <div className="mt-2 flex items-center gap-1 text-slate-500">
+                    <button type="button" onClick={() => copy(i)}
+                      className="inline-flex items-center gap-1 px-1.5 py-1 rounded text-xs hover:bg-slate-100 hover:text-slate-800">
+                      {copied === i ? <Check size={13} aria-hidden="true" /> : <Copy size={13} aria-hidden="true" />} {copied === i ? 'Tersalin' : 'Salin'}
+                    </button>
+                    {m.id && (
+                      <>
+                        <button type="button" onClick={() => rate(i, 'up')} aria-label="Jawaban membantu" aria-pressed={m.feedback === 'up'} title="Jawaban membantu"
+                          className={`p-1.5 rounded hover:bg-slate-100 ${m.feedback === 'up' ? 'text-emerald-600' : 'hover:text-slate-800'}`}>
+                          <ThumbsUp size={13} aria-hidden="true" />
+                        </button>
+                        <button type="button" onClick={() => rate(i, 'down')} aria-label="Jawaban salah atau kurang membantu" aria-pressed={m.feedback === 'down'} title="Jawaban salah atau kurang membantu"
+                          className={`p-1.5 rounded hover:bg-slate-100 ${m.feedback === 'down' ? 'text-rose-600' : 'hover:text-slate-800'}`}>
+                          <ThumbsDown size={13} aria-hidden="true" />
+                        </button>
+                      </>
+                    )}
+                  </div>
+                )}
               </div>
             </div>
           ))}
-          {sending && (
-            <div className="flex justify-start">
-              <div className="rounded-2xl px-4 py-3 text-sm bg-white text-slate-500 border border-slate-200">Mencari data dan menyusun jawaban…</div>
-            </div>
-          )}
           <div ref={endRef} />
         </div>
 
@@ -176,7 +298,7 @@ export default function AIAssistant() {
           />
           <button type="submit" disabled={!canAsk || sending || !draft.trim()} aria-label="Kirim pertanyaan"
             className="self-end inline-flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-semibold bg-indigo-600 text-white hover:bg-indigo-700 disabled:opacity-50">
-            <Send size={14} /> Kirim
+            {sending ? <Loader2 size={14} className="animate-spin" aria-hidden="true" /> : <Send size={14} aria-hidden="true" />} Kirim
           </button>
         </form>
       </main>

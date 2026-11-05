@@ -285,7 +285,7 @@ func TestAISettings(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), 60*time.Second)
 	defer cancel()
 	start := time.Now()
-	turn, err := session.Next(ctx, nil)
+	turn, err := session.Next(ctx, nil, nil)
 	if err != nil {
 		json.NewEncoder(w).Encode(map[string]interface{}{"ok": false, "error": err.Error(), "provider": cfg.Provider, "model": cfg.Model})
 		return

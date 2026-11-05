@@ -91,9 +91,11 @@ export default function WorkOrderDashboard() {
   const [uploadError, setUploadError] = useState("");
 
   // Filter States
-  const [searchTerm, setSearchTerm] = useState("");
+  // ?search=WO... (links from AI Asisten) opens the dashboard on that WO, all dates.
+  const [initialSearch] = useState(() => new URLSearchParams(window.location.search).get('search') || '');
+  const [searchTerm, setSearchTerm] = useState(initialSearch);
   // Server queries use the debounced value so typing doesn't fire a request per keystroke.
-  const [debouncedSearch, setDebouncedSearch] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState(initialSearch);
   const [selectedProject, setSelectedProject] = useState("All");
   const [selectedStatus, setSelectedStatus] = useState("All");
   // Internal (facility) vs external (ship) Job Orders.
@@ -102,7 +104,7 @@ export default function WorkOrderDashboard() {
   
   
   // Date Filtering States
-  const [datePreset, setDatePreset] = useState("week"); // Options: "week", "month", "3months", "6months", "year", "all", "custom"
+  const [datePreset, setDatePreset] = useState(initialSearch ? "all" : "week"); // Options: "week", "month", "3months", "6months", "year", "all", "custom"
   const [customStartDate, setCustomStartDate] = useState("");
   const [customEndDate, setCustomEndDate] = useState("");
 

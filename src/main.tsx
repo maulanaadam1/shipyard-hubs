@@ -76,6 +76,7 @@ import DataFindings from '../components/DataFindings';
 import PriceReference from '../components/PriceReference';
 import AIAssistant from '../components/AIAssistant';
 import AISettings from '../components/AISettings';
+import AILogs from '../components/AILogs';
 import FinancialDashboard from '../components/FinancialDashboard';
 import ApiSyncManagement from '../components/ApiSyncManagement';
 import MasterService from '../components/MasterService';
@@ -241,6 +242,11 @@ createRoot(document.getElementById('root')!).render(
               <ProtectedRoute resource="AI Asisten">
                 <AIAssistant />
               </ProtectedRoute>
+            } />
+            <Route path="ai-logs" element={
+              <AdminRoute resource="Log AI">
+                <AILogs />
+              </AdminRoute>
             } />
             <Route path="ai-settings" element={
               <AdminRoute resource="Pengaturan AI">

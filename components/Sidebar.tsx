@@ -11,6 +11,7 @@ import {
   SearchCheck,
   Tags,
   Bot,
+  ScrollText,
   Package, 
   BarChart3,
   Settings,
@@ -90,6 +91,7 @@ export default function Sidebar({ onTabChange }: { onTabChange: () => void }) {
         { icon: Settings, label: 'Master Configuration', path: '/master-config', resource: 'Master Configuration' },
         { icon: Server, label: 'API Sync Config', path: '/master-api-sync', resource: 'API Sync Config' },
         { icon: Bot, label: 'Pengaturan AI', path: '/ai-settings', resource: 'Pengaturan AI', adminOnly: true },
+        { icon: ScrollText, label: 'Log AI', path: '/ai-logs', resource: 'Log AI', adminOnly: true },
         { icon: Shield, label: 'Role Management', path: '/master-roles', resource: 'Role Management' },
         { icon: Users, label: 'User Management', path: '/user-management', resource: 'User Management' },
       ]
