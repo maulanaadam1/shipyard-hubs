@@ -5,6 +5,12 @@ import { getHeaders } from '@/lib/api-client';
 // Sumber Data Eksternal (Admin only): systems that push rows to
 // POST /api/ingest/{id}, each with its own token. A token is shown once, when
 // a source is created or its token is rotated; the server keeps only a hash.
+//
+// Design: follows the Pengaturan AI page (sticky header, rounded-2xl cards,
+// indigo accent). Dials ENERGY 1 / RHYTHM 1 / MOTION 1: an admin settings page,
+// calm and uniform, no motion beyond hover and focus. Icons are Lucide, the
+// app-wide set: Inbox = incoming data, Copy = copy, KeyRound = token,
+// Pencil = edit, Power = on/off, Plus = add, X = close.
 
 type Kind = { value: string; label: string; needs_key: boolean };
 
@@ -39,7 +45,11 @@ type NewToken = { source: Source; token: string; rotated: boolean };
 const field = 'w-full px-3 py-2 rounded-lg border border-slate-300 bg-white text-sm text-slate-800 focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500';
 const label = 'block text-sm font-semibold text-slate-700 mb-1';
 const help = 'mt-1 text-xs text-slate-500';
-const btn = 'inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-semibold border border-slate-300 text-slate-700 bg-white hover:bg-slate-100 disabled:opacity-50';
+// Every button is at least 44px tall (touch target) and shows the same
+// indigo focus ring as the inputs when reached by keyboard.
+const focusRing = 'focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:ring-offset-2';
+const btn = `inline-flex items-center justify-center gap-1.5 min-h-11 px-3 py-2 rounded-lg text-sm font-semibold border border-slate-300 text-slate-700 bg-white hover:bg-slate-100 disabled:opacity-50 ${focusRing}`;
+const primary = `inline-flex items-center justify-center gap-1.5 min-h-11 px-4 py-2 rounded-lg text-sm font-semibold bg-indigo-600 text-white hover:bg-indigo-700 disabled:opacity-50 ${focusRing}`;
 
 const endpointFor = (id: string) => `${window.location.origin}/api/ingest/${id}`;
 
@@ -209,7 +219,7 @@ export default function IngestSources() {
                 Salin token ini sekarang. Token tidak akan ditampilkan lagi; kalau hilang, ganti token.
               </p>
               <button type="button" aria-label="Tutup" onClick={() => setNewToken(null)}
-                className="p-1 rounded-md hover:bg-amber-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-600">
+                className={`inline-flex items-center justify-center min-h-11 min-w-11 -m-2 rounded-md hover:bg-amber-100 ${focusRing}`}>
                 <X size={16} />
               </button>
             </div>
@@ -241,7 +251,7 @@ export default function IngestSources() {
           </h3>
           {!showForm && (
             <button type="button" onClick={() => { setShowForm(true); setFormError(''); }}
-              className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-semibold bg-indigo-600 text-white hover:bg-indigo-700">
+              className={primary}>
               <Plus size={15} /> Tambah sumber
             </button>
           )}
@@ -288,7 +298,7 @@ export default function IngestSources() {
             {formError && <p role="alert" className="text-sm text-rose-700">{formError}</p>}
             <div className="flex flex-wrap gap-3">
               <button type="submit" disabled={busy === 'create'}
-                className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-semibold bg-indigo-600 text-white hover:bg-indigo-700 disabled:opacity-50">
+                className={primary}>
                 {busy === 'create' ? 'Membuat…' : 'Buat sumber dan token'}
               </button>
               <button type="button" className={btn} onClick={() => setShowForm(false)}>Batal</button>
@@ -316,7 +326,7 @@ export default function IngestSources() {
           const isEditing = editing?.id === s.id;
           const needsKey = kindOf(s.kind)?.needs_key;
           return (
-            <article key={s.id} className={`p-5 rounded-2xl border bg-white flex flex-col gap-3 ${s.is_active ? 'border-slate-200' : 'border-slate-200 opacity-75'}`}>
+            <article key={s.id} className={`p-5 rounded-2xl border border-slate-200 flex flex-col gap-3 ${s.is_active ? 'bg-white' : 'bg-slate-50'}`}>
               <div className="flex flex-wrap items-start justify-between gap-2">
                 <div className="min-w-0">
                   <h4 className="font-semibold text-slate-900 break-words">{s.name}</h4>
@@ -368,7 +378,7 @@ export default function IngestSources() {
                   </div>
                   <div className="flex flex-wrap gap-2">
                     <button type="submit" disabled={busy === s.id}
-                      className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-semibold bg-indigo-600 text-white hover:bg-indigo-700 disabled:opacity-50">
+                      className={primary}>
                       {busy === s.id ? 'Menyimpan…' : 'Simpan'}
                     </button>
                     <button type="button" className={btn} onClick={() => setEditing(null)}>Batal</button>
