@@ -73,6 +73,8 @@ func main() {
 	// Public routes (no auth required)
 	r.Post("/api/auth/login", handlers.Login)
 	r.Get("/api/auth/session", handlers.GetSession)
+	// Pushed by the attendance spreadsheet's Apps Script; checks X-Sync-Token itself.
+	r.Post("/api/attendance/sync", handlers.PostAttendanceSync)
 
 	// Protected routes (require valid JWT)
 	r.Group(func(r chi.Router) {
@@ -128,6 +130,8 @@ func main() {
 		r.With(aiView).Get("/api/ai/conversations/{id}", handlers.GetAIConversation)
 		r.With(aiView).Delete("/api/ai/conversations/{id}", handlers.DeleteAIConversation)
 		r.With(handlers.RequireAdmin).Get("/api/ai/logs", handlers.GetAILogs)
+		// Work hours from attendance punches; Admin only until it has a menu.
+		r.With(handlers.RequireAdmin).Get("/api/attendance/daily", handlers.GetAttendanceDaily)
 		r.Post("/api/ai/tools/{name}", handlers.RunAITool)
 		r.With(handlers.RequireAdmin).Get("/api/ai/settings", handlers.GetAISettings)
 		r.With(handlers.RequireAdmin).Put("/api/ai/settings", handlers.PutAISettings)

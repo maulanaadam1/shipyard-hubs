@@ -706,6 +706,24 @@ func createTables() {
 		key TEXT PRIMARY KEY,
 		value TEXT
 	);`)
+
+	// Fingerprint punches from the attendance spreadsheet (Master_RawData),
+	// pushed by apps-script/attendance-sync. id is the attendance machine's
+	// transaction id; raw keeps the whole sheet row as JSON.
+	DB.Exec(`CREATE TABLE IF NOT EXISTS attendance_punches (
+		id TEXT PRIMARY KEY,
+		emp_code TEXT NOT NULL,
+		first_name TEXT,
+		last_name TEXT,
+		kepala_subkon TEXT,
+		nama_pt TEXT,
+		punch_time TEXT NOT NULL,
+		terminal_sn TEXT,
+		raw TEXT,
+		synced_at TEXT
+	);`)
+	DB.Exec("CREATE INDEX IF NOT EXISTS idx_attendance_punch_time ON attendance_punches(punch_time)")
+	DB.Exec("CREATE INDEX IF NOT EXISTS idx_attendance_emp_time ON attendance_punches(emp_code, punch_time)")
 	DB.Exec("CREATE INDEX IF NOT EXISTS idx_wo_summary_latest_date ON work_order_summary(latest_date)")
 	DB.Exec("CREATE INDEX IF NOT EXISTS idx_wo_summary_vendor_date ON work_order_summary(vendor_name, latest_date)")
 	DB.Exec("CREATE INDEX IF NOT EXISTS idx_wo_summary_project_date ON work_order_summary(project_name, latest_date)")
