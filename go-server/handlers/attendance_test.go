@@ -100,3 +100,15 @@ func TestGetAttendanceDailyRange(t *testing.T) {
 		}
 	}
 }
+
+// A later punch without name or vendor does not blank out the day's details.
+func TestComputeAttendanceDaysKeepsDetails(t *testing.T) {
+	first := punchAt("F", "PT Z", "2026-11-05 07:50:00")
+	first.Name, first.KepalaSubkon = "Uji Coba", "Pak A"
+	last := punchAt("F", "", "2026-11-05 17:05:00")
+	last.Name = ""
+	days := computeAttendanceDays([]punchRow{first, last}, attendanceRules{WeekdayHours: 8, SaturdayHours: 4})
+	if len(days) != 1 || days[0].Name != "Uji Coba" || days[0].KepalaSubkon != "Pak A" || days[0].NamaPT != "PT Z" {
+		t.Errorf("details: %+v", days)
+	}
+}

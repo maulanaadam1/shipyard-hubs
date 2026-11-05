@@ -127,7 +127,8 @@ func PostIngest(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "gagal menyimpan: " + err.Error()})
 		return
 	}
-	recordIngestResult(src.ID, map[string]any{"ok": true, "received": res.Received, "saved": res.Saved, "unchanged": res.Unchanged, "skipped": res.Skipped})
+	recordIngestResult(src.ID, map[string]any{"ok": true, "received": res.Received, "saved": res.Saved,
+		"unchanged": res.Unchanged, "skipped": res.Skipped, "problems": res.Problems})
 	writeJSON(w, http.StatusOK, res)
 }
 
@@ -293,7 +294,11 @@ func slugifyIngestID(name string) string {
 			dash = true
 		}
 	}
-	return strings.Trim(b.String(), "-")
+	s := b.String()
+	if len(s) > 50 {
+		s = s[:50]
+	}
+	return strings.Trim(s, "-")
 }
 
 type ingestSourceInput struct {

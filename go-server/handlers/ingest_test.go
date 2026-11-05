@@ -80,6 +80,8 @@ func TestIngestSourceAdmin(t *testing.T) {
 		`{"name": "", "kind": "attendance"}`:                                                     http.StatusBadRequest,
 		`{"id": "Pakai Spasi", "name": "X", "kind": "attendance"}`:                               http.StatusBadRequest,
 		`{"id": "vendor-detail", "name": "Vendor", "kind": "records", "key_column": "emp_code"}`: http.StatusCreated,
+		// A long name still gives a valid id (cut to 50 characters).
+		`{"name": "Absensi Fingerprint Galangan Absensi Fingerprint Galangan", "kind": "attendance"}`: http.StatusCreated,
 	} {
 		if code, out := ingestCall(t, "POST", "/api/ingest-sources", "", body); code != want {
 			t.Errorf("create %s: want %d, got %d %v", body, want, code, out)
@@ -193,7 +195,7 @@ func TestIngestAttendance(t *testing.T) {
 		src := s.(map[string]any)
 		if src["id"] == id {
 			last := src["last_result"].(map[string]any)
-			if src["rows"].(float64) != 3 || src["last_received_at"] == "" || last["ok"] != true || last["saved"].(float64) != 1 {
+			if src["rows"].(float64) != 3 || src["last_received_at"] == "" || last["ok"] != true || last["saved"].(float64) != 1 || last["problems"] != nil {
 				t.Errorf("source status: %v", src)
 			}
 		}

@@ -246,7 +246,7 @@ func computeAttendanceDays(punches []punchRow, rules attendanceRules) []attendan
 	type group struct {
 		date  time.Time
 		times []time.Time
-		last  punchRow
+		info  punchRow // latest non-empty name, subkon and vendor of the day
 	}
 	groups := map[string]*group{}
 	var keys []string
@@ -260,14 +260,23 @@ func computeAttendanceDays(punches []punchRow, rules attendanceRules) []attendan
 			keys = append(keys, key)
 		}
 		g.times = append(g.times, p.At)
-		g.last = p
+		g.info.EmpCode = p.EmpCode
+		if p.Name != "" {
+			g.info.Name = p.Name
+		}
+		if p.KepalaSubkon != "" {
+			g.info.KepalaSubkon = p.KepalaSubkon
+		}
+		if p.NamaPT != "" {
+			g.info.NamaPT = p.NamaPT
+		}
 	}
 
 	out := make([]attendanceDay, 0, len(keys))
 	for _, key := range keys {
 		g := groups[key]
 		sort.Slice(g.times, func(i, j int) bool { return g.times[i].Before(g.times[j]) })
-		info := g.last // latest synced name/vendor for the worker that day
+		info := g.info
 		in, outT := g.times[0], g.times[len(g.times)-1]
 		hasIn, hasOut := true, true
 		if !in.Before(outT) {
