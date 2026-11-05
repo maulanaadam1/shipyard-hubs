@@ -15,17 +15,18 @@ Server menyimpan per `id` transaksi (upsert), jadi mengirim ulang tidak membuat 
 1. Di ShipHub, buka **Sumber Data Eksternal** (Admin), tambah sumber jenis
    **Absensi (fingerprint)**, lalu salin token yang muncul. Token hanya ditampilkan sekali;
    kalau hilang, pakai **Ganti token**.
-2. Dari folder ini, buat project baru dan kirim kodenya:
-   ```bash
-   clasp create --type standalone --title "ShipHub Attendance Sync"
-   clasp push
-   ```
-   `clasp create` menulis `.clasp.json` (berisi scriptId) di folder ini.
+2. Project sudah ada: **ShipHub Attendance Sync** di akun Google kantor (samudera.id) yang membuka spreadsheet absensi
+   (scriptId di `.clasp.json`). Akun itu harus bisa membuka spreadsheet absensi.
+   Kirim kode dari folder ini dengan `clasp push` (clasp login dengan akun yang sama).
+   Catatan: `clasp create` menimpa `appsscript.json` dengan manifest bawaan; kembalikan
+   dari git sebelum push.
 3. `clasp open`, lalu di **Project Settings → Script properties** tambahkan:
    - `SYNC_URL` = `https://<domain-shiphub>/api/ingest/<id sumber>` (tertulis di halaman sumber)
    - `SYNC_TOKEN` = token dari langkah 1
 4. Di editor, jalankan `checkConfig` (harus selesai tanpa error), lalu `setupTriggers`
    sekali dan setujui izin akses (baca spreadsheet, akses URL luar, kelola trigger).
+   Spreadsheet dibaca lewat Sheets API (advanced service `Sheets`) supaya izinnya cukup
+   baca-saja; `SpreadsheetApp.openById` mewajibkan izin baca-tulis.
 5. Jalankan `syncAll` sekali untuk mengirim semua data lama.
 
 ## Mengubah kode

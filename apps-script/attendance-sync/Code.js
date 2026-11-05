@@ -21,32 +21,48 @@ function config_() {
   return { url: url, token: token };
 }
 
-// Rows as objects keyed by the sheet header. Date cells are sent as text in
-// the spreadsheet's time zone, so the server gets the wall-clock punch time.
+// Format for a date/time column, by header name; '' for other columns.
+function dateFormat_(header) {
+  const key = header.toLowerCase();
+  if (key === 'date') return 'yyyy-MM-dd';
+  if (key === 'time') return 'HH:mm:ss';
+  if (/(^|_)(time|date)$/.test(key) || /_at$/.test(key)) return 'yyyy-MM-dd HH:mm:ss';
+  return '';
+}
+
+// A Sheets date serial (days since 1899-12-30, wall-clock time of the
+// spreadsheet) as text, e.g. 46331.33 -> "2026-11-05 07:55:12".
+function serialToText_(serial, format) {
+  const ms = Math.round((serial - 25569) * 86400000);
+  return Utilities.formatDate(new Date(ms), 'UTC', format);
+}
+
+// Rows as objects keyed by the sheet header. Read through the Sheets API
+// (advanced service), which works with the read-only spreadsheets scope;
+// SpreadsheetApp.openById would need full read-write access to every sheet
+// the account can open. Date cells come back as serial numbers and are sent
+// as wall-clock text, so the server gets the punch time as the sheet shows it.
 function readRows_() {
-  const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
-  const sheet = ss.getSheetByName(SHEET_NAME);
-  if (!sheet) throw new Error('Sheet ' + SHEET_NAME + ' tidak ditemukan.');
-  const values = sheet.getDataRange().getValues();
+  const res = Sheets.Spreadsheets.Values.get(SPREADSHEET_ID, SHEET_NAME, {
+    valueRenderOption: 'UNFORMATTED_VALUE',
+    dateTimeRenderOption: 'SERIAL_NUMBER',
+  });
+  const values = res.values || [];
   if (values.length < 2) return [];
 
-  const tz = ss.getSpreadsheetTimeZone();
   const header = values[0].map(function (h) { return String(h).trim(); });
-  const formats = header.map(function (h) {
-    const key = h.toLowerCase();
-    if (key === 'date') return 'yyyy-MM-dd';
-    if (key === 'time') return 'HH:mm:ss';
-    return 'yyyy-MM-dd HH:mm:ss';
-  });
+  const formats = header.map(dateFormat_);
 
   return values.slice(1)
-    .filter(function (row) { return row[0] !== '' && row[0] !== null; })
+    .filter(function (row) { return row[0] !== '' && row[0] !== undefined && row[0] !== null; })
     .map(function (row) {
       const obj = {};
       header.forEach(function (h, i) {
         if (!h) return;
-        const v = row[i];
-        obj[h] = v instanceof Date ? Utilities.formatDate(v, tz, formats[i]) : v;
+        let v = row[i];
+        if (v === undefined || v === null) v = ''; // the API trims empty trailing cells
+        if (formats[i] && typeof v === 'number') v = serialToText_(v, formats[i]);
+        obj[h] = v;
       });
       return obj;
     });
