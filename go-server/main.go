@@ -115,6 +115,10 @@ func main() {
 		r.With(findingsView).Get("/api/wo-findings/unrecognized/items", handlers.GetUnrecognizedActivityItems)
 		r.With(handlers.RequirePermission(handlers.ResourceItemFindings, "edit")).Post("/api/wo-findings/status", handlers.UpdateItemFindingStatus)
 		r.With(handlers.RequirePermission(handlers.ResourceItemFindings, "export")).Get("/api/wo-findings/export", handlers.ExportItemFindings)
+		// AI tool layer: the user's read-only tools (Claude tool definitions) and
+		// a way to run one; each tool checks view rights on its page's resource.
+		r.Get("/api/ai/tools", handlers.GetAITools)
+		r.Post("/api/ai/tools/{name}", handlers.RunAITool)
 		// Harga Acuan: reference unit costs per work type, size and unit.
 		priceView := handlers.RequirePermission(handlers.ResourcePriceReference, "view")
 		r.With(priceView).Get("/api/price-reference", handlers.GetPriceReferences)
