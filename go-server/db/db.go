@@ -629,6 +629,20 @@ func createTables() {
 	// How long an answer took, and the asker's thumbs up/down on it.
 	DB.Exec("ALTER TABLE ai_chat_log ADD COLUMN duration_ms INTEGER DEFAULT 0")
 	DB.Exec("ALTER TABLE ai_chat_log ADD COLUMN feedback TEXT DEFAULT ''")
+	// AI Asisten conversations (history panel); the messages are the
+	// ai_chat_log rows of the conversation. Deleting hides it from the user,
+	// the log stays for the Admin.
+	DB.Exec("ALTER TABLE ai_chat_log ADD COLUMN conversation_id TEXT DEFAULT ''")
+	DB.Exec(`CREATE TABLE IF NOT EXISTS ai_conversations (
+		id TEXT PRIMARY KEY,
+		user_id TEXT,
+		title TEXT,
+		deleted BOOLEAN DEFAULT false,
+		created_at TEXT,
+		updated_at TEXT
+	);`)
+	DB.Exec("CREATE INDEX IF NOT EXISTS idx_ai_conversations_user ON ai_conversations(user_id, updated_at)")
+	DB.Exec("CREATE INDEX IF NOT EXISTS idx_ai_chat_log_conversation ON ai_chat_log(conversation_id, created_at)")
 	// AI Asisten provider settings (one row, edited by Admins in Pengaturan
 	// AI). The API key is stored encrypted.
 	DB.Exec(`CREATE TABLE IF NOT EXISTS ai_settings (

@@ -34,7 +34,7 @@ const (
 	aiMaxToolResultLen = 30000 // characters of one tool result given to the model
 )
 
-const aiInstructions = `Anda adalah AI Asisten ShipHub untuk tim galangan kapal. Jawab pertanyaan tentang data ShipHub (Work Order, item pekerjaan, tagihan, harga acuan, data perlu dicek) hanya berdasarkan hasil alat yang tersedia. Gunakan alat untuk setiap angka; jangan menebak atau mengarang data. Bila data yang diminta tidak bisa didapat dari alat, katakan itu dengan jelas. Jawab ringkas dalam Bahasa Indonesia, sebutkan periode, filter dan jumlah data yang dipakai. Anda hanya membaca data: perbaikan data dilakukan di SIAGA. Format jawaban dengan Markdown sederhana: tabel Markdown untuk daftar atau perbandingan angka, **tebal** untuk angka utama, daftar berpoin bila perlu; tanpa HTML. Tulis kode WO lengkap seperti di data (mis. WO25060066) agar bisa diklik.`
+const aiInstructions = `Anda adalah AI Asisten ShipHub untuk tim galangan kapal. Jawab pertanyaan tentang data ShipHub (Work Order, item pekerjaan, tagihan, harga acuan, data perlu dicek) hanya berdasarkan hasil alat yang tersedia. Gunakan alat untuk setiap angka; jangan menebak atau mengarang data. Bila data yang diminta tidak bisa didapat dari alat, katakan itu dengan jelas. Jawab ringkas dalam Bahasa Indonesia, sebutkan periode, filter dan jumlah data yang dipakai. Anda hanya membaca data: perbaikan data dilakukan di SIAGA. Format jawaban dengan Markdown sederhana: tabel Markdown untuk daftar atau perbandingan angka, **tebal** untuk angka utama, daftar berpoin bila perlu; tanpa HTML. Tulis kode WO lengkap seperti di data (mis. WO25060066) agar bisa diklik. Akhiri setiap jawaban dengan satu baris terpisah: `+"`LANJUT: <pertanyaan 1> | <pertanyaan 2> | <pertanyaan 3>`"+` berisi 2-3 pertanyaan lanjutan singkat (maks 8 kata) yang bisa dijawab dengan alat yang ada; baris ini tidak ditampilkan sebagai teks.`
 
 func aiUsedToday(userID string) int {
 	var n int
@@ -130,7 +130,8 @@ func PostAIChat(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var body struct {
-		Messages []aiChatMessage `json:"messages"`
+		Messages       []aiChatMessage `json:"messages"`
+		ConversationID string          `json:"conversation_id"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil || len(body.Messages) == 0 {
 		fail(http.StatusBadRequest, "messages wajib diisi")
@@ -175,7 +176,16 @@ func PostAIChat(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	res := runAIChat(r, cfg, claims, last.Content, history, emit)
+	convID, err := aiConversationFor(claims, body.ConversationID, last.Content)
+	if err != nil {
+		if emit != nil {
+			emit("error", map[string]string{"error": err.Error()})
+			return
+		}
+		fail(http.StatusNotFound, err.Error())
+		return
+	}
+	res := runAIChat(r, cfg, claims, convID, last.Content, history, emit)
 	if emit != nil {
 		if res.Failure != "" {
 			emit("error", map[string]string{"error": res.Failure})
@@ -193,17 +203,20 @@ func PostAIChat(w http.ResponseWriter, r *http.Request) {
 }
 
 type aiChatResult struct {
-	ID        string       `json:"id"`
-	Answer    string       `json:"answer"`
+	ID             string       `json:"id"`
+	ConversationID string       `json:"conversation_id"`
+	Suggestions    []string     `json:"suggestions"`
+	DurationMs     int64        `json:"duration_ms"`
+	Answer         string       `json:"answer"`
 	ToolCalls []aiToolCall `json:"tool_calls"`
 	Usage     aiUsage      `json:"usage"`
 	Failure   string       `json:"-"`
 }
 
 // runAIChat runs the tool loop for one question and logs it.
-func runAIChat(r *http.Request, cfg aiProviderConfig, claims middleware.UserClaims, question string, history []aiChatMessage, emit aiEmitter) aiChatResult {
+func runAIChat(r *http.Request, cfg aiProviderConfig, claims middleware.UserClaims, convID, question string, history []aiChatMessage, emit aiEmitter) aiChatResult {
 	start := time.Now()
-	res := aiChatResult{ID: uuid.New().String(), ToolCalls: []aiToolCall{}}
+	res := aiChatResult{ID: uuid.New().String(), ConversationID: convID, ToolCalls: []aiToolCall{}, Suggestions: []string{}}
 	tools := availableAITools(r)
 	var onText func(string)
 	if emit != nil {
@@ -263,11 +276,14 @@ func runAIChat(r *http.Request, cfg aiProviderConfig, claims middleware.UserClai
 		res.Failure = "AI tidak memberi jawaban. Coba ulangi dengan kalimat lain."
 	}
 
+	res.Answer, res.Suggestions = splitSuggestions(res.Answer)
+	res.DurationMs = time.Since(start).Milliseconds()
 	toolsJSON, _ := json.Marshal(res.ToolCalls)
-	db.Exec(`INSERT INTO ai_chat_log (id, user_id, user_email, question, answer, tools, model, stop_reason, error,
+	db.Exec(`INSERT INTO ai_chat_log (id, conversation_id, user_id, user_email, question, answer, tools, model, stop_reason, error,
 			input_tokens, output_tokens, cache_read_tokens, duration_ms, created_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-		res.ID, claims.ID, claims.Email, question, res.Answer, string(toolsJSON), cfg.Provider+"/"+cfg.Model, stopReason, res.Failure,
-		res.Usage.InputTokens, res.Usage.OutputTokens, res.Usage.CacheReadTokens, time.Since(start).Milliseconds(), start.Format("2006-01-02 15:04:05"))
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		res.ID, convID, claims.ID, claims.Email, question, res.Answer, string(toolsJSON), cfg.Provider+"/"+cfg.Model, stopReason, res.Failure,
+		res.Usage.InputTokens, res.Usage.OutputTokens, res.Usage.CacheReadTokens, res.DurationMs, start.Format("2006-01-02 15:04:05.000")) // ms: keeps a conversation in order
+	db.Exec(`UPDATE ai_conversations SET updated_at = ? WHERE id = ?`, time.Now().Format("2006-01-02 15:04:05"), convID)
 	return res
 }

@@ -121,15 +121,23 @@ function cellValue(s: string): string | number {
   return Number.isFinite(n) ? n : t;
 }
 
-function downloadTable(header: string[], rows: string[][]) {
-  const data = [header.map(plain), ...rows.map(r => r.map(cellValue))];
-  const ws = XLSX.utils.aoa_to_sheet(data);
+type TableBlock = Extract<Block, { kind: 'table' }>;
+
+// downloadTables saves tables as one Excel file, one sheet per table.
+function downloadTables(tables: TableBlock[]) {
   const wb = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb, ws, 'Data');
+  tables.forEach((t, i) => {
+    const data = [t.header.map(plain), ...t.rows.map(r => r.map(cellValue))];
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(data), tables.length > 1 ? `Tabel ${i + 1}` : 'Data');
+  });
   XLSX.writeFile(wb, `ai-asisten-${new Date().toISOString().slice(0, 10)}.xlsx`);
 }
 
-export default function AIMarkdown({ text }: { text: string }) {
+export const tablesIn = (text: string) => parseMarkdown(text).filter((b): b is TableBlock => b.kind === 'table');
+export const downloadAnswerTables = (text: string) => { const t = tablesIn(text); if (t.length) downloadTables(t); };
+
+// tableDownload: a download link under each table (off when the page has its own button).
+export default function AIMarkdown({ text, tableDownload = true }: { text: string; tableDownload?: boolean }) {
   const blocks = parseMarkdown(text);
   return (
     <div className="flex flex-col gap-2 leading-relaxed">
@@ -167,10 +175,10 @@ export default function AIMarkdown({ text }: { text: string }) {
                     </tbody>
                   </table>
                 </div>
-                <button type="button" onClick={() => downloadTable(b.header, b.rows)}
+                {tableDownload && <button type="button" onClick={() => downloadTables([b])}
                   className="self-start inline-flex items-center gap-1 text-xs font-medium text-slate-600 hover:text-slate-900">
                   <FileSpreadsheet size={13} aria-hidden="true" /> Unduh tabel (Excel)
-                </button>
+                </button>}
               </div>
             );
           case 'code':
