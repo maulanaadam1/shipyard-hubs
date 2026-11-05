@@ -57,6 +57,10 @@ type pricedItem struct {
 // "Pembayaran Termin X 10%", "(DP 40%)", "TERM II 30%".
 var partPayment = regexp.MustCompile(`(?i)pembayaran|\btermin\b|\b(dp|term)\b[^%]{0,20}\d+\s*%`)
 
+// lumpSum matches work priced as a whole job: "Cleaning minyak, kapasitas 4
+// m3 (BORONGAN)", "Additional Work dan Rework ...", "Biaya Paket Uji Model".
+var lumpSum = regexp.MustCompile(`(?i)\bpaket\b|borongan|lump ?sum|additional work|\brework\b|\breward\b`)
+
 // unitPriceComparable reports whether an item's cost can be compared with
 // others of its work type. Not so for labour (overtime is paid per hour,
 // which the reference doesn't split), for job packages described over several
@@ -71,7 +75,7 @@ func unitPriceComparable(action, object, label string) bool {
 	if strings.Count(low, "<br") >= 2 || strings.Contains(low, "ruang lingkup") || len([]rune(label)) >= 200 {
 		return false
 	}
-	return !partPayment.MatchString(label)
+	return !partPayment.MatchString(label) && !lumpSum.MatchString(label)
 }
 
 type referenceKey struct{ workType, size, unit string }

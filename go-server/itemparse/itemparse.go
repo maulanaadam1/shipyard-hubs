@@ -827,10 +827,12 @@ var (
 // RulesCost marks payments, fees, freight, rentals and tests.
 const RulesCost = "biaya"
 
-// Cost lines that are never a unit price (whole-project or whole-docking
-// amounts and fees); rentals and tests are, per day or per test.
+// Cost lines with no comparable unit price: whole-project or whole-docking
+// amounts and fees, and rentals, whose period (hour, day, month) SIAGA rarely
+// records ("Rental Crane Bulan Mei" next to day rates). Tests are per test.
 var CostWithoutUnitPrice = map[string]bool{
 	"Pembayaran termin / progres": true, "Biaya docking": true, "Pengiriman / transport": true, "Biaya / jasa": true,
+	"Sewa alat": true,
 }
 
 var rentalTools = rules(

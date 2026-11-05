@@ -172,6 +172,8 @@ func TestUnitPriceComparable(t *testing.T) {
 		{"Pipa", "Pekerjaan sistem pipa, ventilasi, electrical (DP 40%), 1", false},
 		{"Pipa", "Pekerjaan sistem pipa, ventilasi (TERM II 30%), 1", false},
 		{"Plat", "Potong Tekuk Plat 8 mm dan Laser, 1", true},
+		{"Tangki", "Cleaning minyak , kapasitas 4 m3 (BORONGAN)", false},
+		{"Plat", "Additional Work dan Rework Elektrik, Pipa, Interior, Tonase & Reward", false},
 		{"Cat", "Pengecatan lambung, thinner 10%", true}, // a percentage alone is fine
 		{"Plat", strings.Repeat("Replating plat lambung kanan ", 8), false},
 	} {
