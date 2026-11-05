@@ -115,6 +115,11 @@ func main() {
 		r.With(findingsView).Get("/api/wo-findings/unrecognized/items", handlers.GetUnrecognizedActivityItems)
 		r.With(handlers.RequirePermission(handlers.ResourceItemFindings, "edit")).Post("/api/wo-findings/status", handlers.UpdateItemFindingStatus)
 		r.With(handlers.RequirePermission(handlers.ResourceItemFindings, "export")).Get("/api/wo-findings/export", handlers.ExportItemFindings)
+		// Harga Acuan: reference unit costs per work type, size and unit.
+		priceView := handlers.RequirePermission(handlers.ResourcePriceReference, "view")
+		r.With(priceView).Get("/api/price-reference", handlers.GetPriceReferences)
+		r.With(priceView).Get("/api/price-reference/detail", handlers.GetPriceReferenceDetail)
+		r.With(handlers.RequirePermission(handlers.ResourcePriceReference, "export")).Get("/api/price-reference/export", handlers.ExportPriceReferences)
 		// Financial Dashboard: billing transactions from the daily approval ledger.
 		financeView := handlers.RequirePermission(handlers.ResourceFinancialDashboard, "view")
 		r.With(financeView, woCache).Get("/api/finance/summary", handlers.GetFinanceSummary)

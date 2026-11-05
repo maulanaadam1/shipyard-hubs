@@ -9,6 +9,7 @@ import {
   ClipboardList, 
   ListChecks,
   SearchCheck,
+  Tags,
   Package, 
   BarChart3,
   Settings,
@@ -48,6 +49,7 @@ export default function Sidebar({ onTabChange }: { onTabChange: () => void }) {
         { icon: FileSpreadsheet, label: 'Work Order', path: '/work-order', resource: 'Work Order' },
         { icon: ListChecks, label: 'Item Pekerjaan WO', path: '/work-order-items', resource: 'Item Pekerjaan WO' },
         { icon: SearchCheck, label: 'Data Perlu Dicek', path: '/data-findings', resource: 'Data Perlu Dicek' },
+        { icon: Tags, label: 'Harga Acuan', path: '/price-reference', resource: 'Harga Acuan' },
         { icon: Anchor, label: 'Ship Docking', path: '/ship-docking', resource: 'Ship Docking' },
       ]
     },
