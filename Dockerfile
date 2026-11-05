@@ -23,7 +23,11 @@ COPY go-server/go.mod go-server/go.sum ./
 RUN go mod download
 
 COPY go-server/ ./
-RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-w -s" -o /shipyard-server .
+# Wait for the frontend build to finish so npm and the Go compiler don't run
+# at the same time, and compile one package at a time: the server VM is small
+# and a parallel build can exhaust its memory.
+COPY --from=frontend-builder /app/package.json /tmp/frontend-built
+RUN CGO_ENABLED=0 GOOS=linux go build -p 1 -ldflags="-w -s" -o /shipyard-server .
 
 # ============================================================
 # Stage 3: Final minimal production image (~30MB)
