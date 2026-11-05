@@ -27,7 +27,7 @@ func attendanceHoursTool() aiTool {
 			"Call this when the user asks how many hours or man-days a vendor / PT worked, who worked or did overtime, how many " +
 			"workers came on a day, attendance with a missing check-in or check-out, or productivity of a vendor (WO value per " +
 			"hour worked). group_by vendor (default) returns per vendor: workers, man-days, measured hours, hours including " +
-			"estimates for days with one punch, overtime, wo_vendor = the exact vendor name to pass to search_work_orders / " +
+			"estimates for days with one punch, overtime, wo_vendor (plus wo_vendors when the PT is also billed under its kepala vendor name) = the exact WO vendor names for search_work_orders / " +
 			"billing_summary, and (when the user may see billing) WO value approved in the period and value per hour. group_by " +
 			"worker or day gives the same per worker (with kepala subkon and skill) or per date. Without dates it covers the " +
 			"last 7 days of attendance.",
@@ -240,15 +240,17 @@ func runAttendanceHours(r *http.Request, input json.RawMessage) (interface{}, er
 	showValue := HasResourcePermission(r, ResourceFinancialDashboard, "view")
 	var approvals map[string][2]float64
 	var woNames map[string]string
+	var aliases map[string][]string
 	if groupBy == "vendor" {
 		woNames = woVendorNames()
+		aliases = vendorAliases()
 		if showValue {
 			approvals = vendorApprovals(from.Format("2006-01-02"), to.Format("2006-01-02"))
 		}
 	}
 
 	rows := []map[string]interface{}{}
-	var noWO []string
+	var noWO, viaHead []string
 	for _, g := range list {
 		row := map[string]interface{}{
 			"workers": len(g.workers), "man_days": g.manDays, "incomplete_days": g.incomplete,
@@ -269,18 +271,40 @@ func runAttendanceHours(r *http.Request, input json.RawMessage) (interface{}, er
 		default:
 			row["vendor"] = g.key
 			if g.key != noPTLabel {
+				// The PT's own name, then its kepala vendor / subkon names:
+				// a WO under any of them is that PT's work.
 				key := normalizeVendorName(g.key)
-				if wo, ok := woNames[key]; ok {
-					row["wo_vendor"] = wo
-					if showValue {
-						a := approvals[key]
-						row["wo_approved_value"], row["wo_approved_count"] = a[0], int(a[1])
-						if g.estimated > 0 {
-							row["value_per_hour"] = math.Round(a[0] / (float64(g.estimated) / 60))
-						}
+				names := aliases[key]
+				if len(names) == 0 {
+					names = []string{key}
+				}
+				var wos []string
+				var value, count float64
+				for _, n := range names {
+					wo, ok := woNames[n]
+					if !ok {
+						continue
 					}
-				} else {
+					wos = append(wos, wo)
+					value += approvals[n][0]
+					count += approvals[n][1]
+					if n != key {
+						viaHead = append(viaHead, g.key+" = "+wo)
+					}
+				}
+				if len(wos) == 0 {
 					noWO = append(noWO, g.key)
+					break
+				}
+				row["wo_vendor"] = wos[0]
+				if len(wos) > 1 {
+					row["wo_vendors"] = wos
+				}
+				if showValue {
+					row["wo_approved_value"], row["wo_approved_count"] = value, int(count)
+					if g.estimated > 0 {
+						row["value_per_hour"] = math.Round(value / (float64(g.estimated) / 60))
+					}
 				}
 			}
 		}
@@ -299,9 +323,14 @@ func runAttendanceHours(r *http.Request, input json.RawMessage) (interface{}, er
 			notes = append(notes, "wo_approved_value = nilai WO vendor itu yang di-approve pada periode yang sama (tanggal approval, bukan tanggal kerja); "+
 				"value_per_hour = wo_approved_value / hours_incl_estimates. Ini perkiraan kasar produktivitas, bukan nilai pekerjaan per jam yang pasti.")
 		}
+		if len(viaHead) > 0 {
+			sort.Strings(viaHead)
+			notes = append(notes, "WO yang tercatat atas nama kepala vendor/subkon (dari MasterOperation) dihitung ke PT-nya: "+strings.Join(viaHead, "; ")+
+				". wo_vendors berisi semua nama vendor WO untuk PT itu; pakai masing-masing di search_work_orders / billing_summary.")
+		}
 		if len(noWO) > 0 {
 			sort.Strings(noWO)
-			notes = append(notes, "Vendor tanpa WO di ShipHub (nama PT di absensi tidak sama dengan vendor WO mana pun): "+strings.Join(noWO, ", "))
+			notes = append(notes, "Vendor tanpa WO di ShipHub (nama PT maupun kepala vendornya tidak sama dengan vendor WO mana pun): "+strings.Join(noWO, ", "))
 		}
 	}
 	if g := groups[noPTLabel]; g != nil && groupBy == "vendor" {

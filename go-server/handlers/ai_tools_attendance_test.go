@@ -67,6 +67,10 @@ func seedAttendanceWorld(t *testing.T) {
 	ingestCall(t, "POST", "/api/ingest/master-op", token, `{"replace_sheet": "vendor_detail", "rows": [
 		{"_sheet": "vendor_detail", "_key": "vendor_detail:1", "emp_code": "E9", "name": "Sari Uji", "kepala_subkon": "Pak Budi", "nama_pt": "PT Maju Jaya", "keahlian": "Fitter", "no_hp": "0812"},
 		{"_sheet": "vendor_detail", "_key": "vendor_detail:2", "emp_code": "E1", "name": "Andi Uji", "kepala_subkon": "Pak Las", "nama_pt": "PT. Las Abadi", "keahlian": "Welder"}]}`)
+	// Kepala vendor per PT: SIAGA bills some work under these names.
+	ingestCall(t, "POST", "/api/ingest/master-op", token, `{"replace_sheet": "vendor", "rows": [
+		{"_sheet": "vendor", "_key": "vendor:1", "id": "1", "vendor": "MARYONO", "nama_pt": "MAJU JAYA, PT"},
+		{"_sheet": "vendor", "_key": "vendor:2", "id": "2", "vendor": "Lasman", "nama_pt": "PT LAS ABADI"}]}`)
 
 	upsertAttendancePunches("absen", []attendancePunch{
 		{ID: "1", EmpCode: "E1", FirstName: "Andi", NamaPT: "PT. Las Abadi", PunchTime: "2026-11-02 07:00:00"},
@@ -74,9 +78,12 @@ func seedAttendanceWorld(t *testing.T) {
 		{ID: "3", EmpCode: "E9", PunchTime: "2026-11-02 07:30:00"},                          // no PT on the punch
 		{ID: "4", EmpCode: "E9", PunchTime: "2026-11-02 15:30:00"},                          // 8h
 		{ID: "5", EmpCode: "E7", PunchTime: "2026-11-03 07:00:00"},                          // unknown worker, one punch
+		{ID: "6", EmpCode: "E8", NamaPT: "PT Tanpa Order", PunchTime: "2026-11-02 08:00:00"},
 	})
 	db.Exec(`INSERT INTO work_order_summary (wo_id, wo_code, vendor_name) VALUES ('900', 'WO-900', 'LAS ABADI, PT')`)
-	db.Exec(`INSERT INTO work_order_daily_costs (wo_id, cost_date, approved_cost) VALUES ('900', '2026-11-03', 5000000), ('900', '2026-12-01', 999)`)
+	db.Exec(`INSERT INTO work_order_summary (wo_id, wo_code, vendor_name) VALUES ('901', 'WO-901', 'MARYONO'), ('902', 'WO-902', 'LASMAN')`)
+	db.Exec(`INSERT INTO work_order_daily_costs (wo_id, cost_date, approved_cost) VALUES ('900', '2026-11-03', 5000000), ('900', '2026-12-01', 999),
+		('901', '2026-11-04', 1600000), ('902', '2026-11-05', 1000000)`)
 
 	db.Exec("DELETE FROM profiles WHERE id IN ('att-admin', 'att-viewer', 'att-nobody')")
 	db.Exec(`INSERT INTO profiles (id, email, username, name, role) VALUES ('att-admin', 'att-admin@example.test', 'attadmin', 'Att Admin', 'Admin')`)
@@ -111,25 +118,29 @@ func TestAttendanceHoursTool(t *testing.T) {
 		byVendor[row["vendor"].(string)] = row
 	}
 	las := byVendor["PT. Las Abadi"]
-	// Joined to the WO vendor despite the different spelling; only the
-	// approval inside the period counts; 5,000,000 / 10 h.
-	if las == nil || las["wo_vendor"] != "LAS ABADI, PT" || las["wo_approved_value"] != float64(5000000) ||
-		las["value_per_hour"] != float64(500000) || las["overtime_hours"] != float64(2) {
+	// Joined to the WO vendor despite the different spelling and to the WO
+	// under its kepala vendor; only approvals inside the period count:
+	// (5,000,000 + 1,000,000) / 10 h.
+	if las == nil || las["wo_vendor"] != "LAS ABADI, PT" || las["wo_approved_value"] != float64(6000000) ||
+		las["value_per_hour"] != float64(600000) || las["overtime_hours"] != float64(2) || las["wo_approved_count"] != float64(2) ||
+		strings.Join(toStrings(las["wo_vendors"]), ",") != "LAS ABADI, PT,LASMAN" {
 		t.Errorf("Las Abadi: %v", las)
 	}
-	// E9's PT comes from the member list.
+	// E9's PT comes from the member list; its WO is under its kepala vendor.
 	maju := byVendor["PT Maju Jaya"]
-	if maju == nil || maju["worked_hours"] != float64(8) || maju["wo_vendor"] != nil {
+	if maju == nil || maju["worked_hours"] != float64(8) || maju["wo_vendor"] != "MARYONO" ||
+		maju["wo_approved_value"] != float64(1600000) || maju["value_per_hour"] != float64(200000) || maju["wo_vendors"] != nil {
 		t.Errorf("Maju Jaya: %v", maju)
 	}
 	if byVendor[noPTLabel] == nil || byVendor[noPTLabel]["incomplete_days"] != float64(1) {
 		t.Errorf("worker without PT: %v", byVendor[noPTLabel])
 	}
 	notes := strings.Join(toStrings(out["notes"]), " | ")
-	if !strings.Contains(notes, "Vendor tanpa WO di ShipHub") || !strings.Contains(notes, "PT Maju Jaya") || !strings.Contains(notes, "1 pekerja tanpa PT") {
+	if !strings.Contains(notes, "Vendor tanpa WO di ShipHub (nama PT maupun kepala vendornya tidak sama dengan vendor WO mana pun): PT Tanpa Order") ||
+		!strings.Contains(notes, "PT Maju Jaya = MARYONO") || !strings.Contains(notes, "PT. Las Abadi = LASMAN") || !strings.Contains(notes, "1 pekerja tanpa PT") {
 		t.Errorf("notes: %s", notes)
 	}
-	if tot := out["totals"].(map[string]interface{}); tot["workers"] != float64(3) || tot["man_days"] != float64(3) {
+	if tot := out["totals"].(map[string]interface{}); tot["workers"] != float64(4) || tot["man_days"] != float64(4) {
 		t.Errorf("totals: %v", tot)
 	}
 
@@ -214,4 +225,24 @@ func toStrings(v interface{}) []string {
 		}
 	}
 	return out
+}
+
+func TestQueryAppDataHidesPersonalColumns(t *testing.T) {
+	seedAttendanceWorld(t)
+	db.Exec("DELETE FROM master_employees WHERE id = 'emp-priv'")
+	db.Exec(`INSERT INTO master_employees (id, code, name, address, email, phone, mobile_phone, position) VALUES ('emp-priv', 'K-1', 'Karyawan Uji', 'Jl. Rahasia 1', 'k@example.test', '021', '0812', 'Welder')`)
+	defer db.Exec("DELETE FROM master_employees WHERE id = 'emp-priv'")
+	res, err := runQueryAppData(aiRequest("att-admin"), json.RawMessage(`{"source": "employees", "filters": {"code": "K-1"}}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	b, _ := json.Marshal(res)
+	for _, leak := range []string{"Rahasia", "k@example.test", "0812", `"address"`, `"email"`, `"phone"`, `"mobile_phone"`} {
+		if strings.Contains(string(b), leak) {
+			t.Errorf("employee personal data returned (%s): %s", leak, b)
+		}
+	}
+	if !strings.Contains(string(b), "Karyawan Uji") || !strings.Contains(string(b), "Welder") {
+		t.Errorf("employee row missing: %s", b)
+	}
 }
