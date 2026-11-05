@@ -22,13 +22,22 @@ type aiDataSource struct {
 	Key, Label, Resource string
 	Table                string // a database table, or
 	Cache                string // a synced SIAGA response (sync_configs id)
+	Lookups              []aiDataLookup
 }
 
+// aiDataLookup adds a readable column for an id column, e.g. a Job Order's
+// location id ("1") → location_name "Slipway D".
+type aiDataLookup struct {
+	Column, Table, IDColumn, NameColumn, As string
+}
+
+var aiLocationLookup = aiDataLookup{Column: "location", Table: "master_locations", IDColumn: "id", NameColumn: "name", As: "location_name"}
+
 var aiDataSources = []aiDataSource{
-	{Key: "job_orders", Label: "Job Order / proyek kapal", Resource: "Job Order", Table: "projects"},
+	{Key: "job_orders", Label: "Job Order / proyek kapal, termasuk lokasi dock (location_name), status docking (status_dock) dan tanggal docking/undocking", Resource: "Job Order", Table: "projects", Lookups: []aiDataLookup{aiLocationLookup}},
 	{Key: "job_orders_siaga", Label: "Job Order dari SIAGA (sinkron)", Resource: "Job Order", Table: "sync_job_orders"},
 	{Key: "material_requests", Label: "Request Material (dari SIAGA)", Resource: "Request", Cache: "MaterialRequisitions"},
-	{Key: "ship_movements", Label: "Ship Docking: pergerakan dan posisi kapal di dock", Resource: "Ship Docking", Table: "ship_movements"},
+	{Key: "ship_movements", Label: "riwayat perpindahan kapal antar dock (sering kosong; lokasi dan status docking per kapal ada di job_orders)", Resource: "Ship Docking", Table: "ship_movements", Lookups: []aiDataLookup{aiLocationLookup}},
 	{Key: "equipment", Label: "Master Equipment / Inventory peralatan", Resource: "Master Equipment", Table: "equipment"},
 	{Key: "equipment_loans", Label: "Peminjaman peralatan (Equipment Loans / Request)", Resource: "Request", Table: "loan_requests"},
 	{Key: "equipment_releases", Label: "Release peralatan", Resource: "Release", Table: "equipment_release"},
@@ -368,8 +377,45 @@ func runQueryAppData(r *http.Request, input json.RawMessage) (interface{}, error
 	return out, nil
 }
 
-// loadAIDataSource reads a source's rows (visible columns only).
+// loadAIDataSource reads a source's rows (visible columns only), with the
+// lookup columns added.
 func loadAIDataSource(src aiDataSource) ([]string, []map[string]interface{}, error) {
+	columns, rows, err := loadAIDataRows(src)
+	if err != nil {
+		return nil, nil, err
+	}
+	for _, l := range src.Lookups {
+		has := false
+		for _, c := range columns {
+			has = has || c == l.Column
+		}
+		if !has {
+			continue
+		}
+		names := map[string]string{}
+		if res, err := db.Query(`SELECT CAST(` + l.IDColumn + ` AS TEXT), COALESCE(` + l.NameColumn + `, '') FROM ` + l.Table); err == nil {
+			for res.Next() {
+				var id, name string
+				if res.Scan(&id, &name) == nil {
+					names[id] = name
+				}
+			}
+			res.Close()
+		}
+		for _, row := range rows {
+			id := strings.TrimSpace(aiDataText(row[l.Column]))
+			if name, ok := names[id]; ok && name != "" {
+				row[l.As] = name
+			} else if id != "" {
+				row[l.As] = id // already a name, or an unknown id
+			}
+		}
+		columns = append(columns, l.As)
+	}
+	return columns, rows, nil
+}
+
+func loadAIDataRows(src aiDataSource) ([]string, []map[string]interface{}, error) {
 	if src.Cache != "" {
 		return loadAICache(src.Cache)
 	}
