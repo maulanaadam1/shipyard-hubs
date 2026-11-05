@@ -73,6 +73,7 @@ import MasterLayout from '../components/MasterLayout';
 import WorkOrderDashboard from '../components/WorkOrderDashboard';
 import WorkOrderItems from '../components/WorkOrderItems';
 import DataFindings from '../components/DataFindings';
+import PriceReference from '../components/PriceReference';
 import FinancialDashboard from '../components/FinancialDashboard';
 import ApiSyncManagement from '../components/ApiSyncManagement';
 import MasterService from '../components/MasterService';
@@ -223,6 +224,11 @@ createRoot(document.getElementById('root')!).render(
             <Route path="work-order-items" element={
               <ProtectedRoute resource="Item Pekerjaan WO">
                 <WorkOrderItems />
+              </ProtectedRoute>
+            } />
+            <Route path="price-reference" element={
+              <ProtectedRoute resource="Harga Acuan">
+                <PriceReference />
               </ProtectedRoute>
             } />
             <Route path="data-findings" element={

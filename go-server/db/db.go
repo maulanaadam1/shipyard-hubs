@@ -66,6 +66,7 @@ func Init() {
 	seedAdmin()
 	MigrateWorkOrderItemsPermission()
 	MigrateItemFindingsPermission()
+	MigratePriceReferencePermission()
 }
 
 // MigrateWorkOrderItemsPermission runs once (called from Init): the Item Pekerjaan WO menu used to
@@ -79,6 +80,12 @@ func MigrateWorkOrderItemsPermission() {
 // with the rights each role has on Item Pekerjaan WO, whose items it checks.
 func MigrateItemFindingsPermission() {
 	copyResourcePermissions("rbac_data_perlu_dicek", "Item Pekerjaan WO", "Data Perlu Dicek")
+}
+
+// MigratePriceReferencePermission runs once: the Harga Acuan menu starts with
+// the rights each role has on Item Pekerjaan WO, whose items it prices.
+func MigratePriceReferencePermission() {
+	copyResourcePermissions("rbac_harga_acuan", "Item Pekerjaan WO", "Harga Acuan")
 }
 
 // copyResourcePermissions gives every role the same actions on resource to as
