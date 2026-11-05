@@ -70,6 +70,8 @@ var aiDataSources = []aiDataSource{
 	{Key: "mo_ships", Label: "MasterOperation master_ship: kapal (tipe, perusahaan, LOA, lebar, tinggi, sarat)", Resource: ResourceIngestSources, Sheet: "master_ship"},
 	{Key: "mo_companies", Label: "MasterOperation master_company: perusahaan (tipe, nama)", Resource: ResourceIngestSources, Sheet: "master_company"},
 	{Key: "mo_locations", Label: "MasterOperation master_location: lokasi dock (kode, nama, koordinat)", Resource: ResourceIngestSources, Sheet: "master_location"},
+	// The attendance spreadsheet's Personal-Data tab (fingerprint users).
+	{Key: "att_personnel", Label: "Personal-Data dari spreadsheet absensi: pengguna mesin absen dengan emp_code, nama, department dan jabatan (karyawan internal galangan)", Resource: ResourceIngestSources, Sheet: "Personal-Data"},
 }
 
 // aiHidden: columns never returned from any source: secrets, blobs and

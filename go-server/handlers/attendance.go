@@ -204,11 +204,17 @@ type attendanceDay struct {
 	NamaPT       string `json:"nama_pt"`
 	// Keahlian (skill) from the vendor member list, when the worker is in it.
 	Keahlian string `json:"keahlian,omitempty"`
-	Date     string `json:"date"`
-	Day      string `json:"hari"`
-	CheckIn  string `json:"check_in"`
-	CheckOut string `json:"check_out"`
-	Punches  int    `json:"punches"`
+	// Department and position from the attendance spreadsheet's Personal-Data
+	// tab: set for the yard's own employees, who have no PT.
+	Department string `json:"department,omitempty"`
+	Position   string `json:"position,omitempty"`
+	Date       string `json:"date"`
+	Day        string `json:"hari"`
+	CheckIn    string `json:"check_in"`
+	CheckOut   string `json:"check_out"`
+	Punches    int    `json:"punches"`
+	// PunchTimes: every punch of the shift day, in order (HH:MM:SS).
+	PunchTimes []string `json:"punch_times"`
 	// Status: lengkap, tanpa_absen_pulang, tanpa_absen_masuk.
 	Status string `json:"status"`
 	// WorkedMinutes is measured from real punches; nil when one is missing.
@@ -304,6 +310,9 @@ func computeAttendanceDays(punches []punchRow, rules attendanceRules) []attendan
 			Punches:      len(g.times),
 			Status:       "lengkap",
 		}
+		for _, t := range g.times {
+			day.PunchTimes = append(day.PunchTimes, t.Format("15:04:05"))
+		}
 		if hasIn {
 			day.CheckIn = in.Format("15:04:05")
 		} else {
@@ -347,10 +356,7 @@ func summarizeAttendanceByVendor(days []attendanceDay) []attendanceVendorSummary
 	byPT := map[string]*attendanceVendorSummary{}
 	workers := map[string]map[string]bool{}
 	for _, d := range days {
-		pt := d.NamaPT
-		if pt == "" {
-			pt = "-"
-		}
+		pt := attendanceGroupLabel(d, "-")
 		s := byPT[pt]
 		if s == nil {
 			s = &attendanceVendorSummary{NamaPT: pt}
@@ -475,7 +481,65 @@ func loadAttendanceDays(from, to time.Time, filters map[string]string, rules att
 	}
 	days := computeAttendanceDays(punches, rules)
 	fillFromMembers(days, loadVendorMembers())
+	fillFromPersonnel(days, loadAttendancePersonnel())
 	return days, nil
+}
+
+// attendanceGroupLabel: the worker's PT, or "Internal - <department>" for the
+// yard's own employees, or empty when neither is known.
+func attendanceGroupLabel(d attendanceDay, empty string) string {
+	if d.NamaPT != "" && d.NamaPT != "-" {
+		return d.NamaPT
+	}
+	if d.Department != "" {
+		return "Internal - " + d.Department
+	}
+	return empty
+}
+
+// fillFromPersonnel adds department and position (Personal-Data, matched on
+// emp_code) and a missing name.
+func fillFromPersonnel(days []attendanceDay, personnel map[string]attendancePerson) {
+	for i := range days {
+		p, ok := personnel[days[i].EmpCode]
+		if !ok {
+			continue
+		}
+		days[i].Department, days[i].Position = p.Department, p.Position
+		if days[i].Name == "" {
+			days[i].Name = p.Name
+		}
+	}
+}
+
+type attendancePerson struct{ Name, Department, Position string }
+
+// loadAttendancePersonnel reads the attendance spreadsheet's Personal-Data
+// tab (machine users: emp_code, first_name, department, position). The
+// machine's placeholder department "Department" means none was set.
+func loadAttendancePersonnel() map[string]attendancePerson {
+	rows, err := loadExternalSheet("Personal-Data")
+	if err != nil {
+		return nil
+	}
+	out := map[string]attendancePerson{}
+	for _, raw := range rows {
+		row := normalizeRow(raw)
+		code := cellString(row["emp_code"])
+		if code == "" {
+			continue
+		}
+		p := attendancePerson{Name: cellString(row["first_name"]), Department: cellString(row["department"])}
+		p.Position = cellString(row["positition"]) // spelled so in the sheet
+		if p.Position == "" {
+			p.Position = cellString(row["position"])
+		}
+		if strings.EqualFold(p.Department, "Department") {
+			p.Department = ""
+		}
+		out[code] = p
+	}
+	return out
 }
 
 // fillFromMembers completes days from the vendor member list (vendor_detail):

@@ -60,7 +60,7 @@ var legalFormWord = regexp.MustCompile(`\b(PT|CV|PD|UD|TBK|PERSERO)\b`)
 // companies (ANUGERAH LAUTAN MANDIRI vs ANUGERAH DUTA NIAGA).
 func normalizeVendorName(name string) string {
 	s := strings.ToUpper(name)
-	s = strings.NewReplacer(".", " ", ",", " ", "(", " ", ")", " ").Replace(s)
+	s = strings.NewReplacer(".", " ", ",", " ", "(", " ", ")", " ", "-", " ").Replace(s)
 	s = legalFormWord.ReplaceAllString(s, " ")
 	return strings.Join(strings.Fields(s), " ")
 }

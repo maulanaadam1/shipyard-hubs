@@ -23,10 +23,12 @@ const noPTLabel = "Tanpa PT"
 func attendanceHoursTool() aiTool {
 	return aiTool{
 		Name: "attendance_hours",
-		Description: "Work hours of subcontractor workers from the fingerprint attendance (ZKTeco, synced from the attendance spreadsheet). " +
-			"Call this when the user asks how many hours or man-days a vendor / PT worked, who worked or did overtime, how many " +
-			"workers came on a day, attendance with a missing check-in or check-out, or productivity of a vendor (WO value per " +
-			"hour worked). group_by vendor (default) returns per vendor: workers, man-days, measured hours, hours including " +
+		Description: "Attendance and work hours from the fingerprint machines (ZKTeco, synced from the attendance spreadsheet): " +
+			"subcontractor workers (grouped by PT) and the yard's own employees (grouped as Internal - <department>). " +
+			"Call this when the user asks how many hours or man-days a vendor / PT or department worked, who worked or did overtime, " +
+			"how many workers came on a day, what time someone checked in or out, attendance with a missing check-in or check-out, " +
+			"or productivity of a vendor (WO value per hour worked). group_by worker_day lists each worker's days with check-in, " +
+			"check-out, every punch time and status; use it with worker or vendor and dates when the user asks what time people came or left. group_by vendor (default) returns per vendor: workers, man-days, measured hours, hours including " +
 			"estimates for days with one punch, overtime, wo_vendor (plus wo_vendors when the PT is also billed under its kepala vendor name) = the exact WO vendor names for search_work_orders / " +
 			"billing_summary, and (when the user may see billing) WO value approved in the period and value per hour. group_by " +
 			"worker or day gives the same per worker (with kepala subkon and skill) or per date. Without dates it covers the " +
@@ -34,9 +36,9 @@ func attendanceHoursTool() aiTool {
 		Schema: aiSchema(map[string]interface{}{
 			"date_from": aiString("First shift day, YYYY-MM-DD."),
 			"date_to":   aiString("Last shift day, YYYY-MM-DD (at most 62 days after date_from)."),
-			"vendor":    aiString("Vendor / PT name in any spelling (PT ABC, ABC PT, ABC, PT. Abc), or \"Tanpa PT\" for workers with no PT."),
-			"worker":    aiString("Worker name or emp_code (fingerprint id); words must all match."),
-			"group_by":  aiString("vendor (default), worker or day.", "vendor", "worker", "day"),
+			"vendor":    aiString("Vendor / PT name in any spelling (PT ABC, ABC PT, ABC, PT. Abc), \"Internal - <department>\" (e.g. Internal - QHSE), \"Internal\" for all yard employees, or \"Tanpa PT\" for workers in neither list."),
+			"worker":    aiString("Worker name, emp_code (fingerprint id) or department; words must all match."),
+			"group_by":  aiString("vendor (default: PT or internal department), worker, day, or worker_day (one row per worker per day with check-in / check-out times).", "vendor", "worker", "day", "worker_day"),
 			"sort":      aiString("hours = most hours first (default), overtime = most overtime first, incomplete = most days with a missing punch first.", "hours", "overtime", "incomplete"),
 			"limit":     aiInteger("Rows to return (default 20).", 1, 100),
 		}),
@@ -57,12 +59,10 @@ type attendanceHoursInput struct {
 
 func hours(minutes int) float64 { return math.Round(float64(minutes)/6) / 10 }
 
-func vendorLabelPT(pt string) string {
-	if pt == "" || pt == "-" {
-		return noPTLabel
-	}
-	return pt
-}
+// groupLabel: PT, "Internal - <department>" or "Tanpa PT".
+func groupLabel(d attendanceDay) string { return attendanceGroupLabel(d, noPTLabel) }
+
+func isInternalLabel(label string) bool { return strings.HasPrefix(label, "Internal - ") }
 
 // attendancePeriod: the requested days, or the last 7 days of attendance.
 func attendancePeriod(in attendanceHoursInput) (time.Time, time.Time, error) {
@@ -127,7 +127,7 @@ func runAttendanceHours(r *http.Request, input json.RawMessage) (interface{}, er
 	if err := decodeAIInput(input, &in); err != nil {
 		return nil, err
 	}
-	if err := oneOf("group_by", in.GroupBy, "vendor", "worker", "day"); err != nil {
+	if err := oneOf("group_by", in.GroupBy, "vendor", "worker", "day", "worker_day"); err != nil {
 		return nil, err
 	}
 	if err := oneOf("sort", in.Sort, "hours", "overtime", "incomplete"); err != nil {
@@ -148,16 +148,22 @@ func runAttendanceHours(r *http.Request, input json.RawMessage) (interface{}, er
 	var days []attendanceDay
 	for _, d := range all {
 		if in.Vendor != "" {
-			if strings.EqualFold(strings.TrimSpace(in.Vendor), noPTLabel) {
-				if vendorLabelPT(d.NamaPT) != noPTLabel {
+			label := groupLabel(d)
+			switch {
+			case strings.EqualFold(strings.TrimSpace(in.Vendor), noPTLabel):
+				if label != noPTLabel {
 					continue
 				}
-			} else if normalizeVendorName(d.NamaPT) != vendorKey {
+			case strings.EqualFold(strings.TrimSpace(in.Vendor), "internal"):
+				if !isInternalLabel(label) {
+					continue
+				}
+			case normalizeVendorName(label) != vendorKey:
 				continue
 			}
 		}
 		if len(words) > 0 {
-			text := strings.ToLower(d.EmpCode + " " + d.Name)
+			text := strings.ToLower(d.EmpCode + " " + d.Name + " " + d.Department)
 			ok := true
 			for _, w := range words {
 				ok = ok && strings.Contains(text, w)
@@ -169,8 +175,13 @@ func runAttendanceHours(r *http.Request, input json.RawMessage) (interface{}, er
 		days = append(days, d)
 	}
 
+	if in.GroupBy == "worker_day" {
+		return attendanceWorkerDays(in, from, to, days), nil
+	}
+
 	type agg struct {
 		key, name, empCode, kepala, keahlian, date, day  string
+		department, position                             string
 		workers                                          map[string]bool
 		manDays, incomplete, worked, estimated, overtime int
 	}
@@ -188,7 +199,7 @@ func runAttendanceHours(r *http.Request, input json.RawMessage) (interface{}, er
 		case "day":
 			key = d.Date
 		default:
-			key = vendorLabelPT(d.NamaPT)
+			key = groupLabel(d)
 		}
 		g := groups[key]
 		if g == nil {
@@ -207,9 +218,10 @@ func runAttendanceHours(r *http.Request, input json.RawMessage) (interface{}, er
 			}
 		}
 		g.name, g.empCode, g.kepala, g.keahlian = d.Name, d.EmpCode, d.KepalaSubkon, d.Keahlian
+		g.department, g.position = d.Department, d.Position
 		g.date, g.day = d.Date, d.Day
 		if groupBy == "worker" {
-			g.key = vendorLabelPT(d.NamaPT) // the worker's vendor, shown below
+			g.key = groupLabel(d) // the worker's vendor or department, shown below
 		}
 	}
 
@@ -266,11 +278,14 @@ func runAttendanceHours(r *http.Request, input json.RawMessage) (interface{}, er
 			if g.keahlian != "" {
 				row["keahlian"] = g.keahlian
 			}
+			if g.position != "" {
+				row["position"] = g.position
+			}
 		case "day":
 			row["date"], row["hari"] = g.date, g.day
 		default:
 			row["vendor"] = g.key
-			if g.key != noPTLabel {
+			if g.key != noPTLabel && !isInternalLabel(g.key) {
 				// The PT's own name, then its kepala vendor / subkon names:
 				// a WO under any of them is that PT's work.
 				key := normalizeVendorName(g.key)
@@ -334,7 +349,7 @@ func runAttendanceHours(r *http.Request, input json.RawMessage) (interface{}, er
 		}
 	}
 	if g := groups[noPTLabel]; g != nil && groupBy == "vendor" {
-		notes = append(notes, fmt.Sprintf("%d pekerja tanpa PT: emp_code mereka belum ada di daftar anggota vendor (vendor_detail) dan absennya tidak membawa nama PT.", len(g.workers)))
+		notes = append(notes, fmt.Sprintf("%d pekerja tanpa PT: emp_code mereka tidak ada di daftar anggota vendor (vendor_detail) maupun di Personal-Data, dan absennya tidak membawa nama PT.", len(g.workers)))
 	}
 
 	return map[string]interface{}{
@@ -348,4 +363,56 @@ func runAttendanceHours(r *http.Request, input json.RawMessage) (interface{}, er
 		"rows":         rows,
 		"notes":        notes,
 	}, nil
+}
+
+// attendanceWorkerDays: one row per worker per shift day with the actual
+// check-in, check-out and every punch, for "what time did X come in".
+func attendanceWorkerDays(in attendanceHoursInput, from, to time.Time, days []attendanceDay) map[string]interface{} {
+	sort.SliceStable(days, func(i, j int) bool {
+		if days[i].Date != days[j].Date {
+			return days[i].Date < days[j].Date
+		}
+		if a, b := groupLabel(days[i]), groupLabel(days[j]); a != b {
+			return a < b
+		}
+		return days[i].Name+days[i].EmpCode < days[j].Name+days[j].EmpCode
+	})
+	limit := limitOr(in.Limit, 50, 100)
+	rows := []map[string]interface{}{}
+	counts := map[string]int{}
+	for _, d := range days {
+		counts[d.Status]++
+		if len(rows) == limit {
+			continue
+		}
+		row := map[string]interface{}{
+			"date": d.Date, "hari": d.Day, "emp_code": d.EmpCode, "name": d.Name, "vendor": groupLabel(d),
+			"check_in": d.CheckIn, "check_out": d.CheckOut, "punch_times": d.PunchTimes, "status": d.Status,
+			"hours_incl_estimates": hours(d.EstimatedMinutes), "overtime_hours": hours(d.OvertimeMinutes),
+		}
+		if d.WorkedMinutes != nil {
+			row["worked_hours"] = hours(*d.WorkedMinutes)
+		}
+		if d.KepalaSubkon != "" && d.KepalaSubkon != "-" {
+			row["kepala_subkon"] = d.KepalaSubkon
+		}
+		if d.Position != "" {
+			row["position"] = d.Position
+		}
+		rows = append(rows, row)
+	}
+	out := map[string]interface{}{
+		"period":   map[string]string{"from": from.Format("2006-01-02"), "to": to.Format("2006-01-02")},
+		"group_by": "worker_day",
+		"totals": map[string]interface{}{"days": len(days), "lengkap": counts["lengkap"],
+			"tanpa_absen_pulang": counts["tanpa_absen_pulang"], "tanpa_absen_masuk": counts["tanpa_absen_masuk"]},
+		"rows": rows,
+		"notes": []string{"check_in = absen pertama, check_out = absen terakhir pada hari shift itu (absen sebelum 05:00 masuk shift hari sebelumnya). " +
+			"Bila hanya ada satu absen, absen pagi (05:00-13:00) dianggap masuk dan check_out kosong; selain itu dianggap pulang. " +
+			"punch_times berisi semua absen hari itu, apa adanya dari mesin; hours_incl_estimates memakai jam standar untuk absen yang hilang."},
+	}
+	if len(days) > len(rows) {
+		out["note"] = fmt.Sprintf("menampilkan %d dari %d hari; persempit dengan worker, vendor atau tanggal", len(rows), len(days))
+	}
+	return out
 }

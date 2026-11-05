@@ -25,8 +25,14 @@ const MASTER_DROP_COLUMN = /identitas|^nik$|alamat|address|nomor_bpjs|bpjs_(no|n
 
 const MASTER_MAX_ROWS = 5000; // one request per tab; the server's limit
 
-function masterRows_(sheet) {
-  const rows = readRows_(MASTER_SPREADSHEET_ID, sheet);
+// Tabs of other spreadsheets sent with MasterOperation to the same source:
+// the attendance spreadsheet's machine user list (department, position).
+const EXTRA_SHEETS = [
+  { spreadsheetId: '1YAF5qBOvwcJtoA_n3rWMfBjAZKXb9uUk68PnjYdup_U', sheet: 'Personal-Data' }, // Absensi ZKteco
+];
+
+function masterRows_(sheet, spreadsheetId) {
+  const rows = readRows_(spreadsheetId || MASTER_SPREADSHEET_ID, sheet);
   return rows.map(function (row, i) {
     const out = { _sheet: sheet };
     Object.keys(row).forEach(function (h) {
@@ -35,7 +41,7 @@ function masterRows_(sheet) {
       out[h] = row[h];
     });
     // Key: the row's id when it has one, else its position in the tab.
-    const id = row.id || row.id_siaga || '';
+    const id = row.id || row.id_siaga || row.emp_code || '';
     out._key = sheet + ':' + (id !== '' ? id : 'row' + (i + 2));
     return out;
   });
@@ -63,9 +69,11 @@ function syncMasterOperation() {
   withLock_(function () {
     const cfg = config_('_MASTER');
     const failed = [];
-    MASTER_SHEETS.forEach(function (sheet) {
+    const tabs = MASTER_SHEETS.map(function (sheet) { return { sheet: sheet }; }).concat(EXTRA_SHEETS);
+    tabs.forEach(function (tab) {
+      const sheet = tab.sheet;
       try {
-        const out = postSheet_(cfg, sheet, masterRows_(sheet));
+        const out = postSheet_(cfg, sheet, masterRows_(sheet, tab.spreadsheetId));
         console.log(sheet + ': ' + out.received + ' baris, ' + out.saved + ' baru/berubah, ' +
           (out.removed || 0) + ' dihapus, ' + out.skipped + ' dilewati.');
       } catch (e) {
