@@ -55,14 +55,26 @@ func TestAttendanceSyncUpsert(t *testing.T) {
 		t.Fatalf("first sync: %d %v", rec.Code, out)
 	}
 
-	// Sending the same id again updates the row instead of duplicating it.
-	postAttendance(t, "rahasia", `{"rows":[{"id": 101, "emp_code": "E1", "nama_pt": "PT Las Baru", "punch_time": "2026-11-02 07:55:00"}]}`)
+	var subkon string
+	db.QueryRow("SELECT kepala_subkon FROM attendance_punches WHERE id = '101'").Scan(&subkon)
+	if subkon != "Pak A" {
+		t.Errorf("header with a space not mapped: kepala_subkon %q", subkon)
+	}
+
+	// Resending identical rows changes nothing.
+	_, out = postAttendance(t, "rahasia", body)
+	if out["saved"].(float64) != 0 || out["unchanged"].(float64) != 3 {
+		t.Errorf("identical resend: %v", out)
+	}
+
+	// Sending the same id with new content updates the row instead of duplicating it.
+	_, out = postAttendance(t, "rahasia", `{"rows":[{"id": 101, "emp_code": "E1", "nama_pt": "PT Las Baru", "punch_time": "2026-11-02 07:55:00"}]}`)
 	var n int
 	var pt, at string
 	db.QueryRow("SELECT COUNT(*) FROM attendance_punches").Scan(&n)
 	db.QueryRow("SELECT nama_pt, punch_time FROM attendance_punches WHERE id = '101'").Scan(&pt, &at)
-	if n != 3 || pt != "PT Las Baru" || at != "2026-11-02 07:55:00" {
-		t.Errorf("after resend: %d rows, nama_pt %q, punch_time %q", n, pt, at)
+	if out["saved"].(float64) != 1 || n != 3 || pt != "PT Las Baru" || at != "2026-11-02 07:55:00" {
+		t.Errorf("after changed resend: %v, %d rows, nama_pt %q, punch_time %q", out, n, pt, at)
 	}
 	db.QueryRow("SELECT punch_time FROM attendance_punches WHERE id = '102'").Scan(&at)
 	if at != "2026-11-02 17:10:30" {

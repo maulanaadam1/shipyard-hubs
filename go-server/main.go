@@ -131,7 +131,7 @@ func main() {
 		r.With(aiView).Delete("/api/ai/conversations/{id}", handlers.DeleteAIConversation)
 		r.With(handlers.RequireAdmin).Get("/api/ai/logs", handlers.GetAILogs)
 		// Work hours from attendance punches; Admin only until it has a menu.
-		r.With(handlers.RequireAdmin).Get("/api/attendance/daily", handlers.GetAttendanceDaily)
+		r.With(appMiddleware.RequireRole("Admin")).Get("/api/attendance/daily", handlers.GetAttendanceDaily)
 		r.Post("/api/ai/tools/{name}", handlers.RunAITool)
 		r.With(handlers.RequireAdmin).Get("/api/ai/settings", handlers.GetAISettings)
 		r.With(handlers.RequireAdmin).Put("/api/ai/settings", handlers.PutAISettings)

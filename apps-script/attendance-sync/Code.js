@@ -60,6 +60,7 @@ function rowDay_(row) {
 function post_(rows) {
   const cfg = config_();
   let saved = 0;
+  let unchanged = 0;
   let skipped = 0;
   // At least one request, so checkConfig can test the URL and token.
   for (let i = 0; i === 0 || i < rows.length; i += CHUNK_SIZE) {
@@ -78,10 +79,12 @@ function post_(rows) {
     }
     const out = JSON.parse(res.getContentText());
     saved += out.saved;
+    unchanged += out.unchanged;
     skipped += out.skipped;
     if (out.problems && out.problems.length) console.warn('Baris dilewati: ' + out.problems.join('; '));
   }
-  console.log('Terkirim ' + rows.length + ' baris: ' + saved + ' tersimpan, ' + skipped + ' dilewati.');
+  console.log('Terkirim ' + rows.length + ' baris: ' + saved + ' baru/berubah, ' + unchanged +
+    ' sudah ada, ' + skipped + ' dilewati.');
 }
 
 function withLock_(fn) {

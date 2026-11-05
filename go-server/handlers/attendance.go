@@ -84,7 +84,9 @@ type attendancePunch struct {
 func attendancePunchFromRow(row map[string]any) (attendancePunch, error) {
 	clean := make(map[string]any, len(row))
 	for k, v := range row {
-		clean[attendanceHeaderClean.ReplaceAllString(strings.ToLower(strings.TrimSpace(k)), "")] = v
+		// "Kepala Subkon" and "kepala_subkon" are the same column.
+		key := strings.Join(strings.Fields(strings.ToLower(k)), "_")
+		clean[attendanceHeaderClean.ReplaceAllString(key, "")] = v
 	}
 	get := func(k string) string { return attendanceString(clean[k]) }
 
@@ -152,16 +154,17 @@ func PostAttendanceSync(w http.ResponseWriter, r *http.Request) {
 		punches = append(punches, p)
 	}
 
-	saved, err := upsertAttendancePunches(punches)
+	changed, err := upsertAttendancePunches(punches)
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "gagal menyimpan: " + err.Error()})
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{
-		"received": len(body.Rows),
-		"saved":    saved,
-		"skipped":  len(body.Rows) - saved,
-		"problems": problems,
+		"received":  len(body.Rows),
+		"saved":     changed,                       // new or changed
+		"unchanged": len(punches) - changed,        // already stored as is
+		"skipped":   len(body.Rows) - len(punches), // unreadable rows, see problems
+		"problems":  problems,
 	})
 }
 
@@ -174,24 +177,32 @@ func upsertAttendancePunches(punches []attendancePunch) (int, error) {
 		return 0, err
 	}
 	defer tx.Rollback()
+	// The script resends the last days every 5 minutes; rows whose content is
+	// unchanged are left alone, so a resend does not rewrite them.
 	stmt, err := tx.Prepare(db.FormatQuery(`INSERT INTO attendance_punches
 		(id, emp_code, first_name, last_name, kepala_subkon, nama_pt, punch_time, terminal_sn, raw, synced_at)
 		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		ON CONFLICT (id) DO UPDATE SET
 			emp_code = excluded.emp_code, first_name = excluded.first_name, last_name = excluded.last_name,
 			kepala_subkon = excluded.kepala_subkon, nama_pt = excluded.nama_pt, punch_time = excluded.punch_time,
-			terminal_sn = excluded.terminal_sn, raw = excluded.raw, synced_at = excluded.synced_at`))
+			terminal_sn = excluded.terminal_sn, raw = excluded.raw, synced_at = excluded.synced_at
+		WHERE attendance_punches.raw IS DISTINCT FROM excluded.raw`))
 	if err != nil {
 		return 0, err
 	}
 	defer stmt.Close()
 	now := time.Now().Format(time.RFC3339)
+	changed := 0
 	for _, p := range punches {
-		if _, err := stmt.Exec(p.ID, p.EmpCode, p.FirstName, p.LastName, p.KepalaSubkon, p.NamaPT, p.PunchTime, p.TerminalSN, p.Raw, now); err != nil {
+		res, err := stmt.Exec(p.ID, p.EmpCode, p.FirstName, p.LastName, p.KepalaSubkon, p.NamaPT, p.PunchTime, p.TerminalSN, p.Raw, now)
+		if err != nil {
 			return 0, err
 		}
+		if n, _ := res.RowsAffected(); n > 0 {
+			changed++
+		}
 	}
-	return len(punches), tx.Commit()
+	return changed, tx.Commit()
 }
 
 // --- Daily work hours ---
@@ -422,7 +433,7 @@ func GetAttendanceDaily(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "from/to harus tanggal YYYY-MM-DD dan from <= to"})
 		return
 	}
-	if to.Sub(from) > attendanceMaxDays*24*time.Hour {
+	if to.Sub(from) >= attendanceMaxDays*24*time.Hour {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": fmt.Sprintf("rentang maksimal %d hari", attendanceMaxDays)})
 		return
 	}
