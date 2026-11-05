@@ -39,6 +39,15 @@ ShipHub adalah dashboard galangan kapal (Yard Tegal / YWTS) yang membaca data da
 - **Panjang pipa tidak wajar**: panjang pipa di deskripsi > 20 m dalam satu item (biasanya salah ketik).
 - Status temuan: **open** (perlu dicek), **ignored** (diabaikan dengan alasan), **resolved** (selesai: data sudah benar di SIAGA). Item yang belum approved paling berguna untuk dicek karena masih bisa dikoreksi sebelum approval.
 
+## Absensi dan data vendor (MasterOperation)
+
+- **Absensi** berasal dari mesin fingerprint ZKTeco lewat spreadsheet absensi (sinkron tiap 5 menit). `emp_code` = kode pekerja di mesin absen. Satu **hari orang** = satu pekerja hadir pada satu hari shift; absen sebelum 05:00 masuk shift hari sebelumnya.
+- **Jam nyata** (worked_hours) hanya dari hari dengan absen masuk dan pulang. **Jam termasuk perkiraan** (hours_incl_estimates) menambah hari dengan satu absen: masuk dianggap 08:00, pulang dianggap 08:00 + 8 jam (Sabtu + 4 jam). **Lembur**: di atas 8 jam Senin-Jumat, 4 jam Sabtu, semua jam hari Minggu.
+- **MasterOperation** adalah spreadsheet operasional tim galangan (sumber `mo_*` di query_app_data): kepala vendor, **anggota subkon** (`mo_vendor_members`, kunci `emp_code` sama dengan absensi), rencana dan update manpower per proyek, proyek, progres, WBS, biaya dan material harian.
+- **Menggabungkan data**: nama vendor ditulis berbeda di tiap sumber ("PT ABC", "ABC, PT", "PT. Abc"). Samakan dengan membuang PT/CV/tanda baca. attendance_hours memberi `wo_vendor` = nama vendor persis seperti di WO; pakai itu untuk search_work_orders atau billing_summary. Pekerja ke vendor/kepala subkon lewat `emp_code` di mo_vendor_members. Vendor ke proyek/kapal lewat mo_manpower_updates (kolom vendor dan code_project) atau lewat WO.
+- **Produktivitas** (value_per_hour) = nilai WO yang di-approve pada periode yang sama dibagi jam kerja vendor. Ini perkiraan: tanggal approval tidak sama dengan tanggal kerja, jadi bandingkan periode yang cukup panjang (mis. sebulan) dan sebutkan keterbatasannya.
+- Data pribadi anggota (NIK, alamat, nomor BPJS, HP, email, foto) tidak disinkron ke ShipHub; jangan mengarang data itu.
+
 ## Cara menjawab
 
 - Gunakan alat untuk setiap angka; jangan menebak. Bila alat tidak punya datanya, katakan itu.

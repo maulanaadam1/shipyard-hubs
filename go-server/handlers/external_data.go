@@ -1,0 +1,115 @@
+package handlers
+
+import (
+	"encoding/json"
+	"regexp"
+	"strings"
+
+	"shipyard/db"
+)
+
+// Rows pushed by spreadsheet sources ("records" kind) carry the tab they came
+// from in _sheet and their key in _key (see apps-script/attendance-sync,
+// syncMasterOperation). These helpers read one tab back, whichever source
+// sent it, and match vendor names across ShipHub's data.
+
+const (
+	externalSheetField = "_sheet"
+	externalKeyField   = "_key"
+)
+
+// externalPersonalColumn: personal identifiers never shown from external
+// rows, even if a sender includes them (the Apps Script already drops them).
+var externalPersonalColumn = regexp.MustCompile(`(?i)identitas|^nik$|alamat|address|nomor_bpjs|bpjs_(no|number)|no_hp|phone|whats|whatapp|wa_number|email|photo|foto|card_no`)
+
+// loadExternalSheet returns the rows of one spreadsheet tab, without the
+// _sheet/_key bookkeeping fields.
+func loadExternalSheet(sheet string) ([]map[string]interface{}, error) {
+	// data is stored by json.Marshal (sorted keys, no spaces), so the tab
+	// name appears exactly like this; it is checked again after decoding.
+	rows, err := db.Query(`SELECT data FROM external_records WHERE data LIKE ? ORDER BY record_key`,
+		`%"`+externalSheetField+`":"`+sheet+`"%`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []map[string]interface{}
+	for rows.Next() {
+		var raw string
+		if rows.Scan(&raw) != nil {
+			continue
+		}
+		var row map[string]interface{}
+		if json.Unmarshal([]byte(raw), &row) != nil || row[externalSheetField] != sheet {
+			continue
+		}
+		delete(row, externalSheetField)
+		delete(row, externalKeyField)
+		out = append(out, row)
+	}
+	return out, rows.Err()
+}
+
+var legalFormWord = regexp.MustCompile(`\b(PT|CV|PD|UD|TBK|PERSERO)\b`)
+
+// normalizeVendorName makes vendor names from different systems comparable:
+// "PT. Maskuri Karya Sejahtera", "MASKURI KARYA SEJAHTERA, PT" and
+// "PT MASKURI KARYA SEJAHTERA" all become "MASKURI KARYA SEJAHTERA".
+// Only this exact form is matched; similar-looking names are often different
+// companies (ANUGERAH LAUTAN MANDIRI vs ANUGERAH DUTA NIAGA).
+func normalizeVendorName(name string) string {
+	s := strings.ToUpper(name)
+	s = strings.NewReplacer(".", " ", ",", " ", "(", " ", ")", " ").Replace(s)
+	s = legalFormWord.ReplaceAllString(s, " ")
+	return strings.Join(strings.Fields(s), " ")
+}
+
+// vendorMember is a subcontractor worker from the vendor_detail tab.
+type vendorMember struct {
+	EmpCode, Name, KepalaSubkon, NamaPT, Keahlian, Status string
+}
+
+// loadVendorMembers indexes vendor_detail by emp_code (the fingerprint id).
+func loadVendorMembers() map[string]vendorMember {
+	rows, err := loadExternalSheet("vendor_detail")
+	if err != nil {
+		return nil
+	}
+	out := map[string]vendorMember{}
+	for _, raw := range rows {
+		row := normalizeRow(raw)
+		m := vendorMember{
+			EmpCode:      cellString(row["emp_code"]),
+			Name:         cellString(row["name"]),
+			KepalaSubkon: cellString(row["kepala_subkon"]),
+			NamaPT:       cellString(row["nama_pt"]),
+			Keahlian:     cellString(row["keahlian"]),
+			Status:       cellString(row["status"]),
+		}
+		if m.EmpCode != "" {
+			out[m.EmpCode] = m
+		}
+	}
+	return out
+}
+
+// woVendorNames maps normalized vendor names to the WO vendor_name as SIAGA
+// spells it, so a name from attendance or a spreadsheet can be passed to the
+// Work Order and billing tools.
+func woVendorNames() map[string]string {
+	out := map[string]string{}
+	rows, err := db.Query(`SELECT DISTINCT vendor_name FROM work_order_summary WHERE COALESCE(vendor_name, '') <> ''`)
+	if err != nil {
+		return out
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var name string
+		if rows.Scan(&name) == nil {
+			if key := normalizeVendorName(name); key != "" {
+				out[key] = name
+			}
+		}
+	}
+	return out
+}

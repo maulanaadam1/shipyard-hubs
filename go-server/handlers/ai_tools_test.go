@@ -88,7 +88,11 @@ func TestAIEvalQuestions(t *testing.T) {
 	for _, tool := range aiTools() {
 		tools[tool.Name] = tool
 	}
-	req := httptest.NewRequest("POST", "/", nil)
+	// As an Admin: some sources (MasterOperation) check the user's rights.
+	db.Exec("DELETE FROM profiles WHERE id = 'ai-eval-admin'")
+	db.Exec(`INSERT INTO profiles (id, email, username, name, role) VALUES ('ai-eval-admin', 'ai-eval-admin@example.test', 'aievaladmin', 'Eval Admin', 'Admin')`)
+	defer db.Exec("DELETE FROM profiles WHERE id = 'ai-eval-admin'")
+	req := httptest.NewRequest("POST", "/", nil).WithContext(asUser("ai-eval-admin"))
 	for _, q := range questions {
 		if q.Question == "" || q.Expect == "" || len(q.Tools) == 0 {
 			t.Errorf("%s: incomplete", q.ID)

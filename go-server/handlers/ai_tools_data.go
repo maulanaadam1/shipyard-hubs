@@ -21,7 +21,8 @@ import (
 type aiDataSource struct {
 	Key, Label, Resource string
 	Table                string // a database table, or
-	Cache                string // a synced SIAGA response (sync_configs id)
+	Cache                string // a synced SIAGA response (sync_configs id), or
+	Sheet                string // a spreadsheet tab pushed to Sumber Data Eksternal
 	Lookups              []aiDataLookup
 }
 
@@ -53,6 +54,22 @@ var aiDataSources = []aiDataSource{
 	{Key: "vessel_layouts", Label: "Master Layout (denah)", Resource: "Master Layout", Table: "vessel_layouts"},
 	{Key: "approval_workflows", Label: "Approval Workflow", Resource: "Master Workflow", Table: "approval_workflow"},
 	{Key: "dropdown_configs", Label: "Master Configuration (pilihan dropdown)", Resource: "Master Configuration", Table: "dropdown_configs"},
+	// Spreadsheet MasterOperation (operational data kept by the yard team),
+	// pushed by apps-script/attendance-sync. Admin only for now: the Sumber
+	// Data Eksternal resource is Admin's.
+	{Key: "mo_vendor_heads", Label: "MasterOperation vendor: kepala vendor (kolom vendor), nama_pt, kategori, jumlah anggota", Resource: ResourceIngestSources, Sheet: "vendor"},
+	{Key: "mo_vendor_members", Label: "MasterOperation vendor_detail: anggota subkon, emp_code (= kode absen fingerprint), nama, kepala_subkon, nama_pt, keahlian, status, safety induction, status BPJS", Resource: ResourceIngestSources, Sheet: "vendor_detail"},
+	{Key: "mo_manpower_plan", Label: "MasterOperation wo_vendor: rencana manpower vendor per proyek/kapal (est_manpower, rate_manpower, cost)", Resource: ResourceIngestSources, Sheet: "wo_vendor"},
+	{Key: "mo_manpower_updates", Label: "MasterOperation wo_mp_update: update manpower harian vendor per proyek/kapal", Resource: ResourceIngestSources, Sheet: "wo_mp_update"},
+	{Key: "mo_projects", Label: "MasterOperation project: proyek kapal dengan tanggal rencana/aktual, docking, harga kontrak, biaya aktual, gross profit, tim, manpower", Resource: ResourceIngestSources, Sheet: "project"},
+	{Key: "mo_progress", Label: "MasterOperation progress: progres proyek (plan vs aktual, planned/earned value, SPI, CPI, biaya kumulatif)", Resource: ResourceIngestSources, Sheet: "progress"},
+	{Key: "mo_wbs", Label: "MasterOperation wbs_data: WBS pekerjaan per proyek (divisi, pekerjaan, biaya, volume, jadwal rencana/aktual, status, progres)", Resource: ResourceIngestSources, Sheet: "wbs_data"},
+	{Key: "mo_daily_cost", Label: "MasterOperation daily_cost: biaya harian per proyek dan vendor (work orders, cost)", Resource: ResourceIngestSources, Sheet: "daily_cost"},
+	{Key: "mo_daily_material", Label: "MasterOperation daily_material: material harian per proyek (kode, material, ukuran, jumlah, harga, vendor)", Resource: ResourceIngestSources, Sheet: "daily_material"},
+	{Key: "mo_wo_detail", Label: "MasterOperation wo_detail: WO vendor per proyek dengan WBS dan biaya", Resource: ResourceIngestSources, Sheet: "wo_detail"},
+	{Key: "mo_ships", Label: "MasterOperation master_ship: kapal (tipe, perusahaan, LOA, lebar, tinggi, sarat)", Resource: ResourceIngestSources, Sheet: "master_ship"},
+	{Key: "mo_companies", Label: "MasterOperation master_company: perusahaan (tipe, nama)", Resource: ResourceIngestSources, Sheet: "master_company"},
+	{Key: "mo_locations", Label: "MasterOperation master_location: lokasi dock (kode, nama, koordinat)", Resource: ResourceIngestSources, Sheet: "master_location"},
 }
 
 // Columns never returned: secrets, and blobs (images, SVG drawings).
@@ -94,7 +111,8 @@ func aiQueryDataTool() aiTool {
 		Name: "query_app_data",
 		Description: "Read any other ShipHub data that the specialised tools don't cover. Call this when the user asks about Job Orders, " +
 			"Ship Docking, equipment and loans, Request Material, or master data (vendors, ships, companies, components, locations, " +
-			"services, employees, configuration). Sources: " + aiDataSourceList() + ". " +
+			"services, employees, configuration), or the yard's MasterOperation spreadsheet (mo_* sources: vendor heads, subcontractor " +
+			"members by emp_code, planned and daily manpower, projects, progress, WBS, daily cost and material per project). Sources: " + aiDataSourceList() + ". " +
 			"Column names differ per source: call with describe=true first to see a source's columns and sample values, then " +
 			"search (words that must all appear in a row), filter on exact column values, a date range on a date column, " +
 			"group_by a column for counts (and sum_column for totals), or list rows. For Work Order, billing, work items, reference " +
@@ -162,6 +180,12 @@ func runQueryAppData(r *http.Request, input json.RawMessage) (interface{}, error
 	columns, rows, err := loadAIDataSource(*src)
 	if err != nil {
 		return nil, err
+	}
+	// An empty source has no columns to check filters against; say so
+	// instead of reporting the asked-for column as unknown.
+	if len(rows) == 0 {
+		return map[string]interface{}{"source": src.Key, "label": src.Label, "total_rows": 0, "matched": 0, "rows": []interface{}{},
+			"note": "sumber ini belum berisi data (belum disinkron atau memang kosong)"}, nil
 	}
 	col := func(field, name string) (string, error) {
 		if name == "" {
@@ -419,6 +443,9 @@ func loadAIDataRows(src aiDataSource) ([]string, []map[string]interface{}, error
 	if src.Cache != "" {
 		return loadAICache(src.Cache)
 	}
+	if src.Sheet != "" {
+		return loadAISheet(src.Sheet)
+	}
 	rows, err := db.Query(`SELECT * FROM ` + src.Table + ` LIMIT ` + strconv.Itoa(aiDataMaxRows))
 	if err != nil {
 		return nil, nil, err
@@ -543,4 +570,32 @@ func aiDataNumber(v interface{}) (float64, bool) {
 	}
 	n, err := strconv.ParseFloat(strings.TrimSpace(aiDataText(v)), 64)
 	return n, err == nil
+}
+
+// loadAISheet reads a spreadsheet tab from Sumber Data Eksternal, without
+// secret-looking or personal-identifier columns.
+func loadAISheet(sheet string) ([]string, []map[string]interface{}, error) {
+	list, err := loadExternalSheet(sheet)
+	if err != nil {
+		return nil, nil, err
+	}
+	if len(list) > aiDataMaxRows {
+		list = list[:aiDataMaxRows]
+	}
+	seen := map[string]bool{}
+	columns := []string{}
+	for _, row := range list {
+		for k := range row {
+			if k == "" || aiHiddenColumn.MatchString(k) || externalPersonalColumn.MatchString(columnName(k)) {
+				delete(row, k)
+				continue
+			}
+			if !seen[k] {
+				seen[k] = true
+				columns = append(columns, k)
+			}
+		}
+	}
+	sort.Strings(columns)
+	return columns, list, nil
 }
