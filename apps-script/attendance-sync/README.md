@@ -43,3 +43,23 @@ karyawan per hari dan total per `nama_pt`. Parameter opsional: `source` (id sumb
 - `estimated_minutes` mengisi absen yang hilang dengan 08.00 atau jam pulang standar,
   sama seperti Attendance Card di spreadsheet.
 - Absen sebelum 05.00 dihitung ke shift hari sebelumnya.
+
+## MasterOperation (data vendor dan operasional)
+
+`MasterOperation.js` mengirim spreadsheet MasterOperation (vendor, anggota subkon, manpower,
+proyek, progres, WBS, biaya dan material harian, master kapal/perusahaan/lokasi) sebagai satu
+sumber **Data umum** dengan kolom kunci `_key`. Setiap tab dikirim utuh dengan `replace_sheet`,
+jadi baris yang dihapus di sheet juga hilang di ShipHub. Daftar tab ada di `MASTER_SHEETS`.
+
+Data pribadi tidak dikirim: NIK / no identitas, alamat, nomor BPJS, HP / WhatsApp, email, foto,
+file dan nomor kartu absen (`MASTER_DROP_COLUMN`). Server juga menyaring nama kolom yang sama.
+
+Pasang:
+1. Di Sumber Data Eksternal, tambah sumber **Data umum** bernama MasterOperation dengan kolom
+   kunci `_key`, lalu salin token dan URL-nya.
+2. Script properties: `SYNC_URL_MASTER` dan `SYNC_TOKEN_MASTER`.
+3. Jalankan `setupTriggers` lagi (menambah `syncMasterOperation` tiap jam), lalu
+   `syncMasterOperation` sekali.
+
+Di AI Asisten datanya terbaca sebagai sumber `mo_*` di `query_app_data`, dan anggota subkon
+melengkapi nama PT / kepala subkon di perhitungan jam kerja (lewat `emp_code`).

@@ -202,11 +202,13 @@ type attendanceDay struct {
 	Name         string `json:"name"`
 	KepalaSubkon string `json:"kepala_subkon"`
 	NamaPT       string `json:"nama_pt"`
-	Date         string `json:"date"`
-	Day          string `json:"hari"`
-	CheckIn      string `json:"check_in"`
-	CheckOut     string `json:"check_out"`
-	Punches      int    `json:"punches"`
+	// Keahlian (skill) from the vendor member list, when the worker is in it.
+	Keahlian string `json:"keahlian,omitempty"`
+	Date     string `json:"date"`
+	Day      string `json:"hari"`
+	CheckIn  string `json:"check_in"`
+	CheckOut string `json:"check_out"`
+	Punches  int    `json:"punches"`
 	// Status: lengkap, tanpa_absen_pulang, tanpa_absen_masuk.
 	Status string `json:"status"`
 	// WorkedMinutes is measured from real punches; nil when one is missing.
@@ -468,5 +470,33 @@ func loadAttendanceDays(from, to time.Time, filters map[string]string, rules att
 		p.Name = strings.TrimSpace(first + " " + last)
 		punches = append(punches, p)
 	}
-	return computeAttendanceDays(punches, rules), rows.Err()
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	days := computeAttendanceDays(punches, rules)
+	fillFromMembers(days, loadVendorMembers())
+	return days, nil
+}
+
+// fillFromMembers completes days from the vendor member list (vendor_detail):
+// a punch without name, kepala subkon or PT gets them from the worker's
+// entry, matched on emp_code. Values on the punch win.
+func fillFromMembers(days []attendanceDay, members map[string]vendorMember) {
+	for i := range days {
+		m, ok := members[days[i].EmpCode]
+		if !ok {
+			continue
+		}
+		d := &days[i]
+		if d.Name == "" {
+			d.Name = m.Name
+		}
+		if d.KepalaSubkon == "" || d.KepalaSubkon == "-" {
+			d.KepalaSubkon = m.KepalaSubkon
+		}
+		if d.NamaPT == "" || d.NamaPT == "-" {
+			d.NamaPT = m.NamaPT
+		}
+		d.Keahlian = m.Keahlian
+	}
 }

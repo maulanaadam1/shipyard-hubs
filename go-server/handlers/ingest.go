@@ -25,6 +25,10 @@ import (
 // tokens in Sumber Data Eksternal; only a SHA-256 hash of each token is kept,
 // so a token is shown once, when it is created or rotated.
 
+// ResourceIngestSources is the (Admin-only) menu of external sources; the AI
+// reads their data, attendance included, under the same resource.
+const ResourceIngestSources = "Sumber Data Eksternal"
+
 const (
 	ingestMaxRows     = 5000
 	ingestMaxBody     = 20 << 20
@@ -36,10 +40,19 @@ var ingestIDPattern = regexp.MustCompile(`^[a-z0-9][a-z0-9-]{1,48}[a-z0-9]$`)
 
 type ingestResult struct {
 	Received  int      `json:"received"`
-	Saved     int      `json:"saved"`     // new or changed
-	Unchanged int      `json:"unchanged"` // already stored as sent
-	Skipped   int      `json:"skipped"`   // unreadable rows, see problems
+	Saved     int      `json:"saved"`             // new or changed
+	Unchanged int      `json:"unchanged"`         // already stored as sent
+	Skipped   int      `json:"skipped"`           // unreadable rows, see problems
+	Removed   int      `json:"removed,omitempty"` // records dropped by replace_sheet
 	Problems  []string `json:"problems"`
+}
+
+// ingestBody is what a source posts. replace_sheet (records kind): the rows
+// are the whole tab of that name, so stored rows of the tab that are not in
+// them were deleted at the source and are removed here.
+type ingestBody struct {
+	Rows         []map[string]any `json:"rows"`
+	ReplaceSheet string           `json:"replace_sheet"`
 }
 
 func (r *ingestResult) problem(msg string) {
@@ -53,13 +66,13 @@ func (r *ingestResult) problem(msg string) {
 var ingestKinds = map[string]struct {
 	label    string
 	needsKey bool
-	store    func(src ingestSourceAuth, rows []map[string]any) (ingestResult, error)
+	store    func(src ingestSourceAuth, body ingestBody) (ingestResult, error)
 }{
-	"attendance": {"Absensi (fingerprint)", false, func(src ingestSourceAuth, rows []map[string]any) (ingestResult, error) {
-		return ingestAttendance(src.ID, rows)
+	"attendance": {"Absensi (fingerprint)", false, func(src ingestSourceAuth, body ingestBody) (ingestResult, error) {
+		return ingestAttendance(src.ID, body.Rows)
 	}},
-	"records": {"Data umum", true, func(src ingestSourceAuth, rows []map[string]any) (ingestResult, error) {
-		return ingestRecords(src.ID, src.KeyColumn, rows)
+	"records": {"Data umum", true, func(src ingestSourceAuth, body ingestBody) (ingestResult, error) {
+		return ingestRecords(src.ID, src.KeyColumn, body.Rows, body.ReplaceSheet)
 	}},
 }
 
@@ -109,9 +122,7 @@ func PostIngest(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var body struct {
-		Rows []map[string]any `json:"rows"`
-	}
+	var body ingestBody
 	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, ingestMaxBody)).Decode(&body); err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "body JSON tidak valid: " + err.Error()})
 		return
@@ -121,14 +132,18 @@ func PostIngest(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	res, err := kind.store(src, body.Rows)
+	res, err := kind.store(src, body)
+	if ie, ok := err.(inputError); ok {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": string(ie)})
+		return
+	}
 	if err != nil {
 		recordIngestResult(src.ID, map[string]any{"ok": false, "error": err.Error()})
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "gagal menyimpan: " + err.Error()})
 		return
 	}
 	recordIngestResult(src.ID, map[string]any{"ok": true, "received": res.Received, "saved": res.Saved,
-		"unchanged": res.Unchanged, "skipped": res.Skipped, "problems": res.Problems})
+		"unchanged": res.Unchanged, "skipped": res.Skipped, "removed": res.Removed, "problems": res.Problems})
 	writeJSON(w, http.StatusOK, res)
 }
 
@@ -138,8 +153,9 @@ func recordIngestResult(id string, result map[string]any) {
 }
 
 // ingestRecords stores rows of a "records" source as JSON, one per value of
-// the source's key column.
-func ingestRecords(sourceID, keyColumn string, rows []map[string]any) (ingestResult, error) {
+// the source's key column. With replaceSheet, rows of that tab (_sheet) not
+// in this delivery are deleted.
+func ingestRecords(sourceID, keyColumn string, rows []map[string]any, replaceSheet string) (ingestResult, error) {
 	res := ingestResult{Received: len(rows)}
 	key := columnName(keyColumn)
 	type record struct{ key, data string }
@@ -153,9 +169,16 @@ func ingestRecords(sourceID, keyColumn string, rows []map[string]any) (ingestRes
 		data, _ := json.Marshal(row)
 		records = append(records, record{k, string(data)})
 	}
-	if len(records) == 0 {
+	if len(records) == 0 && replaceSheet == "" {
 		res.Skipped = len(rows)
 		return res, nil
+	}
+	if replaceSheet != "" {
+		for _, row := range rows {
+			if row[externalSheetField] != replaceSheet {
+				return res, inputError("replace_sheet: semua baris harus punya _sheet = " + replaceSheet)
+			}
+		}
 	}
 
 	tx, err := db.DB.Begin()
@@ -183,8 +206,43 @@ func ingestRecords(sourceID, keyColumn string, rows []map[string]any) (ingestRes
 	}
 	res.Unchanged = len(records) - res.Saved
 	res.Skipped = len(rows) - len(records)
+
+	if replaceSheet != "" {
+		sent := map[string]bool{}
+		for _, rec := range records {
+			sent[rec.key] = true
+		}
+		existing, err := tx.Query(db.FormatQuery(`SELECT record_key, data FROM external_records WHERE source_id = ? AND data LIKE ?`),
+			sourceID, `%"`+externalSheetField+`":"`+replaceSheet+`"%`)
+		if err != nil {
+			return res, err
+		}
+		var stale []string
+		for existing.Next() {
+			var key, data string
+			if existing.Scan(&key, &data) != nil || sent[key] {
+				continue
+			}
+			var row map[string]any
+			if json.Unmarshal([]byte(data), &row) == nil && row[externalSheetField] == replaceSheet {
+				stale = append(stale, key)
+			}
+		}
+		existing.Close()
+		for _, key := range stale {
+			if _, err := tx.Exec(db.FormatQuery(`DELETE FROM external_records WHERE source_id = ? AND record_key = ?`), sourceID, key); err != nil {
+				return res, err
+			}
+		}
+		res.Removed = len(stale)
+	}
 	return res, tx.Commit()
 }
+
+// inputError is a delivery the sender must fix (HTTP 400).
+type inputError string
+
+func (e inputError) Error() string { return string(e) }
 
 // --- Admin: Sumber Data Eksternal ---
 

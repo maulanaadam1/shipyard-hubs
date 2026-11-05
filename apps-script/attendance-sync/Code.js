@@ -5,18 +5,23 @@
 // Script properties (Project Settings > Script properties):
 //   SYNC_URL    https://<shiphub-domain>/api/ingest/<source id>
 //   SYNC_TOKEN  the source's token from Sumber Data Eksternal (shs_...)
+// MasterOperation.js sends the vendor/operations spreadsheet with its own
+// SYNC_URL_MASTER and SYNC_TOKEN_MASTER.
 
 const SPREADSHEET_ID = '1YAF5qBOvwcJtoA_n3rWMfBjAZKXb9uUk68PnjYdup_U';
 const SHEET_NAME = 'Master_RawData';
 const CHUNK_SIZE = 2000; // server accepts up to 5000 rows per request
 const RECENT_DAYS = 3;   // syncRecent resends this many days back
 
-function config_() {
+// config_('') reads SYNC_URL / SYNC_TOKEN, config_('_MASTER') the
+// MasterOperation pair.
+function config_(suffix) {
+  suffix = suffix || '';
   const props = PropertiesService.getScriptProperties();
-  const url = props.getProperty('SYNC_URL');
-  const token = props.getProperty('SYNC_TOKEN');
+  const url = props.getProperty('SYNC_URL' + suffix);
+  const token = props.getProperty('SYNC_TOKEN' + suffix);
   if (!url || !token) {
-    throw new Error('Isi Script properties SYNC_URL dan SYNC_TOKEN dulu.');
+    throw new Error('Isi Script properties SYNC_URL' + suffix + ' dan SYNC_TOKEN' + suffix + ' dulu.');
   }
   return { url: url, token: token };
 }
@@ -42,8 +47,8 @@ function serialToText_(serial, format) {
 // SpreadsheetApp.openById would need full read-write access to every sheet
 // the account can open. Date cells come back as serial numbers and are sent
 // as wall-clock text, so the server gets the punch time as the sheet shows it.
-function readRows_() {
-  const res = Sheets.Spreadsheets.Values.get(SPREADSHEET_ID, SHEET_NAME, {
+function readRows_(spreadsheetId, sheetName) {
+  const res = Sheets.Spreadsheets.Values.get(spreadsheetId || SPREADSHEET_ID, sheetName || SHEET_NAME, {
     valueRenderOption: 'UNFORMATTED_VALUE',
     dateTimeRenderOption: 'SERIAL_NUMBER',
   });
@@ -73,8 +78,10 @@ function rowDay_(row) {
   return pt.slice(0, 10);
 }
 
-function post_(rows) {
-  const cfg = config_();
+// post_ sends rows in chunks. extra is merged into each request body (e.g.
+// replace_sheet); cfg defaults to the attendance source.
+function post_(rows, cfg, extra) {
+  cfg = cfg || config_();
   let saved = 0;
   let unchanged = 0;
   let skipped = 0;
@@ -85,7 +92,7 @@ function post_(rows) {
       method: 'post',
       contentType: 'application/json',
       headers: { Authorization: 'Bearer ' + cfg.token },
-      payload: JSON.stringify({ rows: chunk }),
+      payload: JSON.stringify(Object.assign({ rows: chunk }, extra || {})),
       muteHttpExceptions: true,
     });
     const code = res.getResponseCode();
@@ -101,6 +108,7 @@ function post_(rows) {
   }
   console.log('Terkirim ' + rows.length + ' baris: ' + saved + ' baru/berubah, ' + unchanged +
     ' sudah ada, ' + skipped + ' dilewati.');
+  return { saved: saved, unchanged: unchanged, skipped: skipped };
 }
 
 function withLock_(fn) {
@@ -142,7 +150,8 @@ function setupTriggers() {
   ScriptApp.getProjectTriggers().forEach(function (t) { ScriptApp.deleteTrigger(t); });
   ScriptApp.newTrigger('syncRecent').timeBased().everyMinutes(5).create();
   ScriptApp.newTrigger('syncAll').timeBased().everyDays(1).atHour(2).create();
-  console.log('Trigger dipasang: syncRecent tiap 5 menit, syncAll tiap hari jam 02.');
+  ScriptApp.newTrigger('syncMasterOperation').timeBased().everyHours(1).create();
+  console.log('Trigger dipasang: syncRecent tiap 5 menit, syncAll tiap hari jam 02, syncMasterOperation tiap jam.');
 }
 
 // Checks the URL and token without sending data.
