@@ -626,6 +626,20 @@ func createTables() {
 		created_at TEXT
 	);`)
 	DB.Exec("CREATE INDEX IF NOT EXISTS idx_ai_chat_log_user ON ai_chat_log(user_id, created_at)")
+	// AI Asisten provider settings (one row, edited by Admins in Pengaturan
+	// AI). The API key is stored encrypted.
+	DB.Exec(`CREATE TABLE IF NOT EXISTS ai_settings (
+		id TEXT PRIMARY KEY,
+		provider TEXT,
+		base_url TEXT,
+		model TEXT,
+		api_key_enc TEXT,
+		max_tokens INTEGER DEFAULT 0,
+		daily_limit INTEGER DEFAULT 50,
+		enabled BOOLEAN DEFAULT false,
+		updated_by TEXT,
+		updated_at TEXT
+	);`)
 
 	// Reference unit costs per work type, size and unit (from wo_item_parsed),
 	// rebuilt by the findings job from approved items.

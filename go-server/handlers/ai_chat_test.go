@@ -11,6 +11,19 @@ import (
 	"shipyard/db"
 )
 
+// putSettings saves AI settings through the Admin endpoint.
+func putSettings(t *testing.T, user, body string) map[string]interface{} {
+	t.Helper()
+	rec := httptest.NewRecorder()
+	PutAISettings(rec, httptest.NewRequest("PUT", "/api/ai/settings", strings.NewReader(body)).WithContext(asUser(user)))
+	var out map[string]interface{}
+	json.Unmarshal(rec.Body.Bytes(), &out)
+	if rec.Code != 200 {
+		t.Fatalf("save settings: %d %v", rec.Code, out)
+	}
+	return out
+}
+
 // fakeAnthropic answers the first request with a tool call and the second
 // with text, recording what it was sent.
 func fakeAnthropic(t *testing.T, requests *[]map[string]interface{}) *httptest.Server {
@@ -50,18 +63,18 @@ func TestAIChat(t *testing.T) {
 	}
 	question := `{"messages": [{"role": "user", "content": "Jenis pekerjaan apa yang paling banyak?"}]}`
 
-	// Off without an API key: nothing is sent anywhere.
-	t.Setenv("ANTHROPIC_API_KEY", "")
+	t.Setenv("NEXTAUTH_SECRET", "test-secret")
+	// Off until an Admin switches it on: nothing is sent anywhere.
+	db.Exec("DELETE FROM ai_settings")
+	defer db.Exec("DELETE FROM ai_settings")
 	if code, _ := post(question); code != http.StatusServiceUnavailable {
-		t.Fatalf("without a key: %d", code)
+		t.Fatalf("without settings: %d", code)
 	}
 
 	var requests []map[string]interface{}
 	server := fakeAnthropic(t, &requests)
 	defer server.Close()
-	t.Setenv("ANTHROPIC_API_KEY", "test-key")
-	t.Setenv("ANTHROPIC_BASE_URL", server.URL)
-	t.Setenv("AI_DAILY_LIMIT", "1")
+	putSettings(t, "ai-admin", `{"provider": "anthropic", "base_url": "`+server.URL+`", "api_key": "sk-ant-test-1234", "daily_limit": 1, "enabled": true}`)
 
 	code, out := post(question)
 	if code != 200 || !strings.Contains(out["answer"].(string), "Ganti baru packing karet") {

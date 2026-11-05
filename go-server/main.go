@@ -118,11 +118,15 @@ func main() {
 		// AI tool layer: the user's read-only tools (Claude tool definitions) and
 		// a way to run one; each tool checks view rights on its page's resource.
 		r.Get("/api/ai/tools", handlers.GetAITools)
-		// AI Asisten chat: off until ANTHROPIC_API_KEY is set on the server.
+		// AI Asisten chat: off until an Admin configures and switches on a
+		// provider in Pengaturan AI.
 		aiView := handlers.RequirePermission(handlers.ResourceAIAssistant, "view")
 		r.With(aiView).Get("/api/ai/status", handlers.GetAIStatus)
 		r.With(aiView).Post("/api/ai/chat", handlers.PostAIChat)
 		r.Post("/api/ai/tools/{name}", handlers.RunAITool)
+		r.With(handlers.RequireAdmin).Get("/api/ai/settings", handlers.GetAISettings)
+		r.With(handlers.RequireAdmin).Put("/api/ai/settings", handlers.PutAISettings)
+		r.With(handlers.RequireAdmin).Post("/api/ai/settings/test", handlers.TestAISettings)
 		// Harga Acuan: reference unit costs per work type, size and unit.
 		priceView := handlers.RequirePermission(handlers.ResourcePriceReference, "view")
 		r.With(priceView).Get("/api/price-reference", handlers.GetPriceReferences)
