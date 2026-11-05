@@ -29,7 +29,7 @@ func TestAIToolDefinitions(t *testing.T) {
 		if len(tool.Description) < 120 || !strings.Contains(tool.Description, "Call this when") {
 			t.Errorf("%s: description should say when to call it", tool.Name)
 		}
-		if tool.Resource == "" || tool.Run == nil {
+		if (tool.Resource == "" && tool.Available == nil) || tool.Run == nil {
 			t.Errorf("%s: missing resource or run", tool.Name)
 		}
 		s := tool.Schema

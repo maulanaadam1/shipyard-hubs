@@ -146,6 +146,7 @@ func aiTools() []aiTool {
 			Resource: ResourceItemFindings,
 			Run:      runUnrecognizedActivities,
 		},
+		aiQueryDataTool(),
 	}
 }
 
