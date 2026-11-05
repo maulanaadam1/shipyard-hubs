@@ -1,14 +1,15 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Bot, Send, RotateCcw, Database } from 'lucide-react';
+import { Link } from 'react-router-dom';
 import { getHeaders } from '@/lib/api-client';
 
-// AI Asisten: questions about ShipHub data, answered by Claude with the
+// AI Asisten: questions about ShipHub data, answered by the AI provider set in Pengaturan AI with the
 // read-only tools of the backend (/api/ai/chat). The conversation lives in
 // this page (text only); each answer lists the data it used.
 
 type ToolCall = { name: string; input: Record<string, unknown>; is_error: boolean };
 type Message = { role: 'user' | 'assistant'; content: string; tools?: ToolCall[]; error?: boolean };
-type Status = { enabled: boolean; model: string; daily_limit: number; used_today: number; tools: string[] };
+type Status = { enabled: boolean; provider: string; model: string; daily_limit: number; used_today: number; tools: string[]; is_admin: boolean };
 
 const TOOL_LABELS: Record<string, string> = {
   search_work_orders: 'Pencarian WO',
@@ -107,7 +108,10 @@ export default function AIAssistant() {
         {status && !status.enabled && (
           <section className="p-5 rounded-2xl border border-amber-200 bg-amber-50 text-sm text-amber-900">
             <p className="font-semibold">AI Asisten belum aktif.</p>
-            <p className="mt-1">Fitur ini memakai layanan AI eksternal (Anthropic Claude). Setelah ada persetujuan perusahaan, admin server memasang <code className="font-mono">ANTHROPIC_API_KEY</code>; sebelum itu tidak ada data yang dikirim ke luar.</p>
+            <p className="mt-1">
+              Fitur ini memakai layanan AI eksternal. Setelah ada persetujuan perusahaan, Admin memilih provider dan mengaktifkannya di menu Pengaturan AI; sebelum itu tidak ada data yang dikirim ke luar.
+              {status.is_admin && <> <Link to="/ai-settings" className="font-semibold underline">Buka Pengaturan AI</Link></>}
+            </p>
           </section>
         )}
 

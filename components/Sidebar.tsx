@@ -89,6 +89,7 @@ export default function Sidebar({ onTabChange }: { onTabChange: () => void }) {
         { icon: ClipboardList, label: 'Approval Workflow', path: '/master-workflow', resource: 'Master Workflow' },
         { icon: Settings, label: 'Master Configuration', path: '/master-config', resource: 'Master Configuration' },
         { icon: Server, label: 'API Sync Config', path: '/master-api-sync', resource: 'API Sync Config' },
+        { icon: Bot, label: 'Pengaturan AI', path: '/ai-settings', resource: 'Pengaturan AI', adminOnly: true },
         { icon: Shield, label: 'Role Management', path: '/master-roles', resource: 'Role Management' },
         { icon: Users, label: 'User Management', path: '/user-management', resource: 'User Management' },
       ]
@@ -97,7 +98,8 @@ export default function Sidebar({ onTabChange }: { onTabChange: () => void }) {
 
   const filteredGroups = navGroups.map(group => ({
     ...group,
-    items: group.items.filter(item => canAccess(item.resource, 'view'))
+    items: group.items.filter((item: { resource: string; adminOnly?: boolean }) =>
+      item.adminOnly ? currentUser?.role === 'Admin' : canAccess(item.resource, 'view'))
   })).filter(group => group.items.length > 0);
 
   return (

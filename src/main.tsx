@@ -75,6 +75,7 @@ import WorkOrderItems from '../components/WorkOrderItems';
 import DataFindings from '../components/DataFindings';
 import PriceReference from '../components/PriceReference';
 import AIAssistant from '../components/AIAssistant';
+import AISettings from '../components/AISettings';
 import FinancialDashboard from '../components/FinancialDashboard';
 import ApiSyncManagement from '../components/ApiSyncManagement';
 import MasterService from '../components/MasterService';
@@ -169,6 +170,15 @@ function ProtectedRoute({ children, resource }: { children: React.ReactNode, res
   return <>{children}</>;
 }
 
+// AdminRoute: pages only Admins may open, whatever the role permissions say.
+function AdminRoute({ children, resource }: { children: React.ReactNode, resource: string }) {
+  const { currentUser } = useData();
+  if (currentUser?.role !== 'Admin') {
+    return <AccessDenied resource={resource} />;
+  }
+  return <>{children}</>;
+}
+
 function AppContent() {
   const { currentUser, isAuthLoading, isLoading } = useData();
 
@@ -231,6 +241,11 @@ createRoot(document.getElementById('root')!).render(
               <ProtectedRoute resource="AI Asisten">
                 <AIAssistant />
               </ProtectedRoute>
+            } />
+            <Route path="ai-settings" element={
+              <AdminRoute resource="Pengaturan AI">
+                <AISettings />
+              </AdminRoute>
             } />
             <Route path="price-reference" element={
               <ProtectedRoute resource="Harga Acuan">
