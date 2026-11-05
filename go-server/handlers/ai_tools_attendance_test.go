@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"strings"
 	"testing"
+	"time"
 
 	"shipyard/db"
 )
@@ -79,7 +80,13 @@ func seedAttendanceWorld(t *testing.T) {
 		{ID: "4", EmpCode: "E9", PunchTime: "2026-11-02 15:30:00"},                          // 8h
 		{ID: "5", EmpCode: "E7", PunchTime: "2026-11-03 07:00:00"},                          // unknown worker, one punch
 		{ID: "6", EmpCode: "E8", NamaPT: "PT Tanpa Order", PunchTime: "2026-11-02 08:00:00"},
+		{ID: "7", EmpCode: "E5", PunchTime: "2026-11-03 18:00:00"}, // in no list, one evening punch
 	})
+	// The attendance spreadsheet's machine users: E7 is a yard employee; E5's
+	// department is the machine's placeholder, i.e. not set.
+	ingestCall(t, "POST", "/api/ingest/master-op", token, `{"replace_sheet": "Personal-Data", "rows": [
+		{"_sheet": "Personal-Data", "_key": "Personal-Data:E7", "emp_code": "E7", "first_name": "Rudi", "department": "QHSE", "positition": "Staff"},
+		{"_sheet": "Personal-Data", "_key": "Personal-Data:E5", "emp_code": "E5", "first_name": "Tono", "department": "Department", "positition": "Harian"}]}`)
 	db.Exec(`INSERT INTO work_order_summary (wo_id, wo_code, vendor_name) VALUES ('900', 'WO-900', 'LAS ABADI, PT')`)
 	db.Exec(`INSERT INTO work_order_summary (wo_id, wo_code, vendor_name) VALUES ('901', 'WO-901', 'MARYONO'), ('902', 'WO-902', 'LASMAN')`)
 	db.Exec(`INSERT INTO work_order_daily_costs (wo_id, cost_date, approved_cost) VALUES ('900', '2026-11-03', 5000000), ('900', '2026-12-01', 999),
@@ -132,7 +139,11 @@ func TestAttendanceHoursTool(t *testing.T) {
 		maju["wo_approved_value"] != float64(1600000) || maju["value_per_hour"] != float64(200000) || maju["wo_vendors"] != nil {
 		t.Errorf("Maju Jaya: %v", maju)
 	}
-	if byVendor[noPTLabel] == nil || byVendor[noPTLabel]["incomplete_days"] != float64(1) {
+	// E7 has no PT but is a yard employee in Personal-Data; E5 is in no list.
+	if q := byVendor["Internal - QHSE"]; q == nil || q["workers"] != float64(1) || q["wo_vendor"] != nil {
+		t.Errorf("internal department: %v", q)
+	}
+	if byVendor[noPTLabel] == nil || byVendor[noPTLabel]["workers"] != float64(1) || byVendor[noPTLabel]["incomplete_days"] != float64(1) {
 		t.Errorf("worker without PT: %v", byVendor[noPTLabel])
 	}
 	notes := strings.Join(toStrings(out["notes"]), " | ")
@@ -140,7 +151,10 @@ func TestAttendanceHoursTool(t *testing.T) {
 		!strings.Contains(notes, "PT Maju Jaya = MARYONO") || !strings.Contains(notes, "PT. Las Abadi = LASMAN") || !strings.Contains(notes, "1 pekerja tanpa PT") {
 		t.Errorf("notes: %s", notes)
 	}
-	if tot := out["totals"].(map[string]interface{}); tot["workers"] != float64(4) || tot["man_days"] != float64(4) {
+	if strings.Contains(notes, "Internal - QHSE") {
+		t.Errorf("an internal department listed as a vendor without WO: %s", notes)
+	}
+	if tot := out["totals"].(map[string]interface{}); tot["workers"] != float64(5) || tot["man_days"] != float64(5) {
 		t.Errorf("totals: %v", tot)
 	}
 
@@ -245,4 +259,60 @@ func TestQueryAppDataHidesPersonalColumns(t *testing.T) {
 	if !strings.Contains(string(b), "Karyawan Uji") || !strings.Contains(string(b), "Welder") {
 		t.Errorf("employee row missing: %s", b)
 	}
+}
+
+func TestAttendanceWorkerDaysAndInternal(t *testing.T) {
+	seedAttendanceWorld(t)
+	week := `"date_from": "2026-11-02", "date_to": "2026-11-08"`
+
+	out, err := runAttendanceTool(t, "att-admin", `{`+week+`, "group_by": "worker_day", "worker": "andi"}`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rows := out["rows"].([]interface{})
+	if len(rows) != 1 {
+		t.Fatalf("worker_day rows: %v", rows)
+	}
+	r := rows[0].(map[string]interface{})
+	if r["date"] != "2026-11-02" || r["check_in"] != "07:00:00" || r["check_out"] != "17:00:00" || r["status"] != "lengkap" ||
+		strings.Join(toStrings(r["punch_times"]), ",") != "07:00:00,17:00:00" || r["worked_hours"] != float64(10) || r["vendor"] != "PT. Las Abadi" {
+		t.Errorf("Andi's day: %v", r)
+	}
+
+	// The yard employee: department as group, position, one morning punch.
+	out, _ = runAttendanceTool(t, "att-admin", `{`+week+`, "group_by": "worker_day", "vendor": "internal"}`)
+	rows = out["rows"].([]interface{})
+	if len(rows) != 1 {
+		t.Fatalf("internal rows: %v", rows)
+	}
+	r = rows[0].(map[string]interface{})
+	if r["emp_code"] != "E7" || r["vendor"] != "Internal - QHSE" || r["position"] != "Staff" || r["check_in"] != "07:00:00" ||
+		r["check_out"] != "" || r["status"] != "tanpa_absen_pulang" || r["worked_hours"] != nil {
+		t.Errorf("E7's day: %v", r)
+	}
+	// "Internal QHSE" in any spelling selects the department.
+	out, _ = runAttendanceTool(t, "att-admin", `{`+week+`, "vendor": "internal qhse"}`)
+	if rows := out["rows"].([]interface{}); len(rows) != 1 || rows[0].(map[string]interface{})["vendor"] != "Internal - QHSE" {
+		t.Errorf("department filter: %v", rows)
+	}
+	// The placeholder department "Department" is not a department.
+	out, _ = runAttendanceTool(t, "att-admin", `{`+week+`, "vendor": "Tanpa PT", "group_by": "worker_day"}`)
+	if rows := out["rows"].([]interface{}); len(rows) != 1 || rows[0].(map[string]interface{})["emp_code"] != "E5" ||
+		rows[0].(map[string]interface{})["status"] != "tanpa_absen_masuk" {
+		t.Errorf("Tanpa PT: %v", rows)
+	}
+	if tot := out["totals"].(map[string]interface{}); tot["days"] != float64(1) || tot["tanpa_absen_masuk"] != float64(1) {
+		t.Errorf("worker_day totals: %v", tot)
+	}
+
+	// The daily API carries the same detail.
+	days, err := loadAttendanceDays(mustDate("2026-11-03"), mustDate("2026-11-03"), map[string]string{"emp_code": "E7"}, attendanceRules{WeekdayHours: 8, SaturdayHours: 4})
+	if err != nil || len(days) != 1 || days[0].Department != "QHSE" || days[0].Position != "Staff" || len(days[0].PunchTimes) != 1 {
+		t.Errorf("daily days: %+v %v", days, err)
+	}
+}
+
+func mustDate(s string) time.Time {
+	t, _ := time.Parse("2006-01-02", s)
+	return t
 }

@@ -61,5 +61,9 @@ Pasang:
 3. Jalankan `setupTriggers` lagi (menambah `syncMasterOperation` tiap jam), lalu
    `syncMasterOperation` sekali.
 
+Job yang sama juga mengirim tab **Personal-Data** dari spreadsheet absensi (pengguna mesin absen:
+emp_code, nama, departemen, jabatan; `EXTRA_SHEETS`). Pekerja tanpa PT yang ada di sana dihitung sebagai
+"Internal - <departemen>" di jam kerja, dan terbaca sebagai sumber `att_personnel` di AI.
+
 Di AI Asisten datanya terbaca sebagai sumber `mo_*` di `query_app_data`, dan anggota subkon
 melengkapi nama PT / kepala subkon di perhitungan jam kerja (lewat `emp_code`).
