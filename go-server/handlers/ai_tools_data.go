@@ -72,6 +72,13 @@ var aiDataSources = []aiDataSource{
 	{Key: "mo_locations", Label: "MasterOperation master_location: lokasi dock (kode, nama, koordinat)", Resource: ResourceIngestSources, Sheet: "master_location"},
 }
 
+// aiHidden: columns never returned from any source: secrets, blobs and
+// personal contact / identity data (externalPersonalColumn), e.g. Master
+// Employee's address, email and phone.
+func aiHidden(column string) bool {
+	return aiHiddenColumn.MatchString(column) || externalPersonalColumn.MatchString(columnName(column))
+}
+
 // Columns never returned: secrets, and blobs (images, SVG drawings).
 var aiHiddenColumn = regexp.MustCompile(`(?i)password|passwd|token|secret|api_?key|credential|headers|cookie|svg|image|photo|base64|signature`)
 
@@ -457,7 +464,7 @@ func loadAIDataRows(src aiDataSource) ([]string, []map[string]interface{}, error
 	}
 	var columns []string
 	for _, c := range all {
-		if !aiHiddenColumn.MatchString(c) {
+		if !aiHidden(c) {
 			columns = append(columns, c)
 		}
 	}
@@ -473,7 +480,7 @@ func loadAIDataRows(src aiDataSource) ([]string, []map[string]interface{}, error
 		}
 		row := map[string]interface{}{}
 		for i, c := range all {
-			if aiHiddenColumn.MatchString(c) {
+			if aiHidden(c) {
 				continue
 			}
 			switch v := vals[i].(type) {
@@ -525,7 +532,7 @@ func loadAICache(id string) ([]string, []map[string]interface{}, error) {
 	var columns []string
 	for _, row := range list {
 		for k, v := range row {
-			if aiHiddenColumn.MatchString(k) {
+			if aiHidden(k) {
 				delete(row, k)
 				continue
 			}
@@ -586,7 +593,7 @@ func loadAISheet(sheet string) ([]string, []map[string]interface{}, error) {
 	columns := []string{}
 	for _, row := range list {
 		for k := range row {
-			if k == "" || aiHiddenColumn.MatchString(k) || externalPersonalColumn.MatchString(columnName(k)) {
+			if k == "" || aiHidden(k) {
 				delete(row, k)
 				continue
 			}

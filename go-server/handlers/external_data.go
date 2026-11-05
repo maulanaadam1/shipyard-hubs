@@ -3,6 +3,7 @@ package handlers
 import (
 	"encoding/json"
 	"regexp"
+	"sort"
 	"strings"
 
 	"shipyard/db"
@@ -89,6 +90,45 @@ func loadVendorMembers() map[string]vendorMember {
 		if m.EmpCode != "" {
 			out[m.EmpCode] = m
 		}
+	}
+	return out
+}
+
+// vendorAliases maps a normalized PT name to the normalized names its work
+// may be billed under: the PT itself and its kepala vendor / kepala subkon
+// from MasterOperation (SIAGA often has the WO under the head's name, e.g.
+// "MASKURI" for PT MASKURI KARYA SEJAHTERA).
+func vendorAliases() map[string][]string {
+	sets := map[string]map[string]bool{}
+	add := func(pt, name string) {
+		ptKey, nameKey := normalizeVendorName(pt), normalizeVendorName(name)
+		if ptKey == "" || len(nameKey) < 3 {
+			return
+		}
+		if sets[ptKey] == nil {
+			sets[ptKey] = map[string]bool{ptKey: true}
+		}
+		sets[ptKey][nameKey] = true
+	}
+	if heads, err := loadExternalSheet("vendor"); err == nil {
+		for _, raw := range heads {
+			row := normalizeRow(raw)
+			add(cellString(row["nama_pt"]), cellString(row["vendor"]))
+		}
+	}
+	for _, m := range loadVendorMembers() {
+		add(m.NamaPT, m.KepalaSubkon)
+	}
+	out := map[string][]string{}
+	for pt, set := range sets {
+		names := []string{pt} // the PT's own name first
+		for n := range set {
+			if n != pt {
+				names = append(names, n)
+			}
+		}
+		sort.Strings(names[1:])
+		out[pt] = names
 	}
 	return out
 }
