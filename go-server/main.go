@@ -73,6 +73,9 @@ func main() {
 	// Public routes (no auth required)
 	r.Post("/api/auth/login", handlers.Login)
 	r.Get("/api/auth/session", handlers.GetSession)
+	// External sources push rows here; each checks its own Bearer token
+	// (managed in Sumber Data Eksternal), no user session.
+	r.Post("/api/ingest/{source}", handlers.PostIngest)
 
 	// Protected routes (require valid JWT)
 	r.Group(func(r chi.Router) {
@@ -128,6 +131,14 @@ func main() {
 		r.With(aiView).Get("/api/ai/conversations/{id}", handlers.GetAIConversation)
 		r.With(aiView).Delete("/api/ai/conversations/{id}", handlers.DeleteAIConversation)
 		r.With(handlers.RequireAdmin).Get("/api/ai/logs", handlers.GetAILogs)
+		// Work hours from attendance punches; Admin only until it has a menu.
+		r.With(appMiddleware.RequireRole("Admin")).Get("/api/attendance/daily", handlers.GetAttendanceDaily)
+		// Sumber Data Eksternal: sources and their tokens, Admin only.
+		ingestAdmin := handlers.RequireAdminWith("hanya Admin yang bisa mengelola Sumber Data Eksternal")
+		r.With(ingestAdmin).Get("/api/ingest-sources", handlers.GetIngestSources)
+		r.With(ingestAdmin).Post("/api/ingest-sources", handlers.CreateIngestSource)
+		r.With(ingestAdmin).Put("/api/ingest-sources/{id}", handlers.UpdateIngestSource)
+		r.With(ingestAdmin).Post("/api/ingest-sources/{id}/rotate-token", handlers.RotateIngestSourceToken)
 		r.Post("/api/ai/tools/{name}", handlers.RunAITool)
 		r.With(handlers.RequireAdmin).Get("/api/ai/settings", handlers.GetAISettings)
 		r.With(handlers.RequireAdmin).Put("/api/ai/settings", handlers.PutAISettings)

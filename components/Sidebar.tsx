@@ -29,7 +29,8 @@ import {
   Map as MapIcon,
   Layout,
   FileSpreadsheet,
-  Server
+  Server,
+  Inbox
 } from 'lucide-react';
 import { useData } from '@/context/DataContext';
 import { motion } from 'motion/react';
@@ -90,6 +91,7 @@ export default function Sidebar({ onTabChange }: { onTabChange: () => void }) {
         { icon: ClipboardList, label: 'Approval Workflow', path: '/master-workflow', resource: 'Master Workflow' },
         { icon: Settings, label: 'Master Configuration', path: '/master-config', resource: 'Master Configuration' },
         { icon: Server, label: 'API Sync Config', path: '/master-api-sync', resource: 'API Sync Config' },
+        { icon: Inbox, label: 'Sumber Data Eksternal', path: '/ingest-sources', resource: 'Sumber Data Eksternal', adminOnly: true },
         { icon: Bot, label: 'Pengaturan AI', path: '/ai-settings', resource: 'Pengaturan AI', adminOnly: true },
         { icon: ScrollText, label: 'Log AI', path: '/ai-logs', resource: 'Log AI', adminOnly: true },
         { icon: Shield, label: 'Role Management', path: '/master-roles', resource: 'Role Management' },

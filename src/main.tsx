@@ -79,6 +79,7 @@ import AISettings from '../components/AISettings';
 import AILogs from '../components/AILogs';
 import FinancialDashboard from '../components/FinancialDashboard';
 import ApiSyncManagement from '../components/ApiSyncManagement';
+import IngestSources from '../components/IngestSources';
 import MasterService from '../components/MasterService';
 import MasterEmployee from '../components/MasterEmployee';
 import MasterComponent from '../components/MasterComponent';
@@ -246,6 +247,11 @@ createRoot(document.getElementById('root')!).render(
             <Route path="ai-logs" element={
               <AdminRoute resource="Log AI">
                 <AILogs />
+              </AdminRoute>
+            } />
+            <Route path="ingest-sources" element={
+              <AdminRoute resource="Sumber Data Eksternal">
+                <IngestSources />
               </AdminRoute>
             } />
             <Route path="ai-settings" element={
