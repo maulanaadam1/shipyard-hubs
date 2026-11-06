@@ -150,6 +150,10 @@ func main() {
 		r.With(handlers.RequirePermission(handlers.ResourceAISettings, "edit")).Put("/api/ai/settings", handlers.PutAISettings)
 		r.With(handlers.RequirePermission(handlers.ResourceAISettings, "edit")).Post("/api/ai/settings/test", handlers.TestAISettings)
 		// Harga Acuan: reference unit costs per work type, size and unit.
+		// Harga penawaran (repair list) vs vendor cost per Job Order.
+		marginView := handlers.RequirePermission(handlers.ResourceRepairPrices, "view")
+		r.With(marginView).Get("/api/job-margins", handlers.GetJobMargins)
+		r.With(marginView).Get("/api/job-margins/detail", handlers.GetJobMarginDetail)
 		priceView := handlers.RequirePermission(handlers.ResourcePriceReference, "view")
 		r.With(priceView).Get("/api/price-reference", handlers.GetPriceReferences)
 		r.With(priceView).Get("/api/price-reference/detail", handlers.GetPriceReferenceDetail)

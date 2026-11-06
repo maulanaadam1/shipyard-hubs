@@ -631,6 +631,26 @@ func createTables() {
 	// How long an answer took, and the asker's thumbs up/down on it.
 	DB.Exec("ALTER TABLE ai_chat_log ADD COLUMN duration_ms INTEGER DEFAULT 0")
 	DB.Exec("ALTER TABLE ai_chat_log ADD COLUMN feedback TEXT DEFAULT ''")
+	// Repair-list activities of each WO with the customer price (repair_prices.go).
+	// One activity can sit in several WOs: its price counts once per Job Order.
+	DB.Exec(`CREATE TABLE IF NOT EXISTS wo_repair_activities (
+		wo_id TEXT NOT NULL,
+		activity_key TEXT NOT NULL,
+		activity_path TEXT,
+		jo_id TEXT,
+		jo_code TEXT,
+		name TEXT,
+		category TEXT,
+		unit TEXT,
+		quantity NUMERIC DEFAULT 0,
+		unit_price NUMERIC DEFAULT 0,
+		price NUMERIC DEFAULT 0,
+		version INTEGER DEFAULT 0,
+		PRIMARY KEY (wo_id, activity_key)
+	);`)
+	DB.Exec("CREATE INDEX IF NOT EXISTS idx_wo_repair_activities_jo ON wo_repair_activities(jo_id, activity_key)")
+	DB.Exec("CREATE INDEX IF NOT EXISTS idx_wo_items_wo_activity ON wo_items(wo_id, activity_path)")
+
 	// AI Asisten conversations (history panel); the messages are the
 	// ai_chat_log rows of the conversation. Deleting hides it from the user,
 	// the log stays for the Admin.

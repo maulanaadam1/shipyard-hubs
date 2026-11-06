@@ -4,6 +4,7 @@ import { getHeaders } from '@/lib/api-client';
 import { SearchableSelect } from './SearchableSelect';
 import { useData } from '@/context/DataContext';
 import AskAIButton from './AskAIButton';
+import JobMargins from './JobMargins';
 
 // Work items flattened from every WO detail (wo_items), searchable by item,
 // cost, project, vendor or activity, with per-group cost summaries.
@@ -108,6 +109,8 @@ function VolumeByUnitCell({ units, selected, onSelect }: { units: UnitVolume[]; 
 export default function WorkOrderItems() {
   const { canAccess } = useData();
   const [view, setView] = useState<View>('list');
+  // Item list and groups, or harga penawaran vs biaya per Job Order (Harga Penawaran permission).
+  const [pageTab, setPageTab] = useState<'items' | 'margins'>('items');
   const [searchTerm, setSearchTerm] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const [projectType, setProjectType] = useState<'All' | 'external' | 'internal'>('All');
@@ -443,6 +446,17 @@ export default function WorkOrderItems() {
       </header>
 
       <main className="w-full p-4 md:p-8 space-y-6">
+        {canAccess('Harga Penawaran', 'view') && (
+          <div role="tablist" aria-label="Tampilan" className="inline-flex rounded-xl border border-slate-200 bg-white p-1 shadow-sm">
+            {([['items', 'Item pekerjaan'], ['margins', 'Harga penawaran vs biaya']] as const).map(([key, label]) => (
+              <button key={key} type="button" role="tab" aria-selected={pageTab === key} onClick={() => setPageTab(key)}
+                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${pageTab === key ? 'bg-indigo-600 text-white' : 'text-slate-600 hover:bg-slate-50'}`}>
+                {label}
+              </button>
+            ))}
+          </div>
+        )}
+        {pageTab === 'margins' && canAccess('Harga Penawaran', 'view') ? <JobMargins formatIDR={formatIDR} /> : (<>
         <section className="p-5 rounded-2xl border bg-white border-slate-200 shadow-sm space-y-4">
           <div className="flex flex-wrap items-center justify-between gap-2">
           <div className="flex flex-wrap gap-2">
@@ -826,6 +840,7 @@ export default function WorkOrderItems() {
           (tertimbang volume); item tanpa biaya per satuan tidak ikut dalam min/rata²/maks. Aturannya sama dengan angka dashboard,
           jadi total per WO selalu cocok.
         </p>
+        </>)}
       </main>
     </div>
   );

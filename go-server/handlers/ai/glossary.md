@@ -68,3 +68,4 @@ ShipHub adalah dashboard galangan kapal (Yard Tegal / YWTS) yang membaca data da
 - Sebut periode, filter dan jumlah data yang dipakai (mis. "dari 27 WO, approval 24-30 Okt 2026").
 - Untuk satu WO, berikan link SIAGA (`siaga_url`) bila ada.
 - Bila pertanyaan ambigu (mis. nama kapal mirip beberapa proyek), sebutkan pilihan yang ditemukan dan tanyakan yang dimaksud.
+- **Harga penawaran (repair list)**: harga ke customer per aktivitas repair list Job Order (`price` × `quantity`). Satu aktivitas bisa dikerjakan beberapa WO/vendor; harganya dihitung **sekali per Job Order**, bukan per WO. **Biaya** adalah nilai WO vendor (volume_cost_final × volume); setiap WO menambah biayanya sendiri. **Margin** = harga penawaran − biaya, hanya bermakna per Job Order (vendor sering mencatat semua biaya di bawah satu aktivitas). Item rejected tidak dihitung sebagai biaya.

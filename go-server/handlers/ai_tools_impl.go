@@ -155,6 +155,7 @@ func aiTools() []aiTool {
 			Run:      runUnrecognizedActivities,
 		},
 		attendanceHoursTool(),
+		aiJobMarginTool(),
 		aiQueryDataTool(),
 	}
 }
