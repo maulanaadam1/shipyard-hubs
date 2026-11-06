@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"regexp"
 	"strings"
 	"time"
 
@@ -230,7 +231,13 @@ func runAIChat(r *http.Request, cfg aiProviderConfig, claims middleware.UserClai
 	// question itself (the stored question is unchanged).
 	dateContext := aiDateContext(time.Now())
 	if n := len(history); n > 0 && history[n-1].Role == "user" {
-		history = append(history[:n-1:n-1], aiChatMessage{Role: "user", Content: "[" + dateContext + "]\n" + history[n-1].Content})
+		// The same goes for charts: when the question asks for one, the
+		// format sits right next to it.
+		suffix := ""
+		if aiWantsChart(history[n-1].Content) {
+			suffix = "\n\n" + aiChartReminder
+		}
+		history = append(history[:n-1:n-1], aiChatMessage{Role: "user", Content: "[" + dateContext + "]\n" + history[n-1].Content + suffix})
 	}
 	session, err := newAISession(cfg, aiInstructions+"\n\n"+aiGlossary, dateContext, history, tools)
 	if err != nil {
@@ -339,3 +346,18 @@ func aiDateContext(now time.Time) string {
 		"Jangan memakai tanggal lain dari ingatan Anda.")
 	return b.String()
 }
+
+var aiChartWords = regexp.MustCompile(`(?i)\b(grafik|chart|diagram|visualisasi|visualisasikan|plot|kurva)\b`)
+
+// aiWantsChart: the question asks for a chart.
+func aiWantsChart(question string) bool { return aiChartWords.MatchString(question) }
+
+// aiChartReminder is added after a question that asks for a chart, with the
+// exact block the app draws (lib/ai-chart.ts).
+const aiChartReminder = "[Pengguna meminta grafik. Setelah mengambil data dengan alat, WAJIB sertakan satu blok seperti ini " +
+	"(aplikasi yang menggambarnya; jangan diganti tabel saja, jangan gambar/SVG/HTML):\n" +
+	"```chart\n" +
+	`{"type": "line", "title": "Judul singkat", "unit": "rupiah", "x_label": "Minggu", "x": ["label 1", "label 2"], "series": [{"name": "Approved", "values": [123, 456]}]}` + "\n" +
+	"```\n" +
+	"type: line untuk tren waktu, horizontal_bar untuk banyak kategori, bar untuk sedikit kategori, stacked_bar untuk komposisi. " +
+	"unit: rupiah, jam, angka atau persen. Angka persis dari hasil alat, satu nilai per label x, maksimal 6 seri dan 60 label.]"

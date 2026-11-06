@@ -118,3 +118,76 @@ export function chartTable(spec: ChartSpec): { header: string[]; rows: (string |
     rows: spec.x.map((label, i) => [label, ...spec.series.map(s => s.values[i] ?? '')]),
   };
 }
+
+// --- Tables to charts ---------------------------------------------------
+// Any answer table with a label column and numeric columns can be shown as a
+// chart, whether or not the model sent a ```chart block.
+
+const stripMarks = (s: string) => s.replace(/\*\*([^*]+)\*\*/g, '$1').replace(/`([^`]+)`/g, '$1').replace(/\*([^*]+)\*/g, '$1').trim();
+
+// parseCellNumber: "Rp 1.234.567", "1.234,5", "12%", "1.107,5 jam" → number.
+export function parseCellNumber(cell: string): number | null {
+  const t = stripMarks(cell);
+  const m = /^(?:Rp\.?\s*)?(-?[\d.]+(?:,\d+)?)\s*(?:%|jam)?$/i.exec(t);
+  if (!m || !/\d/.test(m[1])) return null;
+  const n = Number(m[1].replace(/\./g, '').replace(',', '.'));
+  return Number.isFinite(n) ? n : null;
+}
+
+function columnUnit(header: string, cells: string[]): ChartUnit {
+  const h = header.toLowerCase();
+  if (/rp|rupiah|nilai|biaya|tagihan|harga/.test(h) || cells.some(c => /^\s*\**rp/i.test(c))) return 'rupiah';
+  if (/%|persen/.test(h) || cells.some(c => /%\s*\**$/.test(c))) return 'persen';
+  if (/\bjam\b|lembur/.test(h) || cells.some(c => /jam\s*\**$/i.test(c))) return 'jam';
+  return 'angka';
+}
+
+const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des'];
+
+// shortDateLabel: "2026-10-03 s.d. 2026-10-09" → "3–9 Okt", "2026-10-03" →
+// "3 Okt 2026", so date axes stay readable. Other labels are unchanged.
+export function shortDateLabel(label: string): string {
+  const range = /^(\d{4})-(\d{2})-(\d{2})\s*(?:s\.?d\.?|sampai|-|–)\s*(\d{4})-(\d{2})-(\d{2})$/i.exec(label.trim());
+  if (range) {
+    const [, y1, m1, d1, y2, m2, d2] = range;
+    const mon1 = MONTHS[Number(m1) - 1], mon2 = MONTHS[Number(m2) - 1];
+    if (!mon1 || !mon2) return label;
+    const left = y1 !== y2 ? `${Number(d1)} ${mon1} ${y1}` : m1 !== m2 ? `${Number(d1)} ${mon1}` : `${Number(d1)}`;
+    return `${left}–${Number(d2)} ${mon2}`;
+  }
+  const one = /^(\d{4})-(\d{2})-(\d{2})$/.exec(label.trim());
+  if (one && MONTHS[Number(one[2]) - 1]) return `${Number(one[3])} ${MONTHS[Number(one[2]) - 1]} ${one[1]}`;
+  return label;
+}
+
+const TIME_LABEL = /(\d{4}-\d{2}(-\d{2})?)|(\d{1,2}\s*[-–]\s*\d{1,2}\s+\w{3})|\b(jan|feb|mar|apr|mei|jun|jul|agu|agt|sep|okt|nov|des)\w*\b|\bminggu\b|\bW\d+\b|\b(19|20)\d{2}\b/i;
+
+// tableToChart: label = first column; series = the numeric columns sharing
+// the first numeric column's unit (one axis), at most MAX_SERIES. Null when
+// the table has no such column or too few rows to be worth a chart.
+export function tableToChart(header: string[], rows: string[][], title = ''): ChartSpec | null {
+  if (rows.length < 2 || rows.length > MAX_POINTS || header.length < 2) return null;
+  // Total rows would dwarf the others.
+  const body = rows.filter(r => !/^\s*\**\s*(total|jumlah)\b/i.test(r[0] ?? ''));
+  if (body.length < 2) return null;
+  const numeric: { col: number; unit: ChartUnit }[] = [];
+  for (let c = 1; c < header.length; c++) {
+    const cells = body.map(r => r[c] ?? '');
+    const parsed = cells.map(parseCellNumber);
+    const filled = cells.filter(v => stripMarks(v) !== '' && stripMarks(v) !== '-');
+    if (filled.length === 0 || parsed.filter(v => v !== null).length < filled.length) continue;
+    numeric.push({ col: c, unit: columnUnit(header[c], cells) });
+  }
+  if (numeric.length === 0) return null;
+  const unit = numeric[0].unit;
+  const cols = numeric.filter(n => n.unit === unit).slice(0, MAX_SERIES);
+  const x = body.map(r => shortDateLabel(stripMarks(r[0] ?? '')).slice(0, 60));
+  const timeLike = x.filter(l => TIME_LABEL.test(l)).length >= Math.ceil(x.length * 0.6);
+  const longLabels = x.some(l => l.length > 14);
+  const type: ChartType = timeLike && x.length >= 3 ? 'line' : (x.length > 6 || longLabels ? 'horizontal_bar' : 'bar');
+  return {
+    type, unit, title, x,
+    xLabel: stripMarks(header[0]) || undefined,
+    series: cols.map(({ col }) => ({ name: stripMarks(header[col]) || `Kolom ${col + 1}`, values: body.map(r => parseCellNumber(r[col] ?? '')) })),
+  };
+}
