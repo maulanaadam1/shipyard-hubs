@@ -11,14 +11,21 @@ Option Explicit
 ' Macro untuk user (Alt+F8):
 '   ShipHub_SinkronPersediaan  kirim semua tabel sekarang
 '   ShipHub_AutoSinkron        nyalakan/matikan kirim otomatis setiap file disimpan
+'   ShipHub_AturToken          pasang token sumber (tanpa login password)
 '   ShipHub_AturServer         ganti alamat server / email login
-'   ShipHub_Logout             lupakan token login
+'   ShipHub_Logout             lupakan login password
 ' Kirim otomatis butuh kode Workbook_AfterSave di ThisWorkbook (lihat README).
+'
+' Dua cara masuk: token sumber dari menu Sumber Data Eksternal (jenis
+' "Persediaan Material"), disimpan di file dan dipakai lebih dulu; atau email +
+' password akun ShipHub, ditanya sekali setiap Excel dibuka.
 
 Private Const DEFAULT_URL As String = "https://siaga.shipyard.my.id"
 Private Const PROP_URL As String = "ShipHubURL"
 Private Const PROP_EMAIL As String = "ShipHubEmail"
 Private Const PROP_AUTO As String = "ShipHubAutoSync"
+Private Const PROP_TOKEN As String = "ShipHubToken"
+Private Const PROP_SOURCE As String = "ShipHubSumber"
 
 Private mToken As String
 
@@ -90,7 +97,43 @@ End Sub
 
 Public Sub ShipHub_Logout()
     mToken = ""
-    MsgBox "Token dihapus. Kirim berikutnya akan minta login.", vbInformation, "ShipHub"
+    MsgBox "Login password dilupakan." & IIf(PakaiToken(), " Token sumber tetap terpasang (hapus lewat ShipHub_AturToken).", ""), _
+           vbInformation, "ShipHub"
+End Sub
+
+' Token dan URL tujuan disalin dari ShipHub: Sumber Data Eksternal, sumber
+' berjenis "Persediaan Material". Kosongkan URL untuk kembali ke login password.
+Public Sub ShipHub_AturToken()
+    Dim url As String, token As String, p As Long
+    url = Trim(InputBox("URL tujuan sumber (dari Sumber Data Eksternal)," & vbLf & _
+                        "mis. https://siaga.shipyard.my.id/api/ingest/master-inventory" & vbLf & vbLf & _
+                        "Kosongkan untuk menghapus token dan kembali ke login password.", _
+                        "ShipHub", IIf(PakaiToken(), BaseUrl() & "/api/ingest/" & Prop(PROP_SOURCE, ""), "")))
+    If url = "" Then
+        If PakaiToken() Then
+            HapusProp PROP_TOKEN
+            HapusProp PROP_SOURCE
+            MsgBox "Token dihapus. Kirim berikutnya memakai login email + password.", vbInformation, "ShipHub"
+        End If
+        Exit Sub
+    End If
+    p = InStr(1, url, "/api/ingest/", vbTextCompare)
+    If p = 0 Or Len(url) <= p + Len("/api/ingest/") - 1 Then
+        MsgBox "URL harus berbentuk https://.../api/ingest/<id-sumber>.", vbExclamation, "ShipHub"
+        Exit Sub
+    End If
+    token = Trim(InputBox("Token sumber (diawali shs_):", "ShipHub"))
+    If Left(token, 4) <> "shs_" Then
+        MsgBox "Token harus diawali shs_. Tidak ada yang diubah.", vbExclamation, "ShipHub"
+        Exit Sub
+    End If
+    SetProp PROP_URL, Left(url, p - 1)
+    SetProp PROP_SOURCE, Replace(Mid(url, p + Len("/api/ingest/")), "/", "")
+    SetProp PROP_TOKEN, token
+    mToken = ""
+    MsgBox "Token tersimpan di file ini. Kirim berikutnya tidak meminta password." & vbLf & _
+           "Siapa pun yang memegang file ini bisa mengirim data persediaan; kalau file dibagikan, ganti token di ShipHub.", _
+           vbInformation, "ShipHub"
 End Sub
 
 ' Mengirim semua tabel; mengembalikan laporan per tabel. Error hanya untuk
@@ -98,7 +141,11 @@ End Sub
 Public Function ShipHub_Sinkron() As String
     Dim ds As Variant, laporan As String
     If Application.Calculation <> xlCalculationAutomatic Then Application.Calculate
-    Token   ' login sekali di depan, bukan per tabel
+    If PakaiToken() Then
+        CekToken   ' sekali di depan: token ditolak = berhenti, bukan 5 kiriman gagal
+    Else
+        Token   ' login sekali di depan, bukan per tabel
+    End If
     For Each ds In Datasets()
         laporan = laporan & SinkronSatu(CStr(ds)) & vbLf
     Next
@@ -123,15 +170,29 @@ Private Function SinkronSatu(ByVal spec As String) As String
     End If
 
     Application.StatusBar = "ShipHub: mengirim " & bagian(1) & " (" & jumlah & " baris)..."
-    resp = Panggil("POST", "/api/inventory/sync/" & bagian(0), _
-                   "{""source"":""" & JsonEsc(ThisWorkbook.Name) & """,""rows"":[" & json & "]}", status)
+    If PakaiToken() Then
+        resp = KirimDenganToken("{""dataset"":""" & bagian(0) & """,""source"":""" & JsonEsc(ThisWorkbook.Name) & _
+                                """,""rows"":[" & json & "]}", status)
+    Else
+        resp = Panggil("POST", "/api/inventory/sync/" & bagian(0), _
+                       "{""source"":""" & JsonEsc(ThisWorkbook.Name) & """,""rows"":[" & json & "]}", status)
+    End If
+    If status = 401 And PakaiToken() Then
+        SinkronSatu = bagian(1) & ": GAGAL token ditolak (diganti, atau sumber dinonaktifkan). Pasang ulang lewat ShipHub_AturToken."
+        Exit Function
+    End If
     If status <> 200 Then
         SinkronSatu = bagian(1) & ": GAGAL (HTTP " & status & ") " & PesanError(resp)
         Exit Function
     End If
-    SinkronSatu = bagian(1) & ": " & AngkaDari(resp, "rows") & " baris terkirim"
-    peringatan = AngkaDari(resp, "warning_count")
-    If peringatan > 0 Then SinkronSatu = SinkronSatu & " (" & peringatan & " nilai bukan angka/tanggal dikosongkan)"
+    If PakaiToken() Then
+        SinkronSatu = bagian(1) & ": " & AngkaDari(resp, "saved") & " baris terkirim"
+        If InStr(resp, """problems"":[""") > 0 Then SinkronSatu = SinkronSatu & " (ada nilai bukan angka/tanggal yang dikosongkan; rinciannya di Sumber Data Eksternal)"
+    Else
+        SinkronSatu = bagian(1) & ": " & AngkaDari(resp, "rows") & " baris terkirim"
+        peringatan = AngkaDari(resp, "warning_count")
+        If peringatan > 0 Then SinkronSatu = SinkronSatu & " (" & peringatan & " nilai bukan angka/tanggal dikosongkan)"
+    End If
     Exit Function
 Gagal:
     SinkronSatu = bagian(1) & ": GAGAL " & Err.Description
@@ -244,6 +305,33 @@ Private Function Panggil(ByVal method As String, ByVal path As String, ByVal bod
     Panggil = http.responseText
 End Function
 
+Private Function PakaiToken() As Boolean
+    PakaiToken = Len(Prop(PROP_TOKEN, "")) > 0 And Len(Prop(PROP_SOURCE, "")) > 0
+End Function
+
+' Token sumber: tanpa login, tanpa coba ulang (401 berarti token harus diganti).
+Private Function KirimDenganToken(ByVal body As String, ByRef status As Long) As String
+    Dim http As Object
+    Set http = CreateObject("MSXML2.XMLHTTP.6.0")
+    http.Open "POST", BaseUrl() & "/api/ingest/" & Prop(PROP_SOURCE, ""), False
+    http.setRequestHeader "Authorization", "Bearer " & Prop(PROP_TOKEN, "")
+    http.setRequestHeader "Content-Type", "application/json"
+    http.send body
+    status = http.Status
+    KirimDenganToken = http.responseText
+End Function
+
+' Kiriman kecil tanpa dataset: server menjawab 400 kalau token benar, 401
+' kalau salah. Tidak ada data yang berubah.
+Private Sub CekToken()
+    Dim status As Long, resp As String
+    resp = KirimDenganToken("{""rows"":[]}", status)
+    If status = 401 Then Err.Raise vbObjectError + 20, "ShipHub", _
+        "token ditolak (sudah diganti, atau sumber dinonaktifkan). Pasang token baru lewat ShipHub_AturToken."
+    If status = 404 Or status = 0 Then Err.Raise vbObjectError + 21, "ShipHub", _
+        "server tidak bisa dihubungi atau URL sumber salah (" & BaseUrl() & "/api/ingest/" & Prop(PROP_SOURCE, "") & ")."
+End Sub
+
 Private Function Token() As String
     If mToken = "" Then mToken = Login()
     Token = mToken
@@ -310,6 +398,11 @@ Private Sub SetProp(ByVal nama As String, ByVal nilai As String)
     ThisWorkbook.CustomDocumentProperties(nama).Delete
     On Error GoTo 0
     ThisWorkbook.CustomDocumentProperties.Add Name:=nama, LinkToContent:=False, Type:=4, Value:=nilai
+End Sub
+
+Private Sub HapusProp(ByVal nama As String)
+    On Error Resume Next
+    ThisWorkbook.CustomDocumentProperties(nama).Delete
 End Sub
 
 ' ---------------------------------------------------------------- JSON

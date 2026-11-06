@@ -29,10 +29,25 @@ File Excel tetap menjadi tempat input dan perhitungan FIFO. Macro hanya mengirim
 |---|---|
 | `ShipHub_SinkronPersediaan` | Mengirim 5 tabel sekarang: Master Material, Saldo Awal, Pembelian, Pemakaian, dan sheet Persediaan. |
 | `ShipHub_AutoSinkron` | Menyalakan atau mematikan kirim otomatis setiap kali file disimpan (Ctrl+S). |
+| `ShipHub_AturToken` | Memasang token sumber supaya kiriman tidak pernah meminta password (lihat di bawah). |
 | `ShipHub_AturServer` | Mengganti alamat server atau email login. Pengaturan disimpan di file. |
-| `ShipHub_Logout` | Menghapus token login. |
+| `ShipHub_Logout` | Menghapus login password. Token sumber tidak ikut terhapus. |
 
-- Login diminta sekali setiap kali Excel dibuka. Email diingat, password tidak.
+**Tanpa password: token sumber (disarankan untuk kirim otomatis)**
+
+1. Di ShipHub, buka **Sumber Data Eksternal** (khusus Admin) → **Tambah sumber**. Beri nama, misalnya "Master Inventory Gudang", lalu pilih jenis **Persediaan Material (file Master Inventory)**.
+2. Salin **URL tujuan** dan **token** (`shs_…`). Token hanya ditampilkan sekali.
+3. Di Excel, tekan Alt+F8, jalankan `ShipHub_AturToken`, lalu tempel URL dan token. Keduanya disimpan di file.
+
+Mulai saat itu, kiriman memakai token dan tidak pernah meminta login. Hal yang perlu diketahui:
+- **Token hanya bisa mengirim data persediaan.** Token tidak bisa dipakai untuk login atau membaca data lain di ShipHub.
+- **Nama pengirim di web adalah nama sumbernya**, misalnya "Disinkron … oleh Master Inventory Gudang".
+- **Siapa pun yang memegang file .xlsm ini bisa mengirim data persediaan.** Kalau file dibagikan atau laptopnya hilang, klik **Ganti token** di Sumber Data Eksternal (token lama langsung tidak berlaku), atau **Nonaktifkan** sumbernya.
+- **Untuk kembali ke login password**, jalankan `ShipHub_AturToken` lalu kosongkan URL-nya.
+
+**Dengan login password**
+
+- Tanpa token, login diminta sekali setiap kali Excel dibuka. Email diingat, password tidak.
 - **Setiap pengiriman mengganti seluruh isi tabel di ShipHub** dengan isi file. Baris yang dihapus di Excel ikut hilang di ShipHub. Tabel yang kosong di Excel tidak dikirim, jadi data lama di ShipHub tetap ada.
 - Yang dikirim adalah nilai hasil hitungan di sel, bukan rumusnya. File Excel tidak diubah, kecuali pengaturan server/email yang disimpan di properti file.
 - Kalau nama kolom di tabel Excel diganti, pengiriman tabel itu gagal dengan pesan kolom mana yang tidak ditemukan. Ubah pemetaannya di fungsi `Datasets()` di dalam modul.

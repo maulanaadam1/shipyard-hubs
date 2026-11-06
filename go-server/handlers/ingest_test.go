@@ -69,7 +69,7 @@ func TestIngestSourceAdmin(t *testing.T) {
 	raw, _ := json.Marshal(out)
 	list := out["data"].([]any)
 	if code != 200 || len(list) != 1 || strings.Contains(string(raw), token) || strings.Contains(string(raw), hash) ||
-		list[0].(map[string]any)["token_hint"] != token[len(token)-4:] || len(out["kinds"].([]any)) != 2 {
+		list[0].(map[string]any)["token_hint"] != token[len(token)-4:] || len(out["kinds"].([]any)) != len(ingestKindOrder) {
 		t.Errorf("list: %d %s", code, raw)
 	}
 
