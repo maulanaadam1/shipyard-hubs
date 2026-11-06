@@ -276,8 +276,9 @@ func RunSyncJob(force bool, targetId string) error {
 			headers = map[string]string{}
 		}
 
-		if id == "WorkOrderDetails" {
-			// Per-WO URL template, fetched by the work order detail worker instead.
+		if id == "WorkOrderDetails" || id == "RepairLists" {
+			// Per-WO / per-Job Order URL templates, fetched by their own workers
+			// (work order detail worker, repair list worker) instead.
 			continue
 		}
 
