@@ -2,18 +2,24 @@ import React from 'react';
 import { Link } from 'react-router-dom';
 import { FileSpreadsheet } from 'lucide-react';
 import * as XLSX from 'xlsx';
+import AIChart from './AIChart';
+import { ChartSpec, chartTable, formatValue, parseChartSpec } from '@/lib/ai-chart';
 
 // A small Markdown renderer for AI Asisten answers: headings, paragraphs,
 // lists, tables, code, **bold**, *italic*, `code`. Builds React elements (no
 // raw HTML). WO codes become links to the Work Order page; each table can be
-// downloaded as Excel.
+// downloaded as Excel. A ```chart block (JSON data from the AI's tools, see
+// lib/ai-chart.ts) is drawn as a chart; while it streams in, a placeholder.
 
 type Block =
   | { kind: 'heading'; level: number; text: string }
   | { kind: 'paragraph'; text: string }
   | { kind: 'list'; ordered: boolean; items: string[] }
   | { kind: 'table'; header: string[]; rows: string[][] }
-  | { kind: 'code'; text: string };
+  | { kind: 'code'; text: string }
+  | { kind: 'chart'; spec: ChartSpec }
+  | { kind: 'chart_pending' }
+  | { kind: 'chart_error'; error: string; text: string };
 
 const splitRow = (line: string) => {
   const t = line.trim().replace(/^\|/, '').replace(/\|$/, '');
@@ -29,10 +35,20 @@ export function parseMarkdown(src: string): Block[] {
     const line = lines[i];
     if (!line.trim()) { i++; continue; }
     if (line.trim().startsWith('```')) {
+      const lang = line.trim().slice(3).trim().toLowerCase();
       const code: string[] = [];
       i++;
       while (i < lines.length && !lines[i].trim().startsWith('```')) code.push(lines[i++]);
+      const closed = i < lines.length;
       i++;
+      if (lang === 'chart') {
+        if (!closed) { blocks.push({ kind: 'chart_pending' }); continue; }
+        const parsed = parseChartSpec(code.join('\n'));
+        // ('error' in …: the project's non-strict tsconfig doesn't narrow on ok)
+        if ('error' in parsed) blocks.push({ kind: 'chart_error', error: parsed.error, text: code.join('\n') });
+        else blocks.push({ kind: 'chart', spec: parsed.spec });
+        continue;
+      }
       blocks.push({ kind: 'code', text: code.join('\n') });
       continue;
     }
@@ -133,7 +149,15 @@ function downloadTables(tables: TableBlock[]) {
   XLSX.writeFile(wb, `ai-asisten-${new Date().toISOString().slice(0, 10)}.xlsx`);
 }
 
-export const tablesIn = (text: string) => parseMarkdown(text).filter((b): b is TableBlock => b.kind === 'table');
+// tablesIn: the answer's tables, with each chart's data as a table too.
+export const tablesIn = (text: string): TableBlock[] => parseMarkdown(text).flatMap((b): TableBlock[] => {
+  if (b.kind === 'table') return [b];
+  if (b.kind === 'chart') {
+    const { header, rows } = chartTable(b.spec);
+    return [{ kind: 'table', header, rows: rows.map(r => r.map((c, k) => (k === 0 || c === '' ? String(c) : formatValue(Number(c), b.spec.unit)))) }];
+  }
+  return [];
+});
 export const downloadAnswerTables = (text: string) => { const t = tablesIn(text); if (t.length) downloadTables(t); };
 
 // tableDownload: a download link under each table (off when the page has its own button).
@@ -183,6 +207,17 @@ export default function AIMarkdown({ text, tableDownload = true }: { text: strin
             );
           case 'code':
             return <pre key={k} className="p-2.5 rounded-lg bg-slate-100 text-xs font-mono overflow-x-auto whitespace-pre">{b.text}</pre>;
+          case 'chart':
+            return <AIChart key={k} spec={b.spec} />;
+          case 'chart_pending':
+            return <p key={k} role="status" className="text-xs text-slate-500">Menyiapkan grafik…</p>;
+          case 'chart_error':
+            return (
+              <div key={k} className="flex flex-col gap-1">
+                <p role="note" className="text-xs text-amber-800">Grafik tidak bisa ditampilkan ({b.error}). Data yang dikirim:</p>
+                <pre className="p-2.5 rounded-lg bg-slate-100 text-xs font-mono overflow-x-auto whitespace-pre">{b.text}</pre>
+              </div>
+            );
           default:
             return <p key={k} className="whitespace-pre-wrap">{inline(b.text, k)}</p>;
         }
