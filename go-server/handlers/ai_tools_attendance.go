@@ -35,7 +35,7 @@ func attendanceHoursTool() aiTool {
 			"last 7 days of attendance.",
 		Schema: aiSchema(map[string]interface{}{
 			"date_from": aiString("First shift day, YYYY-MM-DD."),
-			"date_to":   aiString("Last shift day, YYYY-MM-DD (at most 62 days after date_from)."),
+			"date_to":   aiString("Last shift day, YYYY-MM-DD (at most 366 days after date_from, so a whole year fits)."),
 			"vendor":    aiString("Vendor / PT name in any spelling (PT ABC, ABC PT, ABC, PT. Abc), \"Internal - <department>\" (e.g. Internal - QHSE), \"Internal\" for all yard employees, or \"Tanpa PT\" for workers in neither list."),
 			"worker":    aiString("Worker name, emp_code (fingerprint id) or department; words must all match."),
 			"group_by":  aiString("vendor (default: PT or internal department), worker, day, or worker_day (one row per worker per day with check-in / check-out times).", "vendor", "worker", "day", "worker_day"),

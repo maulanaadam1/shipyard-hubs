@@ -185,7 +185,7 @@ func TestAttendanceHoursTool(t *testing.T) {
 		t.Errorf("viewer: %v", row)
 	}
 
-	for _, bad := range []string{`{"group_by": "kapal"}`, `{"date_from": "2026-01-01", "date_to": "2026-06-01"}`, `{"date_from": "kemarin"}`, `{"dari": "x"}`} {
+	for _, bad := range []string{`{"group_by": "kapal"}`, `{"date_from": "2025-01-01", "date_to": "2026-06-01"}`, `{"date_from": "kemarin"}`, `{"dari": "x"}`} {
 		if _, err := runAttendanceTool(t, "att-admin", bad); err == nil {
 			t.Errorf("%s: want an input error", bad)
 		}

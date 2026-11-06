@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"shipyard/db"
 	"shipyard/middleware"
@@ -207,5 +208,46 @@ func TestFindingOutOfScopeRemoved(t *testing.T) {
 	db.QueryRow(`SELECT COUNT(*) FROM wo_item_findings`).Scan(&n)
 	if n != 0 {
 		t.Errorf("%d findings left", n)
+	}
+}
+
+// Findings by the day they were found or by the item's approval date, so
+// "temuan minggu ini" gets a precise period.
+func TestItemFindingsDateFilter(t *testing.T) {
+	resetWorkOrderTables(t)
+	t.Setenv("WO_FINDINGS_PAUSE_MS", "1")
+	db.Exec(`INSERT INTO work_order_summary (wo_id, wo_code, project_name, vendor_name) VALUES ('500', 'WO-500', 'JO-1 - KAPAL', 'Vendor A')`)
+	seedFindingItems(t, 450) // the pending item, approval_date 2026-10-01, is flagged
+	if _, err := RunItemFindings(); err != nil {
+		t.Fatal(err)
+	}
+	today := time.Now().Format("2006-01-02")
+	yesterday := time.Now().AddDate(0, 0, -1).Format("2006-01-02")
+	count := func(q string) float64 {
+		t.Helper()
+		rec := httptest.NewRecorder()
+		GetItemFindings(rec, httptest.NewRequest("GET", "/api/wo-findings?"+q, nil))
+		var out struct{ Total float64 }
+		json.Unmarshal(rec.Body.Bytes(), &out)
+		return out.Total
+	}
+	for q, want := range map[string]float64{
+		"date_from=" + today + "&date_to=" + today:                    1,
+		"date_to=" + yesterday:                                        0,
+		"date_field=approval&date_from=2026-10-01&date_to=2026-10-01": 1,
+		"date_field=approval&date_from=2026-10-02":                    0,
+		"date_field=approval&date_from=2026-09-01&date_to=2026-09-30": 0,
+	} {
+		if got := count(q); got != want {
+			t.Errorf("%s: %v findings, want %v", q, got, want)
+		}
+	}
+	// Through the AI tool too.
+	res, err := runDataFindings(aiRequest("ai-admin"), json.RawMessage(`{"date_from": "`+today+`", "date_to": "`+today+`"}`))
+	if err != nil || res.(map[string]interface{})["matching"] != float64(1) {
+		t.Errorf("data_findings with dates: %v %v", res, err)
+	}
+	if _, err := runDataFindings(aiRequest("ai-admin"), json.RawMessage(`{"date_field": "kemarin"}`)); err == nil {
+		t.Error("bad date_field accepted")
 	}
 }

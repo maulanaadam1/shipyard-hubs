@@ -19,7 +19,7 @@ import (
 // /api/ingest/{source}. The spreadsheet's own script is left untouched.
 
 const (
-	attendanceMaxDays  = 62
+	attendanceMaxDays  = 366 // a whole year, e.g. "tahun ini"
 	attendanceTimeForm = "2006-01-02 15:04:05"
 	// Punches before this hour belong to the previous day's shift.
 	attendanceShiftStartHour = 5
@@ -394,7 +394,7 @@ func attendanceHoursParam(v string, def float64) (float64, error) {
 }
 
 // GetAttendanceDaily: work hours per worker per day, and totals per vendor.
-// ?from=YYYY-MM-DD&to=YYYY-MM-DD (max 62 days), optional source, nama_pt, emp_code,
+// ?from=YYYY-MM-DD&to=YYYY-MM-DD (max 366 days), optional source, nama_pt, emp_code,
 // weekday_hours (default 8) and saturday_hours (default 4).
 func GetAttendanceDaily(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()

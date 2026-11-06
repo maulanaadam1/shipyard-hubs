@@ -66,7 +66,7 @@ func aiTools() []aiTool {
 				"Each approval day of each WO is one transaction. Returns totals (value, transactions, WO and JO counts), the trend, " +
 				"top vendors and ships, and the latest transactions. Without a period it covers the last week of data.",
 			Schema: aiSchema(map[string]interface{}{
-				"period":    aiString("Relative period, counted back from the newest approval date. Ignored when date_from or date_to is given.", "all", "1week", "2weeks", "3weeks", "1month", "2months", "3months", "6months"),
+				"period":    aiString("Relative period counted back from the NEWEST APPROVAL DATE in the data, not from today. For calendar questions (hari ini, minggu ini, bulan lalu, tahun ini...) use date_from / date_to from the date list instead. Ignored when date_from or date_to is given.", "all", "1week", "2weeks", "3weeks", "1month", "2months", "3months", "6months"),
 				"date_from": aiString("Start date (YYYY-MM-DD) of a custom period."),
 				"date_to":   aiString("End date (YYYY-MM-DD) of a custom period."),
 				"year":      aiString("Only approvals in this year, e.g. \"2025\"."),
@@ -129,6 +129,9 @@ func aiTools() []aiTool {
 				"item_status": aiString("Approval status of the item in SIAGA.", "pending", "approved", "rejected", "all"),
 				"query":       aiString("Text matched against item, WO code, work type, project and vendor."),
 				"sort":        aiString("excess = biggest rupiah excess (default), ratio = most times the median, date = newest.", "excess", "ratio", "date"),
+				"date_from":   aiString("First day (YYYY-MM-DD) of a period, on date_field."),
+				"date_to":     aiString("Last day (YYYY-MM-DD) of a period, on date_field."),
+				"date_field":  aiString("found = the day ShipHub first flagged the item (default), approval = the item's approval date.", "found", "approval"),
 				"limit":       aiInteger("How many findings to return (default 10).", 1, 25),
 			}),
 			Resource: ResourceItemFindings,
@@ -442,13 +445,17 @@ func runDataFindings(r *http.Request, input json.RawMessage) (interface{}, error
 	var in struct {
 		Rule, Status, Query, Sort string
 		ItemStatus                string `json:"item_status"`
+		DateFrom                  string `json:"date_from"`
+		DateTo                    string `json:"date_to"`
+		DateField                 string `json:"date_field"`
 		Limit                     int
 	}
 	if err := decodeAIInput(input, &in); err != nil {
 		return nil, err
 	}
 	for _, err := range []error{oneOf("rule", in.Rule, "price_high", "pipe_length", "all"), oneOf("status", in.Status, "open", "ignored", "resolved", "all"),
-		oneOf("item_status", in.ItemStatus, "pending", "approved", "rejected", "all"), oneOf("sort", in.Sort, "excess", "ratio", "date")} {
+		oneOf("item_status", in.ItemStatus, "pending", "approved", "rejected", "all"), oneOf("sort", in.Sort, "excess", "ratio", "date"),
+		oneOf("date_field", in.DateField, "found", "approval"), checkDate("date_from", in.DateFrom), checkDate("date_to", in.DateTo)} {
 		if err != nil {
 			return nil, err
 		}
@@ -463,6 +470,9 @@ func runDataFindings(r *http.Request, input json.RawMessage) (interface{}, error
 	setIf(q, "item_status", in.ItemStatus)
 	setIf(q, "search", in.Query)
 	setIf(q, "sort", in.Sort)
+	setIf(q, "date_from", in.DateFrom)
+	setIf(q, "date_to", in.DateTo)
+	setIf(q, "date_field", in.DateField)
 	res, err := aiCall(GetItemFindings, r, "/api/wo-findings", q)
 	if err != nil {
 		return nil, err

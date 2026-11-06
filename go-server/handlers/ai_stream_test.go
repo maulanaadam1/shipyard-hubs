@@ -270,20 +270,38 @@ func mustJakarta(t *testing.T) *time.Location {
 
 func TestAIDateContext(t *testing.T) {
 	loc := mustJakarta(t)
-	// Friday morning in Jakarta, given in UTC (still Thursday there).
-	got := aiDateContext(time.Date(2026, 11, 5, 23, 30, 0, 0, time.UTC))
-	for _, want := range []string{
-		"Waktu sekarang: Jumat, 6 November 2026 pukul 06.30 WIB (hari ini = 2026-11-06)",
-		"Kemarin = 2026-11-05",
-		"Minggu ini (Senin-Minggu) = 2026-11-02 s.d. 2026-11-08",
-		"Bulan ini = 2026-11-01 s.d. 2026-11-30",
-	} {
-		if !strings.Contains(got, want) {
-			t.Errorf("missing %q in %q", want, got)
+	check := func(got string, wants ...string) {
+		t.Helper()
+		for _, want := range wants {
+			if !strings.Contains(got, want) {
+				t.Errorf("missing %q in:\n%s", want, got)
+			}
 		}
 	}
-	// Sunday belongs to the week that started on Monday.
-	if got := aiDateContext(time.Date(2026, 11, 8, 12, 0, 0, 0, loc)); !strings.Contains(got, "Minggu, 8 November 2026") || !strings.Contains(got, "2026-11-02 s.d. 2026-11-08") {
-		t.Errorf("Sunday: %q", got)
-	}
+	// Friday morning in Jakarta, given in UTC (still Thursday there).
+	check(aiDateContext(time.Date(2026, 11, 5, 23, 30, 0, 0, time.UTC)),
+		"Waktu sekarang: Jumat, 6 November 2026 pukul 06.30 WIB (hari ini = 2026-11-06)",
+		"- hari ini: 2026-11-06 s.d. 2026-11-06",
+		"- kemarin: 2026-11-05 s.d. 2026-11-05",
+		"- minggu ini (Senin-Minggu): 2026-11-02 s.d. 2026-11-08",
+		"- minggu lalu (Senin-Minggu): 2026-10-26 s.d. 2026-11-01",
+		"- minggu tagihan ini (Sabtu-Jumat): 2026-10-31 s.d. 2026-11-06",
+		"- minggu tagihan lalu (Sabtu-Jumat): 2026-10-24 s.d. 2026-10-30",
+		"- 7 hari terakhir: 2026-10-31 s.d. 2026-11-06",
+		"- 30 hari terakhir: 2026-10-08 s.d. 2026-11-06",
+		"- bulan ini: 2026-11-01 s.d. 2026-11-30",
+		"- bulan lalu: 2026-10-01 s.d. 2026-10-31",
+		"- tahun ini: 2026-01-01 s.d. 2026-12-31",
+		"- tahun lalu: 2025-01-01 s.d. 2025-12-31")
+	// Saturday starts a billing week; Sunday ends a calendar week.
+	check(aiDateContext(time.Date(2026, 11, 7, 9, 0, 0, 0, loc)),
+		"- minggu tagihan ini (Sabtu-Jumat): 2026-11-07 s.d. 2026-11-13",
+		"- minggu ini (Senin-Minggu): 2026-11-02 s.d. 2026-11-08")
+	check(aiDateContext(time.Date(2026, 11, 8, 12, 0, 0, 0, loc)),
+		"Minggu, 8 November 2026", "- minggu ini (Senin-Minggu): 2026-11-02 s.d. 2026-11-08",
+		"- minggu tagihan ini (Sabtu-Jumat): 2026-11-07 s.d. 2026-11-13")
+	// Across a year and a leap February.
+	check(aiDateContext(time.Date(2028, 1, 1, 8, 0, 0, 0, loc)),
+		"- kemarin: 2027-12-31 s.d. 2027-12-31", "- bulan lalu: 2027-12-01 s.d. 2027-12-31", "- tahun lalu: 2027-01-01 s.d. 2027-12-31")
+	check(aiDateContext(time.Date(2028, 3, 10, 8, 0, 0, 0, loc)), "- bulan lalu: 2028-02-01 s.d. 2028-02-29")
 }
