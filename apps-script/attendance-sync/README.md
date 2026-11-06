@@ -65,5 +65,11 @@ Job yang sama juga mengirim tab **Personal-Data** dari spreadsheet absensi (peng
 emp_code, nama, departemen, jabatan; `EXTRA_SHEETS`). Pekerja tanpa PT yang ada di sana dihitung sebagai
 "Internal - <departemen>" di jam kerja, dan terbaca sebagai sumber `att_personnel` di AI.
 
+Tab **workpermit** dari spreadsheet MasterHSE (izin kerja) ikut dikirim lewat `EXTRA_SHEETS`: baris
+dihitung dari kolom `no_workpermit` (kolom `no` sering kosong), kunci = nomor izin (`#2`, `#3` untuk
+baris berikutnya dengan nomor sama), tanggal dikirim sebagai `YYYY-MM-DD`, kolom `wpclass` (gabungan
+wpclass_1..6) dan `pdf` tidak dikirim. Di AI terbaca sebagai sumber `hse_work_permits`. Akun pemilik
+script harus bisa membuka spreadsheet MasterHSE.
+
 Di AI Asisten datanya terbaca sebagai sumber `mo_*` di `query_app_data`, dan anggota subkon
 melengkapi nama PT / kepala subkon di perhitungan jam kerja (lewat `emp_code`).

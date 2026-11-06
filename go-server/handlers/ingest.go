@@ -30,7 +30,7 @@ import (
 const ResourceIngestSources = "Sumber Data Eksternal"
 
 const (
-	ingestMaxRows     = 5000
+	ingestMaxRows     = 10000
 	ingestMaxBody     = 20 << 20
 	ingestTokenPrefix = "shs_"
 	ingestMaxProblems = 10
