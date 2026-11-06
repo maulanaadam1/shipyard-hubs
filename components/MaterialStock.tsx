@@ -6,8 +6,8 @@ import { getHeaders } from '@/lib/api-client';
 // (stock, purchases, usage, opening balances, materials). Stock and FIFO
 // values are calculated in the workbook; this page only lists and filters.
 
-type Kind = 'text' | 'num' | 'money' | 'date' | 'material' | 'qty' | 'status' | 'id';
-type Column = { key: string; label: string; kind: Kind; sort?: string; qtyCol?: string };
+type Kind = 'text' | 'num' | 'money' | 'date' | 'status' | 'id';
+type Column = { key: string; label: string; kind: Kind };
 type Dataset = {
   key: string; label: string; noun: string; searchHint: string;
   filters: { col: string; label: string }[];
@@ -16,85 +16,62 @@ type Dataset = {
   columns: Column[];
 };
 
+// Columns in the workbook's own order and header names, as the macro maps
+// them (Datasets() in tools/excel/ShipHubPersediaan.bas). "Header=key:kind",
+// kind: t text, i id, d date, n number, m rupiah, s status.
+const KINDS: Record<string, Kind> = { t: 'text', i: 'id', d: 'date', n: 'num', m: 'money', s: 'status' };
+const excelColumns = (spec: string): Column[] => spec.split(';').map(part => {
+  const [label, rest] = part.split('=');
+  const [key, kind] = rest.split(':');
+  return { label, key, kind: KINDS[kind] };
+});
+
 const NEED_ORDER = '__need_order';
 
 const DATASETS: Dataset[] = [
   {
     key: 'stok', label: 'Stok', noun: 'baris stok', searchHint: 'nama material, ukuran, kategori',
-    filters: [{ col: 'status', label: 'Status' }, { col: 'kategori', label: 'Kategori' }, { col: 'gudang', label: 'Gudang' }],
-    totals: [{ col: 'nilai_stok', label: 'Nilai stok FIFO', money: true }],
-    columns: [
-      { key: 'nama', label: 'Material', kind: 'material' },
-      { key: 'gudang', label: 'Gudang', kind: 'text' },
-      { key: 'stok_akhir', label: 'Stok akhir', kind: 'qty' },
-      { key: 'stok_minimum', label: 'Stok min.', kind: 'num' },
-      { key: 'harga_rata', label: 'Harga FIFO rata-rata', kind: 'money' },
-      { key: 'nilai_stok', label: 'Nilai stok FIFO', kind: 'money' },
-      { key: 'status', label: 'Status', kind: 'status' },
-    ],
+    filters: [{ col: 'status', label: 'Status' }, { col: 'kategori', label: 'Kode Material' }, { col: 'gudang', label: 'Gudang' }],
+    totals: [{ col: 'nilai_stok', label: 'Nilai Stok FIFO', money: true }],
+    columns: excelColumns('Kode Material=kategori:t;Nama Material=nama:t;Ukuran=ukuran:t;Gudang=gudang:t;Satuan=satuan:t;'
+      + 'ID Saldo Awal=id_saldo_awal:i;Tanggal Cut Off=tanggal_cutoff:t;Qty Saldo Awal=qty_saldo_awal:n;Nilai Saldo Awal=nilai_saldo_awal:m;'
+      + 'Harga Unit Saldo Awal=harga_unit_saldo_awal:m;Qty Terpakai FIFO=qty_terpakai:n;Sisa Saldo FIFO=sisa_saldo:n;Nilai Sisa FIFO=nilai_sisa:m;'
+      + 'Total Pembelian=total_pembelian:n;Total Pemakaian=total_pemakaian:n;Stok Akhir=stok_akhir:n;Stok Minimum=stok_minimum:n;'
+      + 'Nilai Stok FIFO=nilai_stok:m;Harga FIFO Rata-rata=harga_rata:m;Status=status:s'),
   },
   {
     key: 'pembelian', label: 'Pembelian', noun: 'pembelian', searchHint: 'material, ID, no. PO, pemasok',
-    filters: [{ col: 'proyek', label: 'Proyek' }, { col: 'pemasok', label: 'Pemasok' }, { col: 'kategori', label: 'Kategori' }],
-    hasDates: true, dateLabel: 'Tanggal pembelian',
-    totals: [{ col: 'nilai', label: 'Nilai pembelian', money: true }, { col: 'nilai_sisa', label: 'Nilai sisa lot', money: true }],
-    columns: [
-      { key: 'tanggal', label: 'Tanggal', kind: 'date' },
-      { key: 'id_pembelian', label: 'ID / No. PO', kind: 'id' },
-      { key: 'nama', label: 'Material', kind: 'material' },
-      { key: 'pemasok', label: 'Pemasok', kind: 'text' },
-      { key: 'proyek', label: 'Proyek', kind: 'text' },
-      { key: 'qty', label: 'Qty', kind: 'qty' },
-      { key: 'harga_unit', label: 'Harga unit', kind: 'money' },
-      { key: 'nilai', label: 'Nilai', kind: 'money' },
-      { key: 'sisa_qty', label: 'Sisa lot', kind: 'qty' },
-    ],
+    filters: [{ col: 'proyek', label: 'Proyek' }, { col: 'pemasok', label: 'Pemasok' }, { col: 'kategori', label: 'Kode Material' }],
+    hasDates: true, dateLabel: 'Tanggal',
+    totals: [{ col: 'nilai', label: 'Nilai Pembelian', money: true }, { col: 'nilai_sisa', label: 'Nilai Sisa Lot', money: true }],
+    columns: excelColumns('ID Pembelian=id_pembelian:i;Tanggal=tanggal:d;No. PO=no_po:t;Kode Material=kategori:t;Nama Material=nama:t;'
+      + 'Ukuran=ukuran:t;Pemasok=pemasok:t;Proyek=proyek:t;Gudang=gudang:t;Qty=qty:n;Satuan=satuan:t;Harga Unit=harga_unit:m;'
+      + 'Nilai Pembelian=nilai:m;Qty Terpakai FIFO=qty_terpakai:n;Sisa Lot FIFO=sisa_qty:n;Nilai Sisa Lot=nilai_sisa:m;Catatan=catatan:t'),
   },
   {
     key: 'pemakaian', label: 'Pemakaian', noun: 'pemakaian', searchHint: 'material, ID, no. dokumen, pemakai',
-    filters: [{ col: 'proyek', label: 'Proyek' }, { col: 'pemakai', label: 'Pemakai / bagian' }, { col: 'kategori', label: 'Kategori' }],
-    hasDates: true, dateLabel: 'Tanggal pemakaian',
+    filters: [{ col: 'proyek', label: 'Proyek' }, { col: 'pemakai', label: 'Pemakai/Bagian' }, { col: 'kategori', label: 'Kode Material' }],
+    hasDates: true, dateLabel: 'Tanggal',
     totals: [{ col: 'biaya_fifo', label: 'Biaya FIFO', money: true }],
-    columns: [
-      { key: 'tanggal', label: 'Tanggal', kind: 'date' },
-      { key: 'id_pemakaian', label: 'ID / No. dokumen', kind: 'id' },
-      { key: 'nama', label: 'Material', kind: 'material' },
-      { key: 'proyek', label: 'Proyek', kind: 'text' },
-      { key: 'pemakai', label: 'Pemakai', kind: 'text' },
-      { key: 'qty', label: 'Qty', kind: 'qty' },
-      { key: 'harga_rata', label: 'Harga FIFO', kind: 'money' },
-      { key: 'biaya_fifo', label: 'Biaya FIFO', kind: 'money' },
-    ],
+    columns: excelColumns('ID Pemakaian=id_pemakaian:i;Tanggal=tanggal:d;No. Dokumen=no_dokumen:t;Kode Material=kategori:t;Nama Material=nama:t;'
+      + 'Ukuran=ukuran:t;Proyek=proyek:t;Gudang=gudang:t;Qty=qty:n;Satuan=satuan:t;Pemakai/Bagian=pemakai:t;Biaya FIFO=biaya_fifo:m;'
+      + 'Harga FIFO Rata-rata=harga_rata:m;Catatan=catatan:t'),
   },
   {
     key: 'saldo-awal', label: 'Saldo Awal', noun: 'saldo awal', searchHint: 'material, ID saldo awal',
-    filters: [{ col: 'kategori', label: 'Kategori' }, { col: 'gudang', label: 'Gudang' }],
-    hasDates: true, dateLabel: 'Tanggal cut off',
-    totals: [{ col: 'nilai', label: 'Nilai saldo awal', money: true }, { col: 'nilai_sisa', label: 'Nilai sisa FIFO', money: true }],
-    columns: [
-      { key: 'tanggal', label: 'Cut off', kind: 'date' },
-      { key: 'id_saldo_awal', label: 'ID', kind: 'id' },
-      { key: 'nama', label: 'Material', kind: 'material' },
-      { key: 'gudang', label: 'Gudang', kind: 'text' },
-      { key: 'qty', label: 'Qty', kind: 'qty' },
-      { key: 'harga_unit', label: 'Harga unit', kind: 'money' },
-      { key: 'nilai', label: 'Nilai', kind: 'money' },
-      { key: 'sisa_qty', label: 'Sisa FIFO', kind: 'qty' },
-      { key: 'nilai_sisa', label: 'Nilai sisa', kind: 'money' },
-    ],
+    filters: [{ col: 'kategori', label: 'Kode Material' }, { col: 'gudang', label: 'Gudang' }],
+    hasDates: true, dateLabel: 'Tanggal Cut Off',
+    totals: [{ col: 'nilai', label: 'Nilai Saldo Awal', money: true }, { col: 'nilai_sisa', label: 'Nilai Sisa FIFO', money: true }],
+    columns: excelColumns('ID Saldo Awal=id_saldo_awal:i;Tanggal Cut Off=tanggal:d;Kode Material=kategori:t;Nama Material=nama:t;Proyek=proyek:t;'
+      + 'Gudang=gudang:t;Qty Saldo Awal=qty:n;Satuan=satuan:t;Nilai Saldo Awal=nilai:m;Harga Unit=harga_unit:m;Qty Terpakai FIFO=qty_terpakai:n;'
+      + 'Sisa Saldo FIFO=sisa_qty:n;Nilai Sisa FIFO=nilai_sisa:m;Ukuran=ukuran:t;Catatan=catatan:t'),
   },
   {
-    key: 'material', label: 'Master Material', noun: 'material', searchHint: 'nama, ukuran, kategori, CODA',
-    filters: [{ col: 'kategori', label: 'Kategori' }, { col: 'satuan', label: 'Satuan' }],
+    key: 'material', label: 'Master Material', noun: 'material', searchHint: 'nama, ukuran, kode material, CODA',
+    filters: [{ col: 'kategori', label: 'Kode Material' }, { col: 'satuan', label: 'Satuan' }],
     totals: [],
-    columns: [
-      { key: 'nama', label: 'Material', kind: 'material' },
-      { key: 'coda', label: 'CODA', kind: 'text' },
-      { key: 'satuan', label: 'Satuan', kind: 'text' },
-      { key: 'stok_minimum', label: 'Stok min.', kind: 'num' },
-      { key: 'aktif', label: 'Aktif', kind: 'text' },
-      { key: 'status_data', label: 'Status data', kind: 'text' },
-    ],
+    columns: excelColumns('Kode Material=kategori:t;Nama Material=nama:t;CODA=coda:t;Ukuran=ukuran:t;Satuan=satuan:t;'
+      + 'Stok Minimum=stok_minimum:n;Aktif=aktif:t;Catatan=catatan:t;Status Data=status_data:t'),
   },
 ];
 
@@ -222,50 +199,30 @@ export default function MaterialStock() {
     return () => controller.abort();
   }, [ds.key, search, filters, dateFrom, dateTo, sort, page]);
 
-  const sortCol = (c: Column) => c.sort || (c.kind === 'material' ? 'nama' : c.key);
   const toggleSort = (c: Column) => {
-    const col = sortCol(c);
-    const numeric = c.kind === 'num' || c.kind === 'money' || c.kind === 'qty' || c.kind === 'date';
-    setSort(prev => prev?.col === col
-      ? { col, dir: prev.dir === 'asc' ? 'desc' : 'asc' }
-      : { col, dir: numeric ? 'desc' : 'asc' });
+    const numeric = c.kind === 'num' || c.kind === 'money' || c.kind === 'date';
+    setSort(prev => prev?.col === c.key
+      ? { col: c.key, dir: prev.dir === 'asc' ? 'desc' : 'asc' }
+      : { col: c.key, dir: numeric ? 'desc' : 'asc' });
     setPage(1);
   };
 
   const cell = (c: Column, row: Record<string, any>) => {
     const v = row[c.key];
     switch (c.kind) {
-      case 'material':
-        return (
-          <>
-            <p className="font-semibold text-slate-800">{row.nama || '-'}</p>
-            <p className="text-xs text-slate-500 mt-0.5">{[row.kategori, row.ukuran].filter(Boolean).join(' · ')}</p>
-          </>
-        );
-      case 'id': {
-        const second = row.no_po ?? row.no_dokumen;
-        return (
-          <>
-            <p className="font-mono text-slate-800">{v || '-'}</p>
-            {second && <p className="text-xs text-slate-500 mt-0.5">{second}</p>}
-          </>
-        );
-      }
+      case 'id': return <span className="font-mono text-slate-800 whitespace-nowrap">{v || '-'}</span>;
       case 'date': return <span className="font-mono text-slate-600 whitespace-nowrap">{formatDate(v)}</span>;
       case 'money': return <span className="font-mono whitespace-nowrap">{formatIDR(v)}</span>;
-      case 'num': return <span className="font-mono">{formatNum(v)}</span>;
-      case 'qty':
-        return (
-          <span className={`font-mono whitespace-nowrap ${typeof v === 'number' && v < 0 ? 'text-rose-700 font-semibold' : ''}`}>
-            {formatNum(v)}{row.satuan && v !== null && v !== undefined ? <span className="text-slate-500"> {row.satuan}</span> : null}
-          </span>
-        );
+      case 'num':
+        return <span className={`font-mono whitespace-nowrap ${typeof v === 'number' && v < 0 ? 'text-rose-700 font-semibold' : ''}`}>{formatNum(v)}</span>;
       case 'status':
         return v ? <span className={`inline-block px-2 py-0.5 rounded text-xs font-semibold whitespace-nowrap ${STATUS_STYLE[v] || 'bg-slate-100 text-slate-700'}`}>{v}</span> : '-';
       default: return <span className="text-slate-700">{v ?? '-'}</span>;
     }
   };
-  const isRight = (c: Column) => c.kind === 'num' || c.kind === 'money' || c.kind === 'qty';
+  const isRight = (c: Column) => c.kind === 'num' || c.kind === 'money';
+  // Nama Material stays in view while the wide tables scroll sideways.
+  const isPinned = (c: Column) => c.key === 'nama';
 
   const synced = data?.synced ?? summary?.synced?.[ds.key] ?? null;
   const neverSynced = !loading && !error && data && data.total === 0 && !synced;
@@ -406,10 +363,10 @@ export default function MaterialStock() {
                 <thead className="bg-slate-50 text-slate-500 text-xs">
                   <tr>
                     {ds.columns.map(c => {
-                      const active = sort?.col === sortCol(c);
+                      const active = sort?.col === c.key;
                       return (
                         <th key={c.key} scope="col" aria-sort={active ? (sort!.dir === 'asc' ? 'ascending' : 'descending') : 'none'}
-                          className={`py-3 px-4 font-semibold ${isRight(c) ? 'text-right' : 'text-left'}`}>
+                          className={`py-3 px-3 font-semibold whitespace-nowrap ${isRight(c) ? 'text-right' : 'text-left'} ${isPinned(c) ? 'sticky left-0 z-10 bg-slate-50 shadow-[1px_0_0_0_theme(colors.slate.200)]' : ''}`}>
                           <button type="button" onClick={() => toggleSort(c)}
                             className={`inline-flex items-center gap-1 rounded outline-none hover:text-slate-800 focus-visible:ring-2 focus-visible:ring-indigo-500/40 ${active ? 'text-slate-800' : ''}`}>
                             {c.label}
@@ -427,9 +384,9 @@ export default function MaterialStock() {
                     </td></tr>
                   )}
                   {(data?.data || []).map(row => (
-                    <tr key={row.row_no} className="align-top hover:bg-slate-50">
+                    <tr key={row.row_no} className="group align-top">
                       {ds.columns.map(c => (
-                        <td key={c.key} className={`py-2.5 px-4 ${isRight(c) ? 'text-right' : ''} ${c.kind === 'material' ? 'min-w-[14rem] max-w-md' : ''}`}>
+                        <td key={c.key} className={`py-2.5 px-3 group-hover:bg-slate-50 ${isRight(c) ? 'text-right' : ''} ${isPinned(c) ? 'sticky left-0 z-10 bg-white min-w-[8.5rem] max-w-[10rem] sm:min-w-[12rem] sm:max-w-xs font-semibold text-slate-800 shadow-[1px_0_0_0_theme(colors.slate.200)]' : ''} ${c.kind === 'text' && !isPinned(c) ? 'max-w-xs' : ''}`}>
                           {cell(c, row)}
                         </td>
                       ))}
