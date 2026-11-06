@@ -32,7 +32,9 @@ func aiTools() []aiTool {
 			Name: "search_work_orders",
 			Description: "Search ShipHub work orders (WO, from SIAGA) and get totals. Call this when the user asks which WOs exist for a ship, " +
 				"project (Job Order / JO), vendor or approval status, how many WOs there are, or their total / approved / pending value. " +
-				"Returns a summary (WO and JO counts, total value, value approved so far, value pending) and the matching WOs, newest approval first. " +
+				"Returns a summary (WO and JO counts; item value approved, pending and rejected; SIAGA header value) and the matching WOs, newest approval first. " +
+				"date_from / date_to select WOs by their LATEST approval date, and the values are each WO's whole value, also approvals before the period; " +
+				"for the value approved within a period use billing_summary. " +
 				"For one specific WO by its code use get_work_order instead.",
 			Schema: aiSchema(map[string]interface{}{
 				"query":        aiString("Free text matched against WO code, JO code, project, vendor and ship name, e.g. \"WO25060066\", \"TB Barakuda\", \"PT Maju\"."),
@@ -216,8 +218,23 @@ func runSearchWorkOrders(r *http.Request, input json.RawMessage) (interface{}, e
 	return map[string]interface{}{
 		"summary": map[string]interface{}{
 			"wo_count": stats["totalWOs"], "jo_count": stats["totalJOs"], "vendor_count": stats["totalVendors"],
-			"total_value": stats["sumTotal"], "value_previous_approvals": stats["sumSebelumnya"],
-			"value_latest_approval": stats["sumSaatIni"], "pending_value": stats["sumPending"], "wo_per_status": stats["approvalCounts"],
+			"approved_value":                  stats["sumFinal"],
+			"approved_at_latest_approval":     stats["sumSaatIni"],
+			"approved_before_latest_approval": stats["sumSebelumnya"],
+			"pending_value":                   stats["sumPending"],
+			"rejected_value":                  stats["sumRejected"],
+			"items_value":                     toFloat(stats["sumFinal"]) + toFloat(stats["sumPending"]) + toFloat(stats["sumRejected"]),
+			"siaga_header_value":              stats["sumTotal"],
+			"wo_per_status":                   stats["approvalCounts"],
+		},
+		"notes": []string{
+			"approved_value = nilai item yang sudah di-approve (approved_before_latest_approval + approved_at_latest_approval). " +
+				"pending_value = item belum di-approve, rejected_value = ditolak, items_value = jumlah ketiganya.",
+			"siaga_header_value = total di header WO SIAGA (nilai awal WO); tidak bertambah saat ada pekerjaan tambahan, jadi bisa lebih kecil " +
+				"dari approved_value. Jangan menyebutnya total nilai WO; total nilai pekerjaan adalah items_value.",
+			"Per WO di work_orders: final_cost = approved, pending_cost, rejected_cost, total_cost = header SIAGA (sama seperti di atas).",
+			"date_from / date_to memilih WO berdasarkan tanggal approval TERAKHIR-nya; nilainya mencakup approval sebelum periode. " +
+				"Untuk nilai yang di-approve DI DALAM periode, pakai billing_summary.",
 		},
 		"total": list["total"], "work_orders": rows,
 	}, nil
@@ -298,7 +315,10 @@ func runGetWorkOrder(r *http.Request, input json.RawMessage) (interface{}, error
 	}
 	return map[string]interface{}{
 		"wo_code": woCode, "jo_code": jo, "project": project, "ship": ship, "vendor": vendorLabel(vendor), "status": status,
-		"project_type": projectType, "total_value": total, "approved_value": final, "pending_value": pending, "rejected_value": rejected,
+		"project_type": projectType, "approved_value": final, "pending_value": pending, "rejected_value": rejected,
+		"items_value": final + pending + rejected, "siaga_header_value": total,
+		"value_note": "items_value = approved + pending + rejected (nilai pekerjaan sebenarnya). siaga_header_value = total di header WO SIAGA, " +
+			"nilai awal yang tidak bertambah dengan pekerjaan tambahan.",
 		"latest_approval_date": latest, "created_at": created, "updated_at": updated, "siaga_url": siagaWorkOrderURL + id,
 		"items_per_status": perStatus, "top_items": items, "approvals_per_date": approvals,
 	}, nil
@@ -497,4 +517,10 @@ func runUnrecognizedActivities(r *http.Request, input json.RawMessage) (interfac
 	}
 	return map[string]interface{}{"unrecognized_items": res["items"], "unrecognized_value": res["total_cost"], "all_items": res["all_items"],
 		"all_value": res["all_cost"], "activities": res["data"], "activity_count": res["total"]}, nil
+}
+
+// toFloat reads a number decoded from a handler's JSON answer (0 if absent).
+func toFloat(v interface{}) float64 {
+	n, _ := aiDataNumber(v)
+	return n
 }

@@ -19,6 +19,8 @@ ShipHub adalah dashboard galangan kapal (Yard Tegal / YWTS) yang membaca data da
 
 - Biaya item = harga satuan (`volume_cost_final`) x volume. Harga kontrak aktivitas tidak dihitung sebagai biaya WO.
 - **Nilai total WO** = semua item. **Nilai approved** = item yang sudah disetujui. **Pending** = belum disetujui. **Rejected** = ditolak.
+- **Nilai header SIAGA** (siaga_header_value / total_cost) = total di header WO saat dibuat; tidak bertambah saat ada pekerjaan tambahan, jadi bisa lebih kecil dari nilai approved. Total nilai pekerjaan = items_value (approved + pending + rejected), bukan nilai header.
+- **WO per periode**: search_work_orders memilih WO menurut tanggal approval terakhirnya, dan nilainya termasuk approval sebelum periode. Nilai yang di-approve di dalam periode = billing_summary.
 - **Tagihan (Financial Dashboard)**: nilai yang di-approve pada suatu tanggal. Satu WO yang di-approve di tiga tanggal = tiga transaksi tagihan. "Nilai sebelumnya" = yang sudah di-approve sebelum tanggal itu. Minggu tagihan dihitung Sabtu sampai Jumat.
 
 ## Jenis pekerjaan (hasil rapikan nama item)
