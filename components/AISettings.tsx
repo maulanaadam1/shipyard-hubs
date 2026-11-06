@@ -183,8 +183,9 @@ export default function AISettings() {
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
                 <div>
                   <label htmlFor="ai-limit" className={label}>Batas pertanyaan per pengguna per hari</label>
-                  <input id="ai-limit" type="number" min={1} max={10000} className={field} value={form.daily_limit}
+                  <input id="ai-limit" type="number" min={0} max={10000} className={field} value={form.daily_limit}
                     onChange={e => set('daily_limit', Number(e.target.value))} />
+                  <p className={help}>0 = tanpa batas.</p>
                 </div>
                 <div>
                   <label htmlFor="ai-max-tokens" className={label}>Max tokens jawaban</label>

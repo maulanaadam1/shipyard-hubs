@@ -106,6 +106,7 @@ func decryptSecret(enc string) (string, error) {
 
 // loadAISettings reads the settings; defaults when none are saved yet.
 func loadAISettings() aiSettings {
+	// DailyLimit 0: no limit on questions per user per day.
 	s := aiSettings{Provider: aiProviderAnthropic, DailyLimit: 50}
 	var enc string
 	db.QueryRow(`SELECT COALESCE(provider, ''), COALESCE(base_url, ''), COALESCE(model, ''), COALESCE(api_key_enc, ''),
@@ -233,8 +234,8 @@ func PutAISettings(w http.ResponseWriter, r *http.Request) {
 		fail("max tokens antara 0 (bawaan) dan 128000")
 		return
 	}
-	if s.DailyLimit < 1 || s.DailyLimit > 10000 {
-		fail("batas pertanyaan per hari antara 1 dan 10000")
+	if s.DailyLimit < 0 || s.DailyLimit > 10000 {
+		fail("batas pertanyaan per hari antara 0 (tanpa batas) dan 10000")
 		return
 	}
 	if s.Provider == aiProviderOpenAI && s.Enabled && s.Model == "" {
