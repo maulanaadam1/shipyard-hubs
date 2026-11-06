@@ -126,7 +126,7 @@ func PostAIChat(w http.ResponseWriter, r *http.Request) {
 	}
 	claims, _ := middleware.GetUserClaims(r)
 	limit := loadAISettings().DailyLimit
-	if used := aiUsedToday(claims.ID); used >= limit {
+	if used := aiUsedToday(claims.ID); limit > 0 && used >= limit { // 0 = no limit
 		fail(http.StatusTooManyRequests, fmt.Sprintf("Batas %d pertanyaan per hari sudah tercapai. Coba lagi besok.", limit))
 		return
 	}

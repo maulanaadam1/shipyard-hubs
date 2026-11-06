@@ -63,7 +63,7 @@ func TestAISettingsSecretHandling(t *testing.T) {
 		`{"provider": "gemini", "daily_limit": 5}`,
 		`{"provider": "openai", "base_url": "ftp://x", "model": "m", "daily_limit": 5}`,
 		`{"provider": "openai", "enabled": true, "daily_limit": 5}`,
-		`{"provider": "anthropic", "daily_limit": 0}`,
+		`{"provider": "anthropic", "daily_limit": -1}`,
 	} {
 		if code, _ := call("ai-admin", "PUT", bad); code != http.StatusBadRequest {
 			t.Errorf("accepted %s: %d", bad, code)
@@ -147,5 +147,24 @@ func TestAIChatOpenAICompatible(t *testing.T) {
 	db.QueryRow(`SELECT model, input_tokens + output_tokens FROM ai_chat_log WHERE user_id = 'ai-admin'`).Scan(&model, &tokens)
 	if model != "openai/local-model" || tokens != 2035 {
 		t.Errorf("log: %s %d", model, tokens)
+	}
+}
+
+// daily_limit 0: no limit on questions per day.
+func TestAIUnlimitedQuestions(t *testing.T) {
+	setupStreamTest(t)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		io.ReadAll(r.Body)
+		w.Header().Set("Content-Type", "application/json")
+		io.WriteString(w, `{"choices": [{"finish_reason": "stop", "message": {"role": "assistant", "content": "OK."}}]}`)
+	}))
+	defer server.Close()
+	putSettings(t, "ai-admin", `{"provider": "openai", "base_url": "`+server.URL+`", "model": "m", "daily_limit": 0, "enabled": true}`)
+	for i := 0; i < 3; i++ {
+		rec := httptest.NewRecorder()
+		PostAIChat(rec, httptest.NewRequest("POST", "/api/ai/chat", strings.NewReader(`{"messages": [{"role": "user", "content": "Halo?"}]}`)).WithContext(asUser("ai-admin")))
+		if rec.Code != 200 {
+			t.Fatalf("question %d: %d %s", i+1, rec.Code, rec.Body.String())
+		}
 	}
 }

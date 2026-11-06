@@ -309,8 +309,9 @@ export default function AIAssistant() {
     } catch { /* clipboard blocked by the browser */ }
   };
 
+  const unlimited = !!status && status.daily_limit <= 0; // 0 = no daily limit
   const remaining = status ? Math.max(0, status.daily_limit - status.used_today) : 0;
-  const canAsk = !!status?.enabled && remaining > 0;
+  const canAsk = !!status?.enabled && (unlimited || remaining > 0);
   const groups = conversations.reduce<Record<string, Conversation[]>>((acc, c) => {
     (acc[dayGroup(c.updated_at)] ||= []).push(c);
     return acc;
@@ -383,7 +384,7 @@ export default function AIAssistant() {
             </span>
           )}
         </div>
-        {status?.enabled && (
+        {status?.enabled && !unlimited && (
           <p className="text-xs text-slate-600 tabular-nums">{remaining} dari {status.daily_limit} pertanyaan tersisa hari ini</p>
         )}
       </header>
