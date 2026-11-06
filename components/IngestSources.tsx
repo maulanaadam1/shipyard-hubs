@@ -21,7 +21,14 @@ type LastResult = {
   saved?: number;
   unchanged?: number;
   skipped?: number;
+  dataset?: string;
   problems?: string[] | null;
+};
+
+const KIND_HELP: Record<string, string> = {
+  attendance: 'Baris absen mesin fingerprint (id, emp_code, punch_time). Masuk ke perhitungan jam kerja.',
+  records: 'Baris apa saja, disimpan apa adanya. Baris dengan kolom kunci yang sama diperbarui.',
+  inventory: 'Untuk macro di file Master Inventory: setiap kiriman mengganti satu tabel di menu Persediaan Material. Tempel token ini di macro lewat ShipHub_AturToken.',
 };
 
 type Source = {
@@ -111,6 +118,7 @@ function lastResultText(s: Source) {
   const r = s.last_result;
   if (!r) return `Terakhir mengirim ${when}.`;
   if (!r.ok) return `Kiriman terakhir ${when} gagal: ${r.error}`;
+  if (r.dataset) return `Terakhir ${when}: tabel ${r.dataset} diganti dengan ${r.received} baris.`;
   return `Terakhir ${when}: ${r.received} baris, ${r.saved} baru/berubah, ${r.unchanged} sudah ada, ${r.skipped} dilewati.`;
 }
 
@@ -280,9 +288,7 @@ export default function IngestSources() {
                   {kinds.map(k => <option key={k.value} value={k.value}>{k.label}</option>)}
                 </select>
                 <p className={help}>
-                  {form.kind === 'attendance'
-                    ? 'Baris absen mesin fingerprint (id, emp_code, punch_time). Masuk ke perhitungan jam kerja.'
-                    : 'Baris apa saja, disimpan apa adanya. Baris dengan kolom kunci yang sama diperbarui.'}
+                  {KIND_HELP[form.kind] || ''}
                 </p>
               </div>
               {formKind?.needs_key && (

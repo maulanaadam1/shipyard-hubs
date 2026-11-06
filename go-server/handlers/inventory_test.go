@@ -141,6 +141,59 @@ func TestInventorySyncAndList(t *testing.T) {
 	}
 }
 
+// The macro can send with an inventory source's token instead of a login.
+func TestInventoryIngestToken(t *testing.T) {
+	resetInventoryTables(t)
+	resetIngest(t)
+	id, token := createIngestSource(t, `{"name": "Master Inventory Gudang", "kind": "inventory"}`)
+	_, otherKind := createIngestSource(t, `{"name": "Absensi", "kind": "attendance"}`)
+	path := "/api/ingest/" + id
+	body := `{"dataset": "pembelian", "source": "uji.xlsm", "rows": [
+		{"id_pembelian": "B1", "tanggal": "2026-10-01", "nama": "Kuas", "qty": 2, "nilai": 12000},
+		{"id_pembelian": "B2", "tanggal": "2026-10-02", "nama": "Majun", "qty": "banyak", "nilai": 8000}
+	]}`
+
+	if code, _ := ingestCall(t, "POST", path, otherKind, body); code != 401 {
+		t.Errorf("another source's token: %d", code)
+	}
+	code, out := ingestCall(t, "POST", path, token, body)
+	if code != 200 || out["received"] != 2.0 || out["saved"] != 2.0 || out["dataset"] != "pembelian" || len(out["problems"].([]any)) != 1 {
+		t.Fatalf("ingest: %d %v", code, out)
+	}
+	var list invListResponse
+	inventoryCall(t, "GET", "/api/inventory/data/pembelian", "", &list)
+	if list.Total != 2 || list.Totals["nilai"] != 20000 || list.Synced == nil || list.Synced.By != "Master Inventory Gudang" || list.Synced.Source != "uji.xlsm" {
+		t.Errorf("stored: %+v", list)
+	}
+
+	for name, bad := range map[string]string{
+		"no dataset":     `{"rows": [{"nama": "Kuas"}]}`,
+		"unknown column": `{"dataset": "pembelian", "rows": [{"Nama Material": "Kuas"}]}`,
+		"empty upload":   `{"dataset": "pembelian", "rows": []}`,
+	} {
+		if code, out := ingestCall(t, "POST", path, token, bad); code != 400 {
+			t.Errorf("%s: want 400, got %d %v", name, code, out)
+		}
+	}
+	inventoryCall(t, "GET", "/api/inventory/data/pembelian", "", &list)
+	if list.Total != 2 {
+		t.Errorf("rejected uploads changed the table: %d rows", list.Total)
+	}
+
+	// The source list shows how many workbook rows are stored.
+	_, out = ingestCall(t, "GET", "/api/ingest-sources", "", "")
+	for _, s := range out["data"].([]any) {
+		src := s.(map[string]any)
+		if src["id"] != id {
+			continue
+		}
+		last, _ := src["last_result"].(map[string]any)
+		if src["rows"] != 2.0 || last["dataset"] != "pembelian" {
+			t.Errorf("source after sync: rows %v, last result %v", src["rows"], last)
+		}
+	}
+}
+
 func TestInventorySyncRejects(t *testing.T) {
 	resetInventoryTables(t)
 	inventoryCall(t, "POST", "/api/inventory/sync/material", `{"rows": [{"nama": "Kuas"}]}`, nil)

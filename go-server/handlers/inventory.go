@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"math"
 	"net/http"
@@ -151,9 +152,111 @@ func invValue(kind db.InventoryKind, v any) (any, string) {
 	return nil, fmt.Sprintf("jenis nilai %T tidak didukung", v)
 }
 
-// SyncInventory handles POST /api/inventory/sync/{dataset}: replaces the
-// table with the rows sent by the workbook macro, in one transaction.
-// Body: {"rows": [{"column": value, ...}], "source": "file name"}.
+// invSyncResult is what one table sync stored.
+type invSyncResult struct {
+	Rows         int
+	SyncedAt     string
+	Warnings     []string
+	WarningCount int
+}
+
+// invUploadError is a sync the sender must fix (HTTP 400); Columns lists the
+// table's columns when the upload named unknown ones.
+type invUploadError struct {
+	Msg     string
+	Columns []string
+}
+
+func (e *invUploadError) Error() string { return e.Msg }
+
+// replaceInventory replaces the dataset's table with rows in one
+// transaction and records the sync (when, by whom, from which file).
+func replaceInventory(ds invDataset, rows []map[string]any, source, by string, allowEmpty bool) (invSyncResult, error) {
+	// An empty upload would wipe the table; only on purpose.
+	if len(rows) == 0 && !allowEmpty {
+		return invSyncResult{}, &invUploadError{Msg: "Tidak ada baris yang dikirim; data lama tidak diubah. Tambahkan ?allow_empty=1 untuk mengosongkan tabel."}
+	}
+	if len(rows) > invMaxRows {
+		return invSyncResult{}, &invUploadError{Msg: fmt.Sprintf("Terlalu banyak baris (%d, maksimal %d)", len(rows), invMaxRows)}
+	}
+
+	cols := db.InventoryTables[ds.Table]
+	known := map[string]bool{}
+	for _, c := range cols {
+		known[c.Name] = true
+	}
+	unknown := map[string]bool{}
+	for _, row := range rows {
+		for k := range row {
+			if !known[k] {
+				unknown[k] = true
+			}
+		}
+	}
+	if len(unknown) > 0 {
+		names := make([]string, 0, len(unknown))
+		for k := range unknown {
+			names = append(names, k)
+		}
+		sort.Strings(names)
+		return invSyncResult{}, &invUploadError{Msg: "Kolom tidak dikenal: " + strings.Join(names, ", "), Columns: invColumnNames(ds.Table)}
+	}
+
+	res := invSyncResult{Rows: len(rows), SyncedAt: time.Now().UTC().Format(time.RFC3339), Warnings: []string{}}
+	values := make([][]any, len(rows))
+	for i, row := range rows {
+		vals := make([]any, 0, len(cols)+2)
+		vals = append(vals, i+1)
+		for _, c := range cols {
+			v, warn := invValue(c.Kind, row[c.Name])
+			if warn != "" {
+				res.WarningCount++
+				if len(res.Warnings) < 20 {
+					res.Warnings = append(res.Warnings, fmt.Sprintf("Baris %d, kolom %s: %s", i+1, c.Name, warn))
+				}
+			}
+			vals = append(vals, v)
+		}
+		values[i] = append(vals, res.SyncedAt)
+	}
+
+	tx, err := db.DB.Begin()
+	if err != nil {
+		return res, err
+	}
+	defer tx.Rollback()
+	if _, err := tx.Exec("DELETE FROM " + ds.Table); err != nil {
+		return res, err
+	}
+	colList := "row_no, " + strings.Join(invColumnNames(ds.Table), ", ") + ", synced_at"
+	rowMarks := "(" + strings.TrimSuffix(strings.Repeat("?, ", len(cols)+2), ", ") + ")"
+	for start := 0; start < len(values); start += invInsertRows {
+		end := min(start+invInsertRows, len(values))
+		marks := make([]string, 0, end-start)
+		args := make([]any, 0, (end-start)*(len(cols)+2))
+		for _, vals := range values[start:end] {
+			marks = append(marks, rowMarks)
+			args = append(args, vals...)
+		}
+		q := "INSERT INTO " + ds.Table + " (" + colList + ") VALUES " + strings.Join(marks, ", ")
+		if _, err := tx.Exec(db.FormatQuery(q), args...); err != nil {
+			return res, fmt.Errorf("baris %d-%d: %w", start+1, end, err)
+		}
+	}
+
+	meta, _ := json.Marshal(invSyncInfo{At: res.SyncedAt, By: by, Rows: len(values), Source: strings.TrimSpace(source)})
+	if _, err := tx.Exec(db.FormatQuery("DELETE FROM app_meta WHERE key = ?"), invMetaKey(ds)); err != nil {
+		return res, err
+	}
+	if _, err := tx.Exec(db.FormatQuery("INSERT INTO app_meta (key, value) VALUES (?, ?)"), invMetaKey(ds), string(meta)); err != nil {
+		return res, err
+	}
+	return res, tx.Commit()
+}
+
+// SyncInventory handles POST /api/inventory/sync/{dataset} for a signed-in
+// user (the macro's password login). Body: {"rows": [...], "source": "file"}.
+// Sources with a token send the same body to POST /api/ingest/{source}.
 func SyncInventory(w http.ResponseWriter, r *http.Request) {
 	ds, ok := invDatasetOf(w, r)
 	if !ok {
@@ -168,109 +271,83 @@ func SyncInventory(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, 400, map[string]string{"error": "Body JSON tidak valid: " + err.Error()})
 		return
 	}
-	// An empty upload would wipe the table; only on purpose.
-	if len(body.Rows) == 0 && r.URL.Query().Get("allow_empty") != "1" {
-		writeJSON(w, 400, map[string]string{"error": "Tidak ada baris yang dikirim; data lama tidak diubah. Tambahkan ?allow_empty=1 untuk mengosongkan tabel."})
-		return
-	}
-	if len(body.Rows) > invMaxRows {
-		writeJSON(w, 400, map[string]string{"error": fmt.Sprintf("Terlalu banyak baris (%d, maksimal %d)", len(body.Rows), invMaxRows)})
-		return
-	}
-
-	cols := db.InventoryTables[ds.Table]
-	known := map[string]bool{}
-	for _, c := range cols {
-		known[c.Name] = true
-	}
-	unknown := map[string]bool{}
-	for _, row := range body.Rows {
-		for k := range row {
-			if !known[k] {
-				unknown[k] = true
-			}
-		}
-	}
-	if len(unknown) > 0 {
-		names := make([]string, 0, len(unknown))
-		for k := range unknown {
-			names = append(names, k)
-		}
-		sort.Strings(names)
-		writeJSON(w, 400, map[string]any{"error": "Kolom tidak dikenal: " + strings.Join(names, ", "), "columns": invColumnNames(ds.Table)})
-		return
-	}
-
-	now := time.Now().UTC().Format(time.RFC3339)
-	warnings := []string{}
-	warningCount := 0
-	values := make([][]any, len(body.Rows))
-	for i, row := range body.Rows {
-		vals := make([]any, 0, len(cols)+2)
-		vals = append(vals, i+1)
-		for _, c := range cols {
-			v, warn := invValue(c.Kind, row[c.Name])
-			if warn != "" {
-				warningCount++
-				if len(warnings) < 20 {
-					warnings = append(warnings, fmt.Sprintf("Baris %d, kolom %s: %s", i+1, c.Name, warn))
-				}
-			}
-			vals = append(vals, v)
-		}
-		values[i] = append(vals, now)
-	}
-
-	tx, err := db.DB.Begin()
-	if err != nil {
-		writeJSON(w, 500, map[string]string{"error": err.Error()})
-		return
-	}
-	defer tx.Rollback()
-	if _, err := tx.Exec("DELETE FROM " + ds.Table); err != nil {
-		writeJSON(w, 500, map[string]string{"error": err.Error()})
-		return
-	}
-	colList := "row_no, " + strings.Join(invColumnNames(ds.Table), ", ") + ", synced_at"
-	rowMarks := "(" + strings.TrimSuffix(strings.Repeat("?, ", len(cols)+2), ", ") + ")"
-	for start := 0; start < len(values); start += invInsertRows {
-		end := min(start+invInsertRows, len(values))
-		marks := make([]string, 0, end-start)
-		args := make([]any, 0, (end-start)*(len(cols)+2))
-		for _, vals := range values[start:end] {
-			marks = append(marks, rowMarks)
-			args = append(args, vals...)
-		}
-		q := "INSERT INTO " + ds.Table + " (" + colList + ") VALUES " + strings.Join(marks, ", ")
-		if _, err := tx.Exec(db.FormatQuery(q), args...); err != nil {
-			writeJSON(w, 500, map[string]string{"error": fmt.Sprintf("Gagal menyimpan baris %d-%d: %v", start+1, end, err)})
-			return
-		}
-	}
-
-	info := invSyncInfo{At: now, Rows: len(values), Source: strings.TrimSpace(body.Source)}
+	by := ""
 	if claims, ok := middleware.GetUserClaims(r); ok {
-		info.By = claims.Name
-		if info.By == "" {
-			info.By = claims.Email
+		by = claims.Name
+		if by == "" {
+			by = claims.Email
 		}
 	}
-	meta, _ := json.Marshal(info)
-	if _, err := tx.Exec(db.FormatQuery("DELETE FROM app_meta WHERE key = ?"), invMetaKey(ds)); err == nil {
-		_, err = tx.Exec(db.FormatQuery("INSERT INTO app_meta (key, value) VALUES (?, ?)"), invMetaKey(ds), string(meta))
-		if err != nil {
-			writeJSON(w, 500, map[string]string{"error": err.Error()})
-			return
+	res, err := replaceInventory(ds, body.Rows, body.Source, by, r.URL.Query().Get("allow_empty") == "1")
+	var bad *invUploadError
+	if errors.As(err, &bad) {
+		out := map[string]any{"error": bad.Msg}
+		if bad.Columns != nil {
+			out["columns"] = bad.Columns
 		}
+		writeJSON(w, 400, out)
+		return
 	}
-	if err := tx.Commit(); err != nil {
+	if err != nil {
 		writeJSON(w, 500, map[string]string{"error": "Gagal menyimpan: " + err.Error()})
 		return
 	}
 	writeJSON(w, 200, map[string]any{
-		"dataset": ds.Key, "rows": len(values), "synced_at": now,
-		"warnings": warnings, "warning_count": warningCount,
+		"dataset": ds.Key, "rows": res.Rows, "synced_at": res.SyncedAt,
+		"warnings": res.Warnings, "warning_count": res.WarningCount,
 	})
+}
+
+// inventoryRowTotal is the rows of all workbook tables, shown on inventory
+// sources (the tables hold one workbook, whichever source sent it).
+func inventoryRowTotal() int {
+	total := 0
+	for table := range db.InventoryTables {
+		var n int
+		if db.QueryRow("SELECT COUNT(*) FROM "+table).Scan(&n) == nil {
+			total += n
+		}
+	}
+	return total
+}
+
+// ingestInventory stores one workbook table sent by an "inventory" source
+// with its token: body {"dataset": "stok", "rows": [...], "source": "file"}.
+func ingestInventory(src ingestSourceAuth, body ingestBody) (ingestResult, error) {
+	ds, ok := invDatasets[body.Dataset]
+	if !ok {
+		keys := make([]string, 0, len(invDatasets))
+		for k := range invDatasets {
+			keys = append(keys, k)
+		}
+		sort.Strings(keys)
+		return ingestResult{}, inputError("isi \"dataset\" dengan salah satu: " + strings.Join(keys, ", "))
+	}
+	var name string
+	db.QueryRow("SELECT name FROM ingest_sources WHERE id = ?", src.ID).Scan(&name)
+	if name == "" {
+		name = src.ID
+	}
+	res, err := replaceInventory(ds, body.Rows, body.Source, name, false)
+	var bad *invUploadError
+	if errors.As(err, &bad) {
+		return ingestResult{}, inputError(bad.Msg)
+	}
+	if err != nil {
+		return ingestResult{}, err
+	}
+	out := ingestResult{Received: res.Rows, Saved: res.Rows, Dataset: ds.Key, Problems: []string{}}
+	// Room for a closing "and N more" line within ingestMaxProblems.
+	for _, warn := range res.Warnings {
+		if len(out.Problems) == ingestMaxProblems-1 {
+			break
+		}
+		out.problem(warn)
+	}
+	if res.WarningCount > len(out.Problems) {
+		out.problem(fmt.Sprintf("dan %d nilai lain bukan angka/tanggal (dikosongkan)", res.WarningCount-len(out.Problems)))
+	}
+	return out, nil
 }
 
 // invFilter builds the WHERE of a list: search words (each must match one

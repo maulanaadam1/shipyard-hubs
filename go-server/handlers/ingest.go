@@ -44,15 +44,20 @@ type ingestResult struct {
 	Unchanged int      `json:"unchanged"`         // already stored as sent
 	Skipped   int      `json:"skipped"`           // unreadable rows, see problems
 	Removed   int      `json:"removed,omitempty"` // records dropped by replace_sheet
+	Dataset   string   `json:"dataset,omitempty"` // inventory kind: the table replaced
 	Problems  []string `json:"problems"`
 }
 
 // ingestBody is what a source posts. replace_sheet (records kind): the rows
 // are the whole tab of that name, so stored rows of the tab that are not in
 // them were deleted at the source and are removed here.
+// dataset and source (inventory kind): which workbook table the rows are, and
+// the file they came from.
 type ingestBody struct {
 	Rows         []map[string]any `json:"rows"`
 	ReplaceSheet string           `json:"replace_sheet"`
+	Dataset      string           `json:"dataset"`
+	Source       string           `json:"source"`
 }
 
 func (r *ingestResult) problem(msg string) {
@@ -62,19 +67,26 @@ func (r *ingestResult) problem(msg string) {
 }
 
 // ingestKinds: how each kind of source stores its rows. needsKey: the source
-// must name the column that identifies a row.
+// must name the column that identifies a row. maxRows: rows per delivery
+// (0 = ingestMaxRows).
 var ingestKinds = map[string]struct {
 	label    string
 	needsKey bool
 	store    func(src ingestSourceAuth, body ingestBody) (ingestResult, error)
+	maxRows  int
 }{
 	"attendance": {"Absensi (fingerprint)", false, func(src ingestSourceAuth, body ingestBody) (ingestResult, error) {
 		return ingestAttendance(src.ID, body.Rows)
-	}},
+	}, 0},
 	"records": {"Data umum", true, func(src ingestSourceAuth, body ingestBody) (ingestResult, error) {
 		return ingestRecords(src.ID, src.KeyColumn, body.Rows, body.ReplaceSheet)
-	}},
+	}, 0},
+	// A whole workbook table per delivery, so more rows than other kinds.
+	"inventory": {"Persediaan Material (file Master Inventory)", false, ingestInventory, 20000},
 }
+
+// ingestKindOrder is the order kinds are offered in the admin page.
+var ingestKindOrder = []string{"attendance", "records", "inventory"}
 
 func hashIngestToken(token string) string {
 	sum := sha256.Sum256([]byte(token))
@@ -127,8 +139,12 @@ func PostIngest(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "body JSON tidak valid: " + err.Error()})
 		return
 	}
-	if len(body.Rows) > ingestMaxRows {
-		writeJSON(w, http.StatusRequestEntityTooLarge, map[string]string{"error": fmt.Sprintf("maksimal %d baris per kiriman", ingestMaxRows)})
+	maxRows := ingestMaxRows
+	if kind.maxRows > 0 {
+		maxRows = kind.maxRows
+	}
+	if len(body.Rows) > maxRows {
+		writeJSON(w, http.StatusRequestEntityTooLarge, map[string]string{"error": fmt.Sprintf("maksimal %d baris per kiriman", maxRows)})
 		return
 	}
 
@@ -143,7 +159,7 @@ func PostIngest(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	recordIngestResult(src.ID, map[string]any{"ok": true, "received": res.Received, "saved": res.Saved,
-		"unchanged": res.Unchanged, "skipped": res.Skipped, "removed": res.Removed, "problems": res.Problems})
+		"unchanged": res.Unchanged, "skipped": res.Skipped, "removed": res.Removed, "dataset": res.Dataset, "problems": res.Problems})
 	writeJSON(w, http.StatusOK, res)
 }
 
@@ -309,6 +325,9 @@ func listIngestSources(where string, args ...any) ([]ingestSourceView, error) {
 			s.LastResult = json.RawMessage(last)
 		}
 		s.Rows = counts[s.ID]
+		if s.Kind == "inventory" {
+			s.Rows = inventoryRowTotal()
+		}
 		out = append(out, s)
 	}
 	return out, rows.Err()
@@ -333,7 +352,7 @@ func GetIngestSources(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	kinds := []map[string]any{}
-	for _, k := range []string{"attendance", "records"} {
+	for _, k := range ingestKindOrder {
 		kinds = append(kinds, map[string]any{"value": k, "label": ingestKinds[k].label, "needs_key": ingestKinds[k].needsKey})
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"data": list, "kinds": kinds})
