@@ -174,19 +174,41 @@ func TestRepairLists(t *testing.T) {
 	if _, ok := viewer["items"].([]interface{})[2].(map[string]interface{})["total_price"]; ok {
 		t.Error("item price shown without Harga Penawaran")
 	}
-	list := get("rl-admin", "/api/repair-lists?q=uji")
-	if jos := list["job_orders"].([]interface{}); len(jos) != 1 || jos[0].(map[string]interface{})["total_price"] != float64(3500000) {
-		t.Errorf("list: %v", list)
+	// The list: every Job Order of the Job Order menu, and others with a repair list.
+	byID := func(user string) map[string]map[string]interface{} {
+		out := map[string]map[string]interface{}{}
+		for _, j := range get(user, "/api/repair-lists")["job_orders"].([]interface{}) {
+			row := j.(map[string]interface{})
+			out[row["jo_id"].(string)] = row
+		}
+		return out
 	}
-	// The projects-only Job Order shows with its code; the one without a repair list doesn't.
-	all := get("rl-admin", "/api/repair-lists")
-	codes := []string{}
-	for _, j := range all["job_orders"].([]interface{}) {
-		codes = append(codes, j.(map[string]interface{})["jo_code"].(string))
+	all := byID("rl-admin")
+	if j := all["77"]; j == nil || j["state"] != "ok" || j["total_price"] != float64(3500000) || j["items_in_wo"] != float64(2) {
+		t.Errorf("Job Order 77 in the list: %v", j)
 	}
-	if len(codes) != 2 || !strings.Contains(strings.Join(codes, "|"), "JO-88/T - KM DELAPAN") {
-		t.Errorf("list codes: %v", codes)
+	if j := all["88"]; j == nil || j["state"] != "ok" || j["jo_code"] != "JO-88/T" || j["ship"] != "KM DELAPAN" || j["version"] != float64(2) {
+		t.Errorf("Job Order 88 in the list: %v", j)
 	}
+	if j := all["99"]; j == nil || j["state"] != "none" || j["items"] != float64(0) {
+		t.Errorf("Job Order 99 (no repair list) in the list: %v", j)
+	}
+	if _, ok := byID("rl-viewer")["77"]["total_price"]; ok {
+		t.Error("list price shown without Harga Penawaran")
+	}
+	if s := get("rl-admin", "/api/repair-lists/88")["summary"].(map[string]interface{}); s["ship"] != "KM DELAPAN" || s["state"] != "ok" {
+		t.Errorf("Job Order 88 summary: %v", s)
+	}
+	// A Job Order not fetched yet: listed as pending, an empty detail.
+	db.Exec(`INSERT INTO projects (id, id_siaga, idproject, shipname) VALUES ('rl-p66', 66, 'JO-66/T', 'KM ENAM')`)
+	t.Cleanup(func() { db.Exec("DELETE FROM projects WHERE id = 'rl-p66'") })
+	if j := byID("rl-admin")["66"]; j == nil || j["state"] != "pending" {
+		t.Errorf("Job Order 66 (not fetched): %v", j)
+	}
+	if d := get("rl-admin", "/api/repair-lists/66"); d["summary"].(map[string]interface{})["state"] != "pending" || len(d["items"].([]interface{})) != 0 {
+		t.Errorf("Job Order 66 detail: %v", d)
+	}
+	db.Exec("DELETE FROM projects WHERE id = 'rl-p66'")
 
 	// Job Order margins now use the whole repair list.
 	rec := httptest.NewRecorder()

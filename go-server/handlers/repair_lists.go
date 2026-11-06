@@ -237,6 +237,9 @@ func fetchRepairList(src detailSource, override, joID string, version int) ([]re
 	return flattenRepairList(roots), version, nil
 }
 
+// noRepairList is the error stored for a Job Order SIAGA has no repair list for.
+const noRepairList = "tidak ada repair list di SIAGA"
+
 // storeRepairList replaces one Job Order's stored repair list.
 func storeRepairList(joID string, version int, items []repairItem) error {
 	tx, err := db.DB.Begin()
@@ -410,7 +413,7 @@ func syncRepairLists() (int, error) {
 			recordRepairListError(joID, err.Error())
 			log.Printf("[REPAIR LIST] %s: %v", joID, err)
 		} else if used == 0 {
-			recordRepairListError(joID, "tidak ada repair list di SIAGA")
+			recordRepairListError(joID, noRepairList)
 		} else if err := storeRepairList(joID, used, items); err != nil {
 			return done, err
 		} else {
@@ -447,28 +450,26 @@ func StartRepairListWorker() {
 // API
 // ---------------------------------------------------------------------------
 
-// GetRepairLists lists Job Orders with a repair list: code, ship, version,
-// items, total and how much of it already has a WO. Query: q, limit.
+// GetRepairLists lists every Job Order of the Job Order menu (projects) and
+// any other Job Order with a stored repair list, with the repair list state:
+// "ok", "pending" (not fetched yet, or waiting for a refetch), "none" (no
+// repair list in SIAGA) or "failed". Prices need Harga Penawaran.
 func GetRepairLists(w http.ResponseWriter, r *http.Request) {
 	showPrice := HasResourcePermission(r, ResourceRepairPrices, "view")
-	q := strings.TrimSpace(r.URL.Query().Get("q"))
-	limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
-	if limit <= 0 || limit > 1000 {
-		limit = 300
-	}
-	where, args := "", []interface{}{}
-	if q != "" {
-		where = " AND LOWER(COALESCE(c.jo_code, '')) LIKE ?"
-		args = append(args, "%"+strings.ToLower(q)+"%")
-	}
 	rows, err := db.Query(`
-		WITH c AS (
-			SELECT l.jo_id, COALESCE(MAX(a.jo_code), MAX(j.code || ' - ' || COALESCE(j.m_ship_name, '')),
-				MAX(p.idproject || ' - ' || COALESCE(p.shipname, '')), '') AS jo_code
+		WITH jo AS (
+			SELECT CAST(p.id_siaga AS TEXT) AS jo_id, MAX(COALESCE(p.idproject, '')) AS code, MAX(COALESCE(p.shipname, '')) AS ship,
+				MAX(COALESCE(p.cust_company, '')) AS customer, MAX(COALESCE(ms.name, '')) AS service,
+				MAX(COALESCE(p.est_start, '')) AS est_start, MAX(COALESCE(p.est_finish, '')) AS est_finish
+			FROM projects p LEFT JOIN master_services ms ON CAST(ms.id AS TEXT) = p.docking_type
+			WHERE p.id_siaga IS NOT NULL AND p.id_siaga > 0
+			GROUP BY CAST(p.id_siaga AS TEXT)
+			UNION ALL
+			SELECT l.jo_id, COALESCE(MAX(a.jo_code), MAX(j.code), ''), COALESCE(MAX(j.m_ship_name), ''), COALESCE(MAX(j.m_customer_name), ''), '', '', ''
 			FROM jo_repair_lists l
 			LEFT JOIN wo_repair_activities a ON a.jo_id = l.jo_id
 			LEFT JOIN sync_job_orders j ON j.id = l.jo_id
-			LEFT JOIN projects p ON CAST(p.id_siaga AS TEXT) = l.jo_id
+			WHERE NOT EXISTS (SELECT 1 FROM projects p WHERE CAST(p.id_siaga AS TEXT) = l.jo_id)
 			GROUP BY l.jo_id
 		), inwo AS (
 			SELECT i.jo_id, COUNT(*) AS n, COALESCE(SUM(i.total_price), 0) AS price
@@ -478,14 +479,14 @@ func GetRepairLists(w http.ResponseWriter, r *http.Request) {
 		), leaf AS (
 			SELECT jo_id, COUNT(*) AS n FROM jo_repair_items WHERE is_leaf GROUP BY jo_id
 		)
-		SELECT l.jo_id, c.jo_code, COALESCE(l.version, 0), COALESCE(leaf.n, 0), COALESCE(l.total_price, 0),
+		SELECT jo.jo_id, jo.code, jo.ship, jo.customer, jo.service, jo.est_start, jo.est_finish,
+			l.jo_id IS NOT NULL, COALESCE(l.format, 0), COALESCE(l.version, 0), COALESCE(leaf.n, 0), COALESCE(l.total_price, 0),
 			COALESCE(inwo.n, 0), COALESCE(inwo.price, 0), COALESCE(l.fetched_at, ''), COALESCE(l.error, '')
-		FROM jo_repair_lists l JOIN c ON c.jo_id = l.jo_id
-		LEFT JOIN inwo ON inwo.jo_id = l.jo_id
-		LEFT JOIN leaf ON leaf.jo_id = l.jo_id
-		WHERE COALESCE(l.format, 0) >= `+strconv.Itoa(repairListFormat)+`
-			AND (COALESCE(l.items, 0) > 0 OR COALESCE(l.error, '') NOT IN ('', 'tidak ada repair list di SIAGA'))`+where+`
-		ORDER BY l.total_price DESC LIMIT `+strconv.Itoa(limit), args...)
+		FROM jo
+		LEFT JOIN jo_repair_lists l ON l.jo_id = jo.jo_id
+		LEFT JOIN inwo ON inwo.jo_id = jo.jo_id
+		LEFT JOIN leaf ON leaf.jo_id = jo.jo_id
+		ORDER BY jo.est_start DESC, jo.code DESC`)
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
@@ -493,19 +494,41 @@ func GetRepairLists(w http.ResponseWriter, r *http.Request) {
 	defer rows.Close()
 	list := []map[string]interface{}{}
 	for rows.Next() {
-		var id, code, at, failure string
-		var version, items, inWO int
+		var id, code, ship, customer, service, start, finish, at, failure string
+		var stored bool
+		var format, version, items, inWO int
 		var total, inWOPrice float64
-		if rows.Scan(&id, &code, &version, &items, &total, &inWO, &inWOPrice, &at, &failure) != nil {
+		if rows.Scan(&id, &code, &ship, &customer, &service, &start, &finish, &stored, &format, &version, &items, &total, &inWO, &inWOPrice, &at, &failure) != nil {
 			continue
 		}
-		row := map[string]interface{}{"jo_id": id, "jo_code": code, "version": version, "items": items, "items_in_wo": inWO, "fetched_at": at, "error": failure}
+		state := repairListState(stored, format, failure)
+		if state != "ok" {
+			version, items, inWO, total, inWOPrice = 0, 0, 0, 0, 0
+		}
+		row := map[string]interface{}{"jo_id": id, "jo_code": code, "ship": ship, "customer": customer, "service": service,
+			"est_start": start, "est_finish": finish, "state": state, "version": version, "items": items, "items_in_wo": inWO,
+			"fetched_at": at, "error": failure}
 		if showPrice {
 			row["total_price"], row["price_in_wo"] = total, inWOPrice
 		}
 		list = append(list, row)
 	}
 	writeJSON(w, http.StatusOK, map[string]interface{}{"job_orders": list, "show_price": showPrice})
+}
+
+// repairListState names a Job Order's repair list state for the Repair List menu.
+func repairListState(stored bool, format int, failure string) string {
+	switch {
+	case !stored:
+		return "pending"
+	case failure == noRepairList:
+		return "none"
+	case failure != "":
+		return "failed"
+	case format < repairListFormat:
+		return "pending"
+	}
+	return "ok"
 }
 
 // GetRepairList returns one Job Order's repair list in order, each activity
@@ -584,16 +607,22 @@ func GetRepairList(w http.ResponseWriter, r *http.Request) {
 	if format < repairListFormat && failure == "" {
 		// Stored before the current format: not shown until fetched again.
 		items, total, inWO, leaves, leavesInWO = []map[string]interface{}{}, 0, 0, 0, 0
-		failure = "Repair list sedang ditarik ulang dari SIAGA; coba lagi beberapa saat."
 	}
-	db.QueryRow(`SELECT COALESCE(MAX(jo_code), '') FROM wo_repair_activities WHERE jo_id = ?`, joID).Scan(&code)
+	var ship, customer, service string
+	var stored bool
+	db.QueryRow(`SELECT COUNT(*) > 0 FROM jo_repair_lists WHERE jo_id = ?`, joID).Scan(&stored)
+	state := repairListState(stored, format, failure)
+	db.QueryRow(`SELECT COALESCE(p.idproject, ''), COALESCE(p.shipname, ''), COALESCE(p.cust_company, ''), COALESCE(ms.name, '')
+		FROM projects p LEFT JOIN master_services ms ON CAST(ms.id AS TEXT) = p.docking_type
+		WHERE CAST(p.id_siaga AS TEXT) = ? LIMIT 1`, joID).Scan(&code, &ship, &customer, &service)
+	if code == "" {
+		db.QueryRow(`SELECT COALESCE(MAX(jo_code), '') FROM wo_repair_activities WHERE jo_id = ?`, joID).Scan(&code)
+	}
 	if code == "" {
 		db.QueryRow(`SELECT COALESCE(code, '') || ' - ' || COALESCE(m_ship_name, '') FROM sync_job_orders WHERE id = ?`, joID).Scan(&code)
 	}
-	if code == "" {
-		db.QueryRow(`SELECT COALESCE(idproject, '') || ' - ' || COALESCE(shipname, '') FROM projects WHERE CAST(id_siaga AS TEXT) = ?`, joID).Scan(&code)
-	}
-	summary := map[string]interface{}{"jo_id": joID, "jo_code": code, "version": version, "fetched_at": fetched, "error": failure,
+	summary := map[string]interface{}{"jo_id": joID, "jo_code": code, "ship": ship, "customer": customer, "service": service,
+		"state": state, "version": version, "fetched_at": fetched, "error": failure,
 		"items": leaves, "items_in_wo": leavesInWO}
 	if showPrice {
 		var cost, approved float64
