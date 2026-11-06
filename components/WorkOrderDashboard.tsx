@@ -35,6 +35,7 @@ import { useData } from '@/context/DataContext';
 import { SearchableSelect } from './SearchableSelect';
 import { totalServiceCost } from '@/lib/work-order-cost';
 import WorkOrderItemHistory from './WorkOrderItemHistory';
+import AskAIButton from './AskAIButton';
 
 const MOCK_DATA: any[] = [];
 
@@ -1676,7 +1677,10 @@ export default function WorkOrderDashboard() {
       <header className={`sticky top-0 z-30 border-b backdrop-blur-md px-6 py-4 flex flex-wrap justify-between items-center gap-4 ${isDarkMode ? 'bg-slate-900/80 border-slate-800' : 'bg-white/80 border-slate-200'}`}>
         <div className="flex items-center gap-3">
           <div>
-            <h2 className={`font-display font-bold text-xl md:text-2xl tracking-tight ${isDarkMode ? 'text-white' : 'text-slate-800'}`}>Work Order Dashboard</h2>
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+              <h2 className={`font-display font-bold text-xl md:text-2xl tracking-tight ${isDarkMode ? 'text-white' : 'text-slate-800'}`}>Work Order Dashboard</h2>
+              <AskAIButton scope="wo" questions={["WO mana yang masih Waiting lebih dari 30 hari?", "Vendor dengan nilai WO terbesar bulan ini", "Bandingkan nilai WO bulan ini dengan bulan lalu"]} />
+            </div>
             <p className="text-xs md:text-sm text-slate-500 mt-1">Resume & Analitika Work Order Logistik Perkapalan</p>
           </div>
         </div>

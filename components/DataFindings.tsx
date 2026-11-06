@@ -3,6 +3,7 @@ import { Search, SearchCheck, ChevronLeft, ChevronRight, ArrowDown, ArrowUp, Eye
 import { getHeaders } from '@/lib/api-client';
 import { useData } from '@/context/DataContext';
 import UnrecognizedActivities from './UnrecognizedActivities';
+import AskAIButton from './AskAIButton';
 
 // Work items the server flags for a check against reference unit costs
 // (wo_item_findings). ShipHub only points at them: fixes happen in SIAGA, and
@@ -204,9 +205,12 @@ export default function DataFindings() {
     <div className="min-h-screen bg-slate-50">
       <header className="sticky top-0 z-30 border-b bg-white/80 backdrop-blur-md border-slate-200 px-6 py-4 flex flex-wrap justify-between items-center gap-4">
         <div>
-          <h2 className="font-display font-bold text-xl md:text-2xl tracking-tight text-slate-800 flex items-center gap-2">
-            <SearchCheck className="text-indigo-500" size={22} /> Data Perlu Dicek
-          </h2>
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+            <h2 className="font-display font-bold text-xl md:text-2xl tracking-tight text-slate-800 flex items-center gap-2">
+              <SearchCheck className="text-indigo-500" size={22} /> Data Perlu Dicek
+            </h2>
+            <AskAIButton scope="wo" questions={["Item mana yang paling jauh di atas harga acuan?", "Vendor dengan temuan harga terbanyak", "Temuan baru minggu ini"]} />
+          </div>
           <p className="text-xs md:text-sm text-slate-500 mt-1">
             Item yang harganya jauh di atas acuan atau isiannya tidak wajar. Perbaiki di SIAGA; temuan selesai sendiri setelah datanya benar.
             {summary?.last_run ? ` Terakhir diperiksa ${summary.last_run}.` : ' Belum pernah diperiksa.'}

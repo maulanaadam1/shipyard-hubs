@@ -3,6 +3,7 @@ import { Search, ListChecks, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRi
 import { getHeaders } from '@/lib/api-client';
 import { SearchableSelect } from './SearchableSelect';
 import { useData } from '@/context/DataContext';
+import AskAIButton from './AskAIButton';
 
 // Work items flattened from every WO detail (wo_items), searchable by item,
 // cost, project, vendor or activity, with per-group cost summaries.
@@ -421,9 +422,12 @@ export default function WorkOrderItems() {
     <div className="min-h-screen bg-slate-50">
       <header className="sticky top-0 z-30 border-b bg-white/80 backdrop-blur-md border-slate-200 px-6 py-4 flex flex-wrap justify-between items-center gap-4">
         <div>
-          <h2 className="font-display font-bold text-xl md:text-2xl tracking-tight text-slate-800 flex items-center gap-2">
-            <ListChecks className="text-indigo-500" size={22} /> Item Pekerjaan WO
-          </h2>
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+            <h2 className="font-display font-bold text-xl md:text-2xl tracking-tight text-slate-800 flex items-center gap-2">
+              <ListChecks className="text-indigo-500" size={22} /> Item Pekerjaan WO
+            </h2>
+            <AskAIButton scope="wo" questions={["Jenis pekerjaan dengan biaya terbesar 3 bulan terakhir", "Item pekerjaan termahal bulan ini", "Bandingkan biaya per vendor untuk pekerjaan yang sama"]} />
+          </div>
           <p className="text-xs md:text-sm text-slate-500 mt-1">
             Cari item pekerjaan, bandingkan biaya, dan lihat ringkasan per proyek
             {facets ? ` · ${facets.itemCount.toLocaleString('id-ID')} item dari ${facets.woCount.toLocaleString('id-ID')} WO` : ''}

@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { Search, Tags, ChevronDown, ChevronLeft, ChevronRight, Eye, EyeOff, FileSpreadsheet } from 'lucide-react';
 import { getHeaders } from '@/lib/api-client';
 import { useData } from '@/context/DataContext';
+import AskAIButton from './AskAIButton';
 
 // Harga Acuan: the usual unit cost of each work type, size and unit, from
 // approved work items (wo_item_reference, rebuilt by the findings job). A row
@@ -185,9 +186,12 @@ export default function PriceReference() {
     <div className="min-h-screen bg-slate-50">
       <header className="sticky top-0 z-30 border-b bg-white/80 backdrop-blur-md border-slate-200 px-6 py-4 flex flex-wrap justify-between items-center gap-4">
         <div>
-          <h2 className="font-display font-bold text-xl md:text-2xl tracking-tight text-slate-800 flex items-center gap-2">
-            <Tags className="text-indigo-500" size={22} /> Harga Acuan
-          </h2>
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+            <h2 className="font-display font-bold text-xl md:text-2xl tracking-tight text-slate-800 flex items-center gap-2">
+              <Tags className="text-indigo-500" size={22} /> Harga Acuan
+            </h2>
+            <AskAIButton scope="wo" questions={["Berapa harga wajar bongkar & ganti baru kampas rem?", "Jenis pekerjaan yang harganya paling bervariasi", "Vendor yang sering di atas harga acuan"]} />
+          </div>
           <p className="text-xs md:text-sm text-slate-500 mt-1">
             Harga satuan wajar per jenis pekerjaan, ukuran dan satuan, dari item yang sudah approved
             {data ? ` (${data.window_months} bulan terakhir, minimal ${data.min_items} item pembanding)` : ''}.

@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Boxes, Search, ChevronLeft, ChevronRight, Eye, EyeOff, ArrowUp, ArrowDown, FileSpreadsheet } from 'lucide-react';
 import { getHeaders } from '@/lib/api-client';
+import AskAIButton from './AskAIButton';
 
 // Persediaan Material: the Master Inventory workbook as its macro last sent it
 // (stock, purchases, usage, opening balances, materials). Stock and FIFO
@@ -234,9 +235,12 @@ export default function MaterialStock() {
     <div className="min-h-screen bg-slate-50">
       <header className="sticky top-0 z-30 border-b bg-white/80 backdrop-blur-md border-slate-200 px-6 py-4 flex flex-wrap justify-between items-center gap-4">
         <div>
-          <h2 className="font-display font-bold text-xl md:text-2xl tracking-tight text-slate-800 flex items-center gap-2">
-            <Boxes className="text-indigo-500" size={22} /> Persediaan Material
-          </h2>
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+            <h2 className="font-display font-bold text-xl md:text-2xl tracking-tight text-slate-800 flex items-center gap-2">
+              <Boxes className="text-indigo-500" size={22} /> Persediaan Material
+            </h2>
+            <AskAIButton scope="material" questions={["Material apa yang perlu dipesan ulang?", "Pemakaian material terbesar bulan ini per proyek", "Nilai stok per gudang"]} />
+          </div>
           <p className="text-xs md:text-sm text-slate-500 mt-1">
             Isi file Master Inventory, dikirim lewat macro Excel. Stok dan nilai FIFO dihitung di file Excel, bukan di ShipHub.
           </p>
