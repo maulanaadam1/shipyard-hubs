@@ -34,6 +34,12 @@ WITH acts AS (
 		COALESCE(SUM(CASE WHEN i.status = 'approved' THEN i.total_cost ELSE 0 END), 0) AS cost_approved
 	FROM wos w LEFT JOIN wo_items i ON i.wo_id = w.wo_id
 	GROUP BY w.jo_id
+), full_price AS (
+	-- The whole repair list (repair_lists.go) when it has been fetched; the
+	-- activities in WOs otherwise.
+	SELECT jo.jo_id, CASE WHEN COALESCE(rl.total_price, 0) > 0 THEN rl.total_price ELSE jo.price END AS price,
+		CASE WHEN COALESCE(rl.total_price, 0) > 0 THEN 1 ELSE 0 END AS from_repair_list
+	FROM jo LEFT JOIN jo_repair_lists rl ON rl.jo_id = jo.jo_id
 )`
 
 type jobMargin struct {
@@ -48,6 +54,10 @@ type jobMargin struct {
 	Shared        int     `json:"shared_activities"`
 	DoubleCounted float64 `json:"double_counted"` // what summing prices per WO would add
 	WOCount       int     `json:"wo_count"`
+	// PriceInWO: the activities that have a WO; Price is the whole repair list
+	// when FromRepairList, else the same as PriceInWO.
+	PriceInWO      float64 `json:"price_in_wo"`
+	FromRepairList bool    `json:"from_repair_list"`
 }
 
 func (m *jobMargin) finish() {
@@ -67,11 +77,11 @@ func GetJobMargins(w http.ResponseWriter, r *http.Request) {
 		args = append(args, "%"+strings.ToLower(text)+"%")
 	}
 	order := map[string]string{
-		"margin": "(jo.price - cost.cost)", "price": "jo.price", "cost": "cost.cost", "code": "jo.jo_code",
-		"pct": "CASE WHEN jo.price > 0 THEN (jo.price - cost.cost) / jo.price ELSE 0 END",
+		"margin": "(fp.price - cost.cost)", "price": "fp.price", "cost": "cost.cost", "code": "jo.jo_code",
+		"pct": "CASE WHEN fp.price > 0 THEN (fp.price - cost.cost) / fp.price ELSE 0 END",
 	}[q.Get("sort")]
 	if order == "" {
-		order = "jo.price"
+		order = "fp.price"
 	}
 	dir := " DESC"
 	if q.Get("dir") == "asc" {
@@ -86,9 +96,10 @@ func GetJobMargins(w http.ResponseWriter, r *http.Request) {
 	var total jobMargin
 	count := 0
 	rows, err := db.Query(jobMarginCTE+`
-		SELECT jo.jo_id, COALESCE(jo.jo_code, ''), COALESCE(jo.price, 0), COALESCE(cost.cost, 0), COALESCE(cost.cost_approved, 0),
-			jo.activities, COALESCE(jo.shared, 0), COALESCE(jo.double_counted, 0), COALESCE(cost.wo_count, 0)
-		FROM jo LEFT JOIN cost ON cost.jo_id = jo.jo_id`+where+` ORDER BY `+order+dir, args...)
+		SELECT jo.jo_id, COALESCE(jo.jo_code, ''), COALESCE(fp.price, 0), COALESCE(cost.cost, 0), COALESCE(cost.cost_approved, 0),
+			jo.activities, COALESCE(jo.shared, 0), COALESCE(jo.double_counted, 0), COALESCE(cost.wo_count, 0),
+			COALESCE(jo.price, 0), COALESCE(fp.from_repair_list, 0)
+		FROM jo LEFT JOIN cost ON cost.jo_id = jo.jo_id LEFT JOIN full_price fp ON fp.jo_id = jo.jo_id`+where+` ORDER BY `+order+dir, args...)
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
@@ -96,9 +107,11 @@ func GetJobMargins(w http.ResponseWriter, r *http.Request) {
 	defer rows.Close()
 	for rows.Next() {
 		var m jobMargin
-		if err := rows.Scan(&m.JOID, &m.JOCode, &m.Price, &m.Cost, &m.CostApproved, &m.Activities, &m.Shared, &m.DoubleCounted, &m.WOCount); err != nil {
+		var fromRL int
+		if err := rows.Scan(&m.JOID, &m.JOCode, &m.Price, &m.Cost, &m.CostApproved, &m.Activities, &m.Shared, &m.DoubleCounted, &m.WOCount, &m.PriceInWO, &fromRL); err != nil {
 			continue
 		}
+		m.FromRepairList = fromRL == 1
 		m.finish()
 		count++
 		total.Price += m.Price
@@ -108,6 +121,7 @@ func GetJobMargins(w http.ResponseWriter, r *http.Request) {
 		total.Shared += m.Shared
 		total.DoubleCounted += m.DoubleCounted
 		total.WOCount += m.WOCount
+		total.PriceInWO += m.PriceInWO
 		if len(list) < limit {
 			list = append(list, m)
 		}
@@ -141,15 +155,18 @@ func GetJobMarginDetail(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var m jobMargin
+	var fromRL int
 	err := db.QueryRow(jobMarginCTE+`
-		SELECT jo.jo_id, COALESCE(jo.jo_code, ''), COALESCE(jo.price, 0), COALESCE(cost.cost, 0), COALESCE(cost.cost_approved, 0),
-			jo.activities, COALESCE(jo.shared, 0), COALESCE(jo.double_counted, 0), COALESCE(cost.wo_count, 0)
-		FROM jo LEFT JOIN cost ON cost.jo_id = jo.jo_id WHERE jo.jo_id = ?`, joID).
-		Scan(&m.JOID, &m.JOCode, &m.Price, &m.Cost, &m.CostApproved, &m.Activities, &m.Shared, &m.DoubleCounted, &m.WOCount)
+		SELECT jo.jo_id, COALESCE(jo.jo_code, ''), COALESCE(fp.price, 0), COALESCE(cost.cost, 0), COALESCE(cost.cost_approved, 0),
+			jo.activities, COALESCE(jo.shared, 0), COALESCE(jo.double_counted, 0), COALESCE(cost.wo_count, 0),
+			COALESCE(jo.price, 0), COALESCE(fp.from_repair_list, 0)
+		FROM jo LEFT JOIN cost ON cost.jo_id = jo.jo_id LEFT JOIN full_price fp ON fp.jo_id = jo.jo_id WHERE jo.jo_id = ?`, joID).
+		Scan(&m.JOID, &m.JOCode, &m.Price, &m.Cost, &m.CostApproved, &m.Activities, &m.Shared, &m.DoubleCounted, &m.WOCount, &m.PriceInWO, &fromRL)
 	if err != nil {
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": "Job Order tidak ditemukan"})
 		return
 	}
+	m.FromRepairList = fromRL == 1
 	m.finish()
 
 	acts := []*jobMarginActivity{}
@@ -223,6 +240,7 @@ func aiJobMarginTool() aiTool {
 	return aiTool{
 		Name: "job_order_margin",
 		Description: "Customer price (harga penawaran from the repair list) against vendor cost (WO items) per Job Order, and the margin. " +
+			"price is the whole repair list when it has been fetched (from_repair_list), price_in_wo the part that already has WOs. " +
 			"Call this when the user asks about harga penawaran, nilai kontrak per aktivitas, margin, untung/rugi, or price vs cost of a " +
 			"Job Order or ship. A repair-list activity worked on by several WOs is priced once per Job Order (never sum prices per WO); " +
 			"every WO adds its own cost; rejected items are not cost. Margins are only meaningful per Job Order, because vendors often book " +

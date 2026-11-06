@@ -55,6 +55,8 @@ func main() {
 		// Reference costs and Data Perlu Dicek findings, a few minutes after
 		// start and then every 6 hours.
 		handlers.StartItemFindingsWorker()
+		// Full repair lists of the Job Orders (customer prices), every 6 hours.
+		handlers.StartRepairListWorker()
 	}
 	// Per process (it fills this instance's response cache), so it runs either way.
 	handlers.StartWorkOrderItemPrewarm()
@@ -154,6 +156,11 @@ func main() {
 		marginView := handlers.RequirePermission(handlers.ResourceRepairPrices, "view")
 		r.With(marginView).Get("/api/job-margins", handlers.GetJobMargins)
 		r.With(marginView).Get("/api/job-margins/detail", handlers.GetJobMarginDetail)
+		// Repair List menu: each Job Order's full repair list from SIAGA.
+		rlView := handlers.RequirePermission(handlers.ResourceRepairList, "view")
+		r.With(rlView).Get("/api/repair-lists", handlers.GetRepairLists)
+		r.With(rlView).Get("/api/repair-lists/{id}", handlers.GetRepairList)
+		r.With(handlers.RequirePermission(handlers.ResourceRepairList, "edit")).Post("/api/repair-lists/{id}/sync", handlers.PostRepairListSync)
 		priceView := handlers.RequirePermission(handlers.ResourcePriceReference, "view")
 		r.With(priceView).Get("/api/price-reference", handlers.GetPriceReferences)
 		r.With(priceView).Get("/api/price-reference/detail", handlers.GetPriceReferenceDetail)

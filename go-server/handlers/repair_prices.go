@@ -25,6 +25,7 @@ type repairActivity struct {
 	JOID, JOCode                    string
 	Quantity, UnitPrice, Price      float64
 	Version                         int
+	JOVersion                       int // the Job Order's latest repair-list version
 }
 
 // repairActivitiesFromDetail reads the top-level repair_list entries of a WO
@@ -35,9 +36,10 @@ func repairActivitiesFromDetail(raw []byte) []repairActivity {
 		return nil
 	}
 	joID := firstString(data, "t_job_order_id")
-	joCode := ""
+	joCode, joVersion := "", 0
 	if jo, ok := data["t_job_order"].(map[string]interface{}); ok {
 		joCode = firstString(jo, "code_project", "code")
+		joVersion = int(parseFloatAny(jo["latest_version"]))
 		if joID == "" {
 			joID = firstString(jo, "id")
 		}
@@ -71,7 +73,7 @@ func repairActivitiesFromDetail(raw []byte) []repairActivity {
 		out = append(out, repairActivity{
 			Key: key, Path: firstString(it, "path"), Name: name, Category: category, Unit: firstString(it, "unit"),
 			JOID: firstString(it, "t_job_order_id"), JOCode: joCode,
-			Quantity: qty, UnitPrice: unitPrice, Price: price, Version: int(parseFloatAny(it["version"])),
+			Quantity: qty, UnitPrice: unitPrice, Price: price, Version: int(parseFloatAny(it["version"])), JOVersion: joVersion,
 		})
 		if out[len(out)-1].JOID == "" {
 			out[len(out)-1].JOID = joID
@@ -102,14 +104,14 @@ func writeRepairActivities(exec func(string, ...interface{}) (sql.Result, error)
 			return nil
 		}
 		_, err := exec(db.FormatQuery(`INSERT INTO wo_repair_activities (wo_id, activity_key, activity_path, jo_id, jo_code, name, category, unit,
-			quantity, unit_price, price, version) VALUES `+strings.Join(rows, ", ")+` ON CONFLICT(wo_id, activity_key) DO NOTHING`), args...)
+			quantity, unit_price, price, version, jo_version) VALUES `+strings.Join(rows, ", ")+` ON CONFLICT(wo_id, activity_key) DO NOTHING`), args...)
 		rows, args = rows[:0], args[:0]
 		return err
 	}
 	for woID, acts := range byWO {
 		for _, a := range acts {
-			rows = append(rows, "(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")
-			args = append(args, woID, a.Key, a.Path, a.JOID, a.JOCode, a.Name, a.Category, a.Unit, a.Quantity, a.UnitPrice, a.Price, a.Version)
+			rows = append(rows, "(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")
+			args = append(args, woID, a.Key, a.Path, a.JOID, a.JOCode, a.Name, a.Category, a.Unit, a.Quantity, a.UnitPrice, a.Price, a.Version, a.JOVersion)
 			if len(rows) >= batch {
 				if err := flush(); err != nil {
 					return err
@@ -121,7 +123,7 @@ func writeRepairActivities(exec func(string, ...interface{}) (sql.Result, error)
 }
 
 // repairPricesVersion: bump to re-read every stored detail.
-const repairPricesVersion = "2026-11-06.1"
+const repairPricesVersion = "2026-11-06.2" // .2: jo_version
 
 // backfillRepairActivities fills wo_repair_activities from the WO details
 // already stored, a batch at a time, resuming after the last WO done.
