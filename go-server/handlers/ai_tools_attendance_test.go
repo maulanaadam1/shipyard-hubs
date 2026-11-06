@@ -362,3 +362,39 @@ func TestNamaPTFallsBackToNeighbour(t *testing.T) {
 		}
 	}
 }
+
+// MasterHSE work permits: a permit active on a day is found by its date range,
+// and one permit number can have several rows.
+func TestQueryAppDataWorkPermits(t *testing.T) {
+	seedAttendanceWorld(t)
+	_, token := createIngestSource(t, `{"id": "master-hse", "name": "MasterHSE", "kind": "records", "key_column": "_key"}`)
+	ingestCall(t, "POST", "/api/ingest/master-hse", token, `{"replace_sheet": "workpermit", "rows": [
+		{"_sheet": "workpermit", "_key": "workpermit:WP-1", "no_workpermit": "WP-1", "vendor": "MARYONO", "manpower": 3, "wpclass_1": "Panas , Lainnya", "date_start": "2026-11-02", "date_finish": "2026-11-08", "status": "Approved"},
+		{"_sheet": "workpermit", "_key": "workpermit:WP-1#2", "no_workpermit": "WP-1", "vendor": "Lasman", "manpower": 4, "wpclass_1": "Ruang Terbatas", "date_start": "2026-11-02", "date_finish": "2026-11-08", "status": "Draft"},
+		{"_sheet": "workpermit", "_key": "workpermit:WP-2", "no_workpermit": "WP-2", "vendor": "MARYONO", "manpower": 5, "wpclass_1": "Panas", "date_start": "2026-10-01", "date_finish": "2026-10-07", "status": "Approved"}]}`)
+	res, err := runQueryAppData(aiRequest("att-admin"), json.RawMessage(
+		`{"source": "hse_work_permits", "date_column": "date_finish", "date_from": "2026-11-06", "group_by": "vendor", "sum_column": "manpower"}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	b, _ := json.Marshal(res)
+	var out struct {
+		Groups []struct {
+			Value string  `json:"value"`
+			Count int     `json:"count"`
+			Sum   float64 `json:"sum"`
+		} `json:"groups"`
+	}
+	json.Unmarshal(b, &out)
+	if len(out.Groups) != 2 {
+		t.Fatalf("active permits per vendor: %s", b)
+	}
+	for _, g := range out.Groups {
+		if g.Value == "MARYONO" && (g.Count != 1 || g.Sum != 3) {
+			t.Errorf("MARYONO: %+v (the October permit is not active)", g)
+		}
+	}
+	if _, err := runQueryAppData(aiRequest("att-nobody"), json.RawMessage(`{"source": "hse_work_permits"}`)); err == nil {
+		t.Error("a user without the resource read work permits")
+	}
+}

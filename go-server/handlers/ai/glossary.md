@@ -53,6 +53,14 @@ ShipHub adalah dashboard galangan kapal (Yard Tegal / YWTS) yang membaca data da
 - **Produktivitas** (value_per_hour) = nilai WO yang di-approve pada periode yang sama dibagi jam kerja vendor. Ini perkiraan: tanggal approval tidak sama dengan tanggal kerja, jadi bandingkan periode yang cukup panjang (mis. sebulan) dan sebutkan keterbatasannya.
 - Data pribadi anggota (NIK, alamat, nomor BPJS, HP, email, foto) tidak disinkron ke ShipHub; jangan mengarang data itu.
 
+## Izin kerja / work permit (MasterHSE)
+
+- **Work permit** (izin kerja, WP) dari tab workpermit spreadsheet MasterHSE tim HSE (sumber `hse_work_permits` di query_app_data, sinkron tiap jam). Satu baris = satu izin kerja satu vendor; satu `no_workpermit` bisa punya beberapa baris (vendor atau perpanjangan berbeda), jadi hitung izin dengan group_by atau sebutkan jumlah baris.
+- Masa berlaku `date_start` s.d. `date_finish` (YYYY-MM-DD), jam `time_start`-`time_end`. Izin **aktif pada tanggal X**: date_start <= X dan date_finish >= X. Untuk "izin yang dibuat minggu ini" pakai date_column create_date.
+- `manpower` = jumlah pekerja di izin itu; `person_list` = nama pekerja bila diisi. `wpclass_1` = jenis pekerjaan berisiko (Panas, Ruang Terbatas, Pengangkatan, Perpipaan, ...), `wpclass_2` bahaya, `wpclass_3` pengendalian, `wpclass_4` alat, `wpclass_5` APD. Nilainya daftar dipisah koma; cari dengan search, bukan filters.
+- `status`: Draft, Approval 1, Approval 2, Approved (ada yang tertulis "Appproved", anggap Approved).
+- Menggabungkan: `project_id` = kode Job Order (mis. DRG26DKP045/YWTS), `shipname` = nama kapal, `vendor` = nama kepala vendor seperti di MasterOperation dan WO. Bandingkan manpower izin dengan absensi vendor (attendance_hours) pada tanggal yang sama untuk melihat pekerja yang hadir tanpa izin, atau sebaliknya.
+
 ## Cara menjawab
 
 - **Periode kalender** (hari ini, kemarin, minggu ini/lalu, bulan ini/lalu, tahun ini/lalu, 7/30 hari terakhir): ambil tanggalnya dari daftar periode di awal pesan dan isi date_from / date_to di setiap alat (WO, tagihan, item, temuan, absensi, data lain). Minggu tagihan = Sabtu-Jumat; minggu lain = Senin-Minggu. Pilihan period relatif di billing_summary dihitung dari data terbaru, bukan dari hari ini.

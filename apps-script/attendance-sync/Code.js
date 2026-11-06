@@ -47,7 +47,10 @@ function serialToText_(serial, format) {
 // SpreadsheetApp.openById would need full read-write access to every sheet
 // the account can open. Date cells come back as serial numbers and are sent
 // as wall-clock text, so the server gets the punch time as the sheet shows it.
-function readRows_(spreadsheetId, sheetName) {
+// opts.required: the column a row must have to count (default: the first
+// column); opts.formats: date formats by header, on top of dateFormat_.
+function readRows_(spreadsheetId, sheetName, opts) {
+  opts = opts || {};
   const res = Sheets.Spreadsheets.Values.get(spreadsheetId || SPREADSHEET_ID, sheetName || SHEET_NAME, {
     valueRenderOption: 'UNFORMATTED_VALUE',
     dateTimeRenderOption: 'SERIAL_NUMBER',
@@ -56,10 +59,12 @@ function readRows_(spreadsheetId, sheetName) {
   if (values.length < 2) return [];
 
   const header = values[0].map(function (h) { return String(h).trim(); });
-  const formats = header.map(dateFormat_);
+  const formats = header.map(function (h) { return (opts.formats || {})[h] || dateFormat_(h); });
+  const required = opts.required ? header.indexOf(opts.required) : 0;
+  if (required < 0) throw new Error('Kolom ' + opts.required + ' tidak ada di tab ' + sheetName);
 
   return values.slice(1)
-    .filter(function (row) { return row[0] !== '' && row[0] !== undefined && row[0] !== null; })
+    .filter(function (row) { const v = row[required]; return v !== '' && v !== undefined && v !== null; })
     .map(function (row) {
       const obj = {};
       header.forEach(function (h, i) {

@@ -77,6 +77,8 @@ var aiDataSources = []aiDataSource{
 	{Key: "mo_locations", Label: "MasterOperation master_location: lokasi dock (kode, nama, koordinat)", Resource: ResourceIngestSources, Sheet: "master_location"},
 	// The attendance spreadsheet's Personal-Data tab (fingerprint users).
 	{Key: "att_personnel", Label: "Personal-Data dari spreadsheet absensi: pengguna mesin absen dengan emp_code, nama, department dan jabatan (karyawan internal galangan)", Resource: ResourceIngestSources, Sheet: "Personal-Data"},
+	// MasterHSE's workpermit tab (HSE team's work permits).
+	{Key: "hse_work_permits", Label: "MasterHSE workpermit: izin kerja (work permit) per vendor dan kapal: no_workpermit, category (PROJECT/NON PROJECT), project_id, shipname, bagian/dept, supervisi, vendor, manpower, person_list, area_kerja, pekerjaan, date_start/date_finish (YYYY-MM-DD), time_start/time_end, durationWP (hari), wpclass_1 jenis pekerjaan berisiko (Panas, Ruang Terbatas, Pengangkatan, ...), wpclass_2 bahaya, wpclass_3 pengendalian, wpclass_4 alat, wpclass_5 APD, wpclass_6 lainnya, project_lead, safetyman, status (Draft, Approval 1, Approval 2, Approved)", Resource: ResourceIngestSources, Sheet: "workpermit"},
 }
 
 // aiHidden: columns never returned from any source: secrets, blobs and
