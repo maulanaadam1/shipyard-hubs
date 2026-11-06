@@ -34,7 +34,7 @@ const (
 	aiMaxToolResultLen = 30000 // characters of one tool result given to the model
 )
 
-const aiInstructions = `Anda adalah AI Asisten ShipHub untuk tim galangan kapal. Jawab pertanyaan tentang data ShipHub (Work Order, item pekerjaan, tagihan, harga acuan, data perlu dicek, Job Order, Ship Docking, Request Material, peralatan dan master data) hanya berdasarkan hasil alat yang tersedia. Gunakan alat untuk setiap angka; jangan menebak atau mengarang data. Bila data yang diminta tidak bisa didapat dari alat, katakan itu dengan jelas. Jawab ringkas dalam Bahasa Indonesia, sebutkan periode, filter dan jumlah data yang dipakai. Anda hanya membaca data: perbaikan data dilakukan di SIAGA. Format jawaban dengan Markdown sederhana: tabel Markdown untuk daftar atau perbandingan angka, **tebal** untuk angka utama, daftar berpoin bila perlu; tanpa HTML. Tulis kode WO lengkap seperti di data (mis. WO25060066) agar bisa diklik. Akhiri setiap jawaban dengan satu baris terpisah: `+"`LANJUT: <pertanyaan 1> | <pertanyaan 2> | <pertanyaan 3>`"+` berisi 2-3 pertanyaan lanjutan singkat (maks 8 kata) yang bisa dijawab dengan alat yang ada; baris ini tidak ditampilkan sebagai teks.`
+const aiInstructions = `Anda adalah AI Asisten ShipHub untuk tim galangan kapal. Jawab pertanyaan tentang data ShipHub (Work Order, item pekerjaan, tagihan, harga acuan, data perlu dicek, Job Order, Ship Docking, Request Material, peralatan dan master data) hanya berdasarkan hasil alat yang tersedia. Gunakan alat untuk setiap angka; jangan menebak atau mengarang data. Bila data yang diminta tidak bisa didapat dari alat, katakan itu dengan jelas. Jawab ringkas dalam Bahasa Indonesia, sebutkan periode, filter dan jumlah data yang dipakai. Anda hanya membaca data: perbaikan data dilakukan di SIAGA. Format jawaban dengan Markdown sederhana: tabel Markdown untuk daftar atau perbandingan angka, **tebal** untuk angka utama, daftar berpoin bila perlu; tanpa HTML. Tulis kode WO lengkap seperti di data (mis. WO25060066) agar bisa diklik. Akhiri setiap jawaban dengan satu baris terpisah: ` + "`LANJUT: <pertanyaan 1> | <pertanyaan 2> | <pertanyaan 3>`" + ` berisi 2-3 pertanyaan lanjutan singkat (maks 8 kata) yang bisa dijawab dengan alat yang ada; baris ini tidak ditampilkan sebagai teks.`
 
 func aiUsedToday(userID string) int {
 	var n int
@@ -208,9 +208,9 @@ type aiChatResult struct {
 	Suggestions    []string     `json:"suggestions"`
 	DurationMs     int64        `json:"duration_ms"`
 	Answer         string       `json:"answer"`
-	ToolCalls []aiToolCall `json:"tool_calls"`
-	Usage     aiUsage      `json:"usage"`
-	Failure   string       `json:"-"`
+	ToolCalls      []aiToolCall `json:"tool_calls"`
+	Usage          aiUsage      `json:"usage"`
+	Failure        string       `json:"-"`
 }
 
 // runAIChat runs the tool loop for one question and logs it.
@@ -225,7 +225,14 @@ func runAIChat(r *http.Request, cfg aiProviderConfig, claims middleware.UserClai
 	var stopReason string
 	// Stable instructions and glossary first (cacheable); the date apart so it
 	// doesn't invalidate the cache.
-	session, err := newAISession(cfg, aiInstructions+"\n\n"+aiGlossary, "Hari ini: "+time.Now().Format("2006-01-02")+" (WIB).", history, tools)
+	// Light models ignore a date at the end of a long system prompt and
+	// answer from their training data, so the date also goes next to the
+	// question itself (the stored question is unchanged).
+	dateContext := aiDateContext(time.Now())
+	if n := len(history); n > 0 && history[n-1].Role == "user" {
+		history = append(history[:n-1:n-1], aiChatMessage{Role: "user", Content: "[" + dateContext + "]\n" + history[n-1].Content})
+	}
+	session, err := newAISession(cfg, aiInstructions+"\n\n"+aiGlossary, dateContext, history, tools)
 	if err != nil {
 		res.Failure = err.Error()
 	} else {
@@ -286,4 +293,22 @@ func runAIChat(r *http.Request, cfg aiProviderConfig, claims middleware.UserClai
 		res.Usage.InputTokens, res.Usage.OutputTokens, res.Usage.CacheReadTokens, res.DurationMs, start.Format("2006-01-02 15:04:05.000")) // ms: keeps a conversation in order
 	db.Exec(`UPDATE ai_conversations SET updated_at = ? WHERE id = ?`, time.Now().Format("2006-01-02 15:04:05"), convID)
 	return res
+}
+
+var aiMonthNames = []string{"", "Januari", "Februari", "Maret", "April", "Mei", "Juni", "Juli", "Agustus", "September", "Oktober", "November", "Desember"}
+
+// aiDateContext tells the model what "today", "yesterday", "this week" and
+// "this month" are, in WIB, so it never falls back on dates it remembers.
+func aiDateContext(now time.Time) string {
+	if loc, err := time.LoadLocation("Asia/Jakarta"); err == nil {
+		now = now.In(loc)
+	}
+	day := func(t time.Time) string { return t.Format("2006-01-02") }
+	weekStart := now.AddDate(0, 0, -((int(now.Weekday()) + 6) % 7)) // Monday
+	monthStart := time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, now.Location())
+	return fmt.Sprintf("Waktu sekarang: %s, %d %s %d pukul %s WIB (hari ini = %s). Kemarin = %s. Minggu ini (Senin-Minggu) = %s s.d. %s. "+
+		"Bulan ini = %s s.d. %s. Pakai tanggal-tanggal ini untuk hari ini, kemarin, minggu ini dan bulan ini; jangan memakai tanggal lain.",
+		attendanceDayNames[now.Weekday()], now.Day(), aiMonthNames[now.Month()], now.Year(), now.Format("15.04"), day(now),
+		day(now.AddDate(0, 0, -1)), day(weekStart), day(weekStart.AddDate(0, 0, 6)),
+		day(monthStart), day(monthStart.AddDate(0, 1, -1)))
 }
