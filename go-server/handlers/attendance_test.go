@@ -92,7 +92,7 @@ func TestGetAttendanceDailyRange(t *testing.T) {
 		t.Fatalf("range: %d %s", rec.Code, rec.Body.String())
 	}
 
-	for _, q := range []string{"from=2026-11-05&to=2026-11-01", "from=bukan", "from=2026-01-01&to=2026-06-01", "weekday_hours=abc"} {
+	for _, q := range []string{"from=2026-11-05&to=2026-11-01", "from=bukan", "from=2025-01-01&to=2026-06-01", "weekday_hours=abc"} {
 		rec := httptest.NewRecorder()
 		GetAttendanceDaily(rec, httptest.NewRequest("GET", "/api/attendance/daily?"+q, nil))
 		if rec.Code != 400 {

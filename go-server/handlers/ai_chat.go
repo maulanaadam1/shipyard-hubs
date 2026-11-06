@@ -297,18 +297,45 @@ func runAIChat(r *http.Request, cfg aiProviderConfig, claims middleware.UserClai
 
 var aiMonthNames = []string{"", "Januari", "Februari", "Maret", "April", "Mei", "Juni", "Juli", "Agustus", "September", "Oktober", "November", "Desember"}
 
-// aiDateContext tells the model what "today", "yesterday", "this week" and
-// "this month" are, in WIB, so it never falls back on dates it remembers.
+// aiDateContext tells the model the current WIB date and the exact dates of
+// the periods people name ("hari ini", "minggu lalu", "bulan lalu", "tahun
+// ini"...), so every tool gets the same precise date_from / date_to and the
+// model never falls back on dates it remembers.
 func aiDateContext(now time.Time) string {
 	if loc, err := time.LoadLocation("Asia/Jakarta"); err == nil {
 		now = now.In(loc)
 	}
 	day := func(t time.Time) string { return t.Format("2006-01-02") }
-	weekStart := now.AddDate(0, 0, -((int(now.Weekday()) + 6) % 7)) // Monday
-	monthStart := time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, now.Location())
-	return fmt.Sprintf("Waktu sekarang: %s, %d %s %d pukul %s WIB (hari ini = %s). Kemarin = %s. Minggu ini (Senin-Minggu) = %s s.d. %s. "+
-		"Bulan ini = %s s.d. %s. Pakai tanggal-tanggal ini untuk hari ini, kemarin, minggu ini dan bulan ini; jangan memakai tanggal lain.",
-		attendanceDayNames[now.Weekday()], now.Day(), aiMonthNames[now.Month()], now.Year(), now.Format("15.04"), day(now),
-		day(now.AddDate(0, 0, -1)), day(weekStart), day(weekStart.AddDate(0, 0, 6)),
-		day(monthStart), day(monthStart.AddDate(0, 1, -1)))
+	span := func(a, b time.Time) string { return day(a) + " s.d. " + day(b) }
+	today := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location())
+	monday := today.AddDate(0, 0, -((int(today.Weekday()) + 6) % 7))
+	// Billing weeks (Financial Dashboard) run Saturday to Friday.
+	saturday := today.AddDate(0, 0, -((int(today.Weekday()) + 1) % 7))
+	month := time.Date(today.Year(), today.Month(), 1, 0, 0, 0, 0, today.Location())
+	year := time.Date(today.Year(), 1, 1, 0, 0, 0, 0, today.Location())
+
+	var b strings.Builder
+	fmt.Fprintf(&b, "Waktu sekarang: %s, %d %s %d pukul %s WIB (hari ini = %s).\n",
+		attendanceDayNames[today.Weekday()], today.Day(), aiMonthNames[today.Month()], today.Year(), now.Format("15.04"), day(today))
+	b.WriteString("Periode (pakai persis tanggal ini sebagai date_from / date_to di semua alat, lalu sebut periodenya di jawaban):\n")
+	for _, p := range [][2]string{
+		{"hari ini", span(today, today)},
+		{"kemarin", span(today.AddDate(0, 0, -1), today.AddDate(0, 0, -1))},
+		{"minggu ini (Senin-Minggu)", span(monday, monday.AddDate(0, 0, 6))},
+		{"minggu lalu (Senin-Minggu)", span(monday.AddDate(0, 0, -7), monday.AddDate(0, 0, -1))},
+		{"minggu tagihan ini (Sabtu-Jumat)", span(saturday, saturday.AddDate(0, 0, 6))},
+		{"minggu tagihan lalu (Sabtu-Jumat)", span(saturday.AddDate(0, 0, -7), saturday.AddDate(0, 0, -1))},
+		{"7 hari terakhir", span(today.AddDate(0, 0, -6), today)},
+		{"30 hari terakhir", span(today.AddDate(0, 0, -29), today)},
+		{"bulan ini", span(month, month.AddDate(0, 1, -1))},
+		{"bulan lalu", span(month.AddDate(0, -1, 0), month.AddDate(0, 0, -1))},
+		{"tahun ini", span(year, year.AddDate(1, 0, -1))},
+		{"tahun lalu", span(year.AddDate(-1, 0, 0), year.AddDate(0, 0, -1))},
+	} {
+		fmt.Fprintf(&b, "- %s: %s\n", p[0], p[1])
+	}
+	b.WriteString("Untuk tagihan / approval per minggu pakai minggu tagihan (Sabtu-Jumat); untuk hal lain (absensi, item, WO) minggu Senin-Minggu. " +
+		"Jangan memakai pilihan periode relatif alat (mis. period 1week) untuk pertanyaan kalender seperti ini, karena itu dihitung dari data terbaru, bukan dari hari ini. " +
+		"Jangan memakai tanggal lain dari ingatan Anda.")
+	return b.String()
 }

@@ -53,6 +53,7 @@ ShipHub adalah dashboard galangan kapal (Yard Tegal / YWTS) yang membaca data da
 
 ## Cara menjawab
 
+- **Periode kalender** (hari ini, kemarin, minggu ini/lalu, bulan ini/lalu, tahun ini/lalu, 7/30 hari terakhir): ambil tanggalnya dari daftar periode di awal pesan dan isi date_from / date_to di setiap alat (WO, tagihan, item, temuan, absensi, data lain). Minggu tagihan = Sabtu-Jumat; minggu lain = Senin-Minggu. Pilihan period relatif di billing_summary dihitung dari data terbaru, bukan dari hari ini.
 - Gunakan alat untuk setiap angka; jangan menebak. Bila alat tidak punya datanya, katakan itu.
 - Sebut periode, filter dan jumlah data yang dipakai (mis. "dari 27 WO, approval 24-30 Okt 2026").
 - Untuk satu WO, berikan link SIAGA (`siaga_url`) bila ada.

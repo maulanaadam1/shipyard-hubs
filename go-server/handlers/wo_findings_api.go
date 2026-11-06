@@ -72,7 +72,7 @@ func scanFindingRow(scan func(...interface{}) error) (findingRow, error) {
 }
 
 // findingFilters reads rule, status (open by default; "all" for every
-// status), item_status, search, project and vendor.
+// status), item_status, search, project, vendor and a date range.
 func findingFilters(q url.Values) (string, []interface{}) {
 	where := []string{"1=1"}
 	args := []interface{}{}
@@ -104,6 +104,20 @@ func findingFilters(q url.Values) (string, []interface{}) {
 	if vendor := strings.TrimSpace(q.Get("vendor")); vendor != "" && vendor != "all" {
 		where = append(where, "s.vendor_name = ?")
 		args = append(args, vendor)
+	}
+	// date_from / date_to (YYYY-MM-DD) on the day the finding was first
+	// seen, or with date_field=approval on the item's approval date.
+	dateCol := "SUBSTR(COALESCE(f.first_seen, ''), 1, 10)"
+	if q.Get("date_field") == "approval" {
+		dateCol = "SUBSTR(COALESCE(i.approval_date, ''), 1, 10)"
+	}
+	if from := q.Get("date_from"); from != "" {
+		where = append(where, dateCol+" >= ?")
+		args = append(args, from)
+	}
+	if to := q.Get("date_to"); to != "" {
+		where = append(where, dateCol+" <> '' AND "+dateCol+" <= ?")
+		args = append(args, to)
 	}
 	return strings.Join(where, " AND "), args
 }
