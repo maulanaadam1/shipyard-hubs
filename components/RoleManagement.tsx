@@ -63,6 +63,7 @@ const RESOURCES = [
   { id: 'Data MasterOperation', type: 'data', note: 'Data spreadsheet MasterOperation untuk AI Assistant: proyek, progres, biaya, manpower, vendor' },
   { id: 'Data Absensi', type: 'data', note: 'Data absensi untuk AI Assistant: jam kerja dan data karyawan' },
   { id: 'Data HSE', type: 'data', note: 'Data MasterHSE untuk AI Assistant: izin kerja' },
+  { id: 'Harga Penawaran', type: 'data', note: 'Harga ke customer dari repair list dan margin per Job Order (Item Pekerjaan WO dan AI Assistant)' },
 ];
 
 const ACTIONS = ['view', 'add', 'edit', 'delete', 'approve', 'import', 'export'];

@@ -239,10 +239,11 @@ func storeWorkOrderDetail(woID string, body []byte) error {
 type detailDerived struct {
 	summary         workOrderSummary
 	detailUpdatedAt string
+	activities      []repairActivity // repair-list activities with their customer price
 }
 
 func deriveFromDetail(woID string, raw []byte) detailDerived {
-	d := detailDerived{summary: applyFinancialsFromDetail(workOrderSummary{WOID: woID}, raw)}
+	d := detailDerived{summary: applyFinancialsFromDetail(workOrderSummary{WOID: woID}, raw), activities: repairActivitiesFromDetail(raw)}
 	if data, err := dataObject(raw); err == nil {
 		d.detailUpdatedAt = firstString(data, "updated_at", "last_updated")
 	}
@@ -392,6 +393,15 @@ func writeDetailDerived(items []detailDerived) error {
 			}
 		}
 		if err := flushItems(); err != nil {
+			return err
+		}
+
+		// Repair-list activities and their customer price, replaced per WO.
+		byWO := make(map[string][]repairActivity, len(chunk))
+		for _, d := range chunk {
+			byWO[d.summary.WOID] = d.activities
+		}
+		if err := writeRepairActivities(tx.Exec, byWO); err != nil {
 			return err
 		}
 	}
@@ -700,6 +710,8 @@ func StartWorkOrderDetailWorker() {
 		// Parsed descriptions for items that lack them (new table, new rules, an
 		// interrupted rebuild), a little at a time.
 		startParsedItemsBackfill()
+		// Customer prices of the repair-list activities, from stored details.
+		startRepairActivitiesBackfill()
 		ticker := time.NewTicker(interval)
 		defer ticker.Stop()
 		for {

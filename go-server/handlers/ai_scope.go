@@ -19,7 +19,7 @@ type aiScope struct {
 }
 
 var aiScopes = []aiScope{
-	{Key: "wo", Label: "Work Order dan tagihan", Tools: []string{"search_work_orders", "get_work_order", "billing_summary", "search_work_items", "price_reference", "data_findings", "unrecognized_activities"},
+	{Key: "wo", Label: "Work Order dan tagihan", Tools: []string{"search_work_orders", "get_work_order", "billing_summary", "search_work_items", "price_reference", "data_findings", "unrecognized_activities", "job_order_margin"},
 		Hint: "Work Order, item pekerjaan, tagihan, harga acuan dan data perlu dicek"},
 	{Key: "project", Label: "Job Order", Tools: []string{"query_app_data", "search_work_orders"},
 		Hint: "job_orders, mo_projects, mo_progress, mo_wbs dan locations lewat query_app_data"},
