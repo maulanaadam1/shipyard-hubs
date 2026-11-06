@@ -870,7 +870,7 @@ func buildWorkOrderStats(items []workOrderSummary) map[string]interface{} {
 		"Approval Level 4": 0,
 		"Approval Level 5": 0,
 	}
-	var sumTotal, sumSebelumnya, sumSaatIni, sumPending float64
+	var sumTotal, sumSebelumnya, sumSaatIni, sumPending, sumFinal, sumRejected float64
 	for _, item := range items {
 		if item.JOCode != "" && item.JOCode != "N/A" {
 			joSet[item.JOCode] = true
@@ -885,6 +885,8 @@ func buildWorkOrderStats(items []workOrderSummary) map[string]interface{} {
 		sumSebelumnya += item.PreviousCost
 		sumSaatIni += item.LatestCost
 		sumPending += item.PendingCost
+		sumFinal += item.FinalCost
+		sumRejected += item.RejectedCost
 		approvalCounts[item.DerivedStatus]++
 	}
 	return map[string]interface{}{
@@ -897,6 +899,11 @@ func buildWorkOrderStats(items []workOrderSummary) map[string]interface{} {
 		"sumSebelumnya":  sumSebelumnya,
 		"sumSaatIni":     sumSaatIni,
 		"sumPending":     sumPending,
+		// Item values: approved (= sumSebelumnya + sumSaatIni) and rejected.
+		// sumTotal is SIAGA's WO header total, which does not grow with
+		// added work, so it can be lower than the items.
+		"sumFinal":       sumFinal,
+		"sumRejected":    sumRejected,
 		"approvalCounts": approvalCounts,
 	}
 }
