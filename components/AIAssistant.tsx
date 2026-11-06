@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import {
   Bot, Plus, Database, Copy, Check, ThumbsUp, ThumbsDown, Loader2, FileSpreadsheet, History, Trash2, X,
-  FileText, Tags, Ship, Package, ChevronDown, CornerDownRight, AlertTriangle, ArrowRight, CalendarDays, ArrowUp, Layers,
+  FileText, Tags, Ship, Package, ChevronDown, CornerDownRight, AlertTriangle, ArrowRight, CalendarDays, ArrowUp, Layers, Sparkles,
 } from 'lucide-react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { getHeaders } from '@/lib/api-client';
@@ -21,7 +21,16 @@ type Message = {
 };
 type Status = { enabled: boolean; provider: string; model: string; daily_limit: number; used_today: number; tools: string[]; is_admin: boolean };
 type Conversation = { id: string; title: string; updated_at: string; questions: number };
-type Insight = { key: string; label: string; count: number; tone: 'danger' | 'warning' | 'neutral'; question: string; link?: string };
+type Insight = { key: string; label: string; count: number; value?: number; tone: 'danger' | 'warning' | 'neutral'; question: string; link?: string };
+
+// 1250000000 -> "Rp 1,25 M"; amounts in the attention card stay short.
+const shortRupiah = (v: number) => {
+  const f = (n: number, unit: string) => `Rp ${n.toLocaleString('id-ID', { maximumFractionDigits: n < 10 ? 2 : 1 })} ${unit}`;
+  if (v >= 1e12) return f(v / 1e12, 'T');
+  if (v >= 1e9) return f(v / 1e9, 'M');
+  if (v >= 1e6) return f(v / 1e6, 'jt');
+  return `Rp ${Math.round(v).toLocaleString('id-ID')}`;
+};
 type Option = { key: string; label: string };
 
 const TONE: Record<Insight['tone'], string> = {
@@ -166,6 +175,7 @@ export default function AIAssistant() {
   const [sending, setSending] = useState(false);
   const [copied, setCopied] = useState<number | null>(null);
   const [insights, setInsights] = useState<Insight[] | null>(null);
+  const [latest, setLatest] = useState<Insight[]>([]);
   const [scopes, setScopes] = useState<Option[]>([]);
   const [periods, setPeriods] = useState<Option[]>([]);
   const [scope, setScope] = useState(() => remembered('ai.scope'));
@@ -193,7 +203,10 @@ export default function AIAssistant() {
   const loadInsights = async () => {
     try {
       const res = await fetch('/api/ai/insights', { headers: await getHeaders() });
-      if (res.ok) setInsights((await res.json()).insights || []);
+      if (!res.ok) return;
+      const body = await res.json();
+      setInsights(body.insights || []);
+      setLatest(body.latest || []);
     } catch { /* the card stays hidden */ }
   };
   const loadScopes = async () => {
@@ -361,23 +374,40 @@ export default function AIAssistant() {
     return acc;
   }, {});
 
-  const insightsCard = insights && insights.length > 0 && (
-    <section className="p-4 rounded-2xl border border-slate-200 bg-white" aria-labelledby="ai-insights-title">
-      <p id="ai-insights-title" className="text-sm font-semibold text-slate-800 flex items-center gap-2">
-        <AlertTriangle size={16} className="text-amber-700" aria-hidden="true" /> Perlu perhatian hari ini
-      </p>
-      <ul className="mt-2 flex flex-col">
-        {insights.map(i => (
-          <li key={i.key} className="border-t border-slate-100 first:border-t-0">
-            <button type="button" onClick={() => send(i.question)} disabled={!canAsk || sending}
-              className="w-full flex items-center justify-between gap-3 py-2 text-left text-sm text-slate-700 hover:text-slate-900 disabled:opacity-50">
-              <span className="min-w-0">{i.label}</span>
-              <span className={`shrink-0 min-w-[2rem] text-center text-xs font-semibold px-2 py-0.5 rounded-full tabular-nums ${TONE[i.tone] || TONE.neutral}`}>{i.count}</span>
-            </button>
-          </li>
-        ))}
-      </ul>
-      <p className="mt-1 text-xs text-slate-500 flex items-center gap-1">Klik untuk tanya AI <ArrowRight size={12} aria-hidden="true" /></p>
+  const insightRow = (i: Insight) => (
+    <li key={i.key} className="border-t border-slate-100 first:border-t-0">
+      <button type="button" onClick={() => send(i.question)} disabled={!canAsk || sending}
+        className="w-full flex items-center justify-between gap-3 py-2 text-left text-sm text-slate-700 hover:text-slate-900 disabled:opacity-50">
+        <span className="min-w-0">
+          {i.label}
+          {i.value ? <span className="block text-xs text-slate-500">{i.count} WO</span> : null}
+        </span>
+        <span className={`shrink-0 min-w-[2rem] text-center text-xs font-semibold px-2 py-0.5 rounded-full tabular-nums ${TONE[i.tone] || TONE.neutral}`}>
+          {i.value ? shortRupiah(i.value) : i.count.toLocaleString('id-ID')}
+        </span>
+      </button>
+    </li>
+  );
+
+  const insightsCard = insights !== null && (insights.length > 0 || latest.length > 0) && (
+    <section className="p-4 rounded-2xl border border-slate-200 bg-white flex flex-col gap-4" aria-label="Ringkasan hari ini">
+      {insights.length > 0 && (
+        <div>
+          <p className="text-sm font-semibold text-slate-800 flex items-center gap-2">
+            <AlertTriangle size={16} className="text-amber-700" aria-hidden="true" /> Perlu perhatian
+          </p>
+          <ul className="mt-1.5 flex flex-col">{insights.map(insightRow)}</ul>
+        </div>
+      )}
+      <div>
+        <p className="text-sm font-semibold text-slate-800 flex items-center gap-2">
+          <Sparkles size={16} className="text-sky-700" aria-hidden="true" /> Terbaru hari ini
+        </p>
+        {latest.length > 0
+          ? <ul className="mt-1.5 flex flex-col">{latest.map(insightRow)}</ul>
+          : <p className="mt-1.5 text-sm text-slate-500">Belum ada data baru hari ini.</p>}
+      </div>
+      <p className="-mt-2 text-xs text-slate-500 flex items-center gap-1">Klik untuk tanya AI <ArrowRight size={12} aria-hidden="true" /></p>
     </section>
   );
 
