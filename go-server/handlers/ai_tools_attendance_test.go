@@ -406,6 +406,21 @@ func TestQueryAppDataWorkPermits(t *testing.T) {
 	if m := res.(map[string]interface{})["matched"]; m != 1 {
 		t.Errorf("October overlap: matched %v, want 1", m)
 	}
+	// A filter that empties the result says what the rows hold without it.
+	res, _ = runQueryAppData(aiRequest("att-admin"), json.RawMessage(
+		`{"source": "hse_work_permits", "filters": {"status": "Approval 2"}, "date_column": "date_start", "end_column": "date_finish", "date_from": "2026-11-06", "date_to": "2026-11-06"}`))
+	b, _ = json.Marshal(res)
+	var empty struct {
+		Matched int `json:"matched"`
+		Without struct {
+			Matched int                       `json:"matched"`
+			Values  map[string]map[string]int `json:"values"`
+		} `json:"without_filters"`
+	}
+	json.Unmarshal(b, &empty)
+	if empty.Matched != 0 || empty.Without.Matched != 2 || empty.Without.Values["status"]["Draft"] != 1 || empty.Without.Values["status"]["Approved"] != 1 {
+		t.Errorf("empty filter hint: %s", b)
+	}
 	if _, err := runQueryAppData(aiRequest("att-admin"), json.RawMessage(`{"source": "hse_work_permits", "end_column": "date_finish"}`)); err == nil {
 		t.Error("end_column without date_column accepted")
 	}
