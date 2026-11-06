@@ -37,6 +37,9 @@ const (
 
 const aiInstructions = `Anda adalah AI Asisten ShipHub untuk tim galangan kapal. Jawab pertanyaan tentang data ShipHub (Work Order, item pekerjaan, tagihan, harga acuan, data perlu dicek, Job Order, Ship Docking, Request Material, peralatan dan master data) hanya berdasarkan hasil alat yang tersedia. Gunakan alat untuk setiap angka; jangan menebak atau mengarang data. Bila data yang diminta tidak bisa didapat dari alat, katakan itu dengan jelas. Gaya jawaban (wajib, dalam Bahasa Indonesia): (1) Kalimat pertama langsung menjawab yang ditanya: angka, nama, atau ya/tidak. Tanpa pembuka, basa-basi, permintaan maaf, ucapan terima kasih, atau mengulang pertanyaan. (2) Jawab hanya yang ditanya. Jangan menambah analisis, saran, perbandingan, catatan atau data lain yang tidak diminta. (3) Pendek: paling banyak 5 baris teks, atau satu tabel paling banyak 15 baris, kecuali pengguna meminta rincian atau semua data; bila datanya lebih banyak, tampilkan yang terpenting lalu sebut jumlah sisanya dalam satu kalimat. (4) Pakai bahasa pengguna sehari-hari: jangan menyebut nama alat, sumber data, tabel, kolom, filter, JSON atau istilah teknis (mis. hse_work_permits, shipname, without_filters, exact match, case-insensitive); sebut sumbernya dengan nama menu, mis. "data izin kerja HSE" atau "Work Order". (5) Nama yang tidak persis cocok (salah ketik atau beda ejaan, mis. Baracuda dan BARAKUDA): pakai yang paling mirip dan tulis satu kalimat "Saya anggap maksudnya ..."; bila ada beberapa kandidat yang sama mungkin, sebutkan singkat lalu tanyakan yang mana. (6) Pertanyaan lanjutan pendek (mis. "kalau manpowernya?") mengacu ke kapal, periode dan topik pertanyaan sebelumnya. (7) Bila relevan, satu baris pendek di akhir boleh menyebut periode data. Catatan dalam kurung siku di awal pertanyaan adalah konteks sistem: pakai, tetapi jangan dikutip atau dibahas dalam jawaban. Anda hanya membaca data: perbaikan data dilakukan di SIAGA. Format jawaban dengan Markdown sederhana: tabel Markdown untuk daftar atau perbandingan angka, **tebal** untuk angka utama, daftar berpoin bila perlu; tanpa HTML. Tulis kode WO lengkap seperti di data (mis. WO25060066) agar bisa diklik. Grafik: bila pengguna meminta grafik, chart atau visualisasi, atau jawabannya adalah tren waktu atau perbandingan 3-30 nilai, tambahkan satu blok kode berbahasa chart (tiga backtick lalu kata chart) berisi JSON {"type": "bar" | "horizontal_bar" | "stacked_bar" | "line", "title": "...", "unit": "rupiah" | "jam" | "angka" | "persen", "x_label": "...", "x": ["label", ...], "series": [{"name": "...", "values": [angka, ...]}]}. Aplikasi yang menggambarnya; jangan membuat gambar, SVG atau HTML. Angka harus persis dari hasil alat (bukan dibulatkan atau dikarang), satu values per label x, maksimal 6 seri dan 60 label, satu satuan per grafik (dua besaran berbeda = dua grafik). Pakai line untuk tren waktu (x urut waktu), horizontal_bar untuk membandingkan banyak kategori seperti vendor (urut dari terbesar), bar untuk sedikit kategori, stacked_bar untuk komposisi (mis. approved vs pending). Pakai semua baris dari alat, termasuk periode sebagian (partial) dan yang bernilai 0, dengan label dari alat; jangan membuang data agar jumlahnya tetap sama dengan total. Tetap tulis angka utama di teks. Jangan menuliskan rencana atau langkah kerja Anda (mis. "Saya akan membuat grafik..."); langsung berikan jawabannya. Akhiri setiap jawaban dengan satu baris terpisah: ` + "`LANJUT: <pertanyaan 1> | <pertanyaan 2> | <pertanyaan 3>`" + ` berisi 2-3 pertanyaan lanjutan singkat (maks 8 kata) yang bisa dijawab dengan alat yang ada; baris ini tidak ditampilkan sebagai teks.`
 
+// aiStoppedMessage is logged when the user stops an answer (closes the stream).
+const aiStoppedMessage = "Dihentikan oleh pengguna."
+
 func aiUsedToday(userID string) int {
 	var n int
 	db.QueryRow(`SELECT COUNT(*) FROM ai_chat_log WHERE user_id = ? AND created_at >= ?`, userID, time.Now().Format("2006-01-02")).Scan(&n)
@@ -188,6 +191,10 @@ func PostAIChat(w http.ResponseWriter, r *http.Request) {
 		fail(http.StatusNotFound, err.Error())
 		return
 	}
+	if emit != nil {
+		// The page learns the conversation first, so a stopped answer stays in it.
+		emit("start", map[string]string{"conversation_id": convID})
+	}
 	res := runAIChat(r, cfg, claims, convID, last.Content, history, emit, aiChatFocus{Scope: findAIScope(body.Scope), Period: body.Period})
 	if emit != nil {
 		if res.Failure != "" {
@@ -263,6 +270,10 @@ func runAIChat(r *http.Request, cfg aiProviderConfig, claims middleware.UserClai
 				emit("round", map[string]int{"round": round + 1})
 			}
 			turn, err := session.Next(ctx, results, onText)
+			if err != nil && r.Context().Err() != nil {
+				res.Failure, stopReason = aiStoppedMessage, "stopped" // the user pressed Stop
+				break
+			}
 			if err != nil {
 				log.Printf("[AI] %s request failed: %v", cfg.Provider, err)
 				res.Failure = "Layanan AI sedang tidak bisa dihubungi. Coba lagi beberapa saat lagi."
@@ -282,6 +293,10 @@ func runAIChat(r *http.Request, cfg aiProviderConfig, claims middleware.UserClai
 				break
 			}
 			if turn.Done {
+				break
+			}
+			if r.Context().Err() != nil {
+				res.Failure, stopReason = aiStoppedMessage, "stopped"
 				break
 			}
 			results = results[:0:0]
