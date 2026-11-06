@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import {
-  Bot, Send, Plus, Database, Copy, Check, ThumbsUp, ThumbsDown, Loader2, FileSpreadsheet, History, Trash2, X,
-  FileText, Tags, Ship, Package, ChevronDown, CornerDownRight, AlertTriangle, ArrowRight, CalendarDays,
+  Bot, Plus, Database, Copy, Check, ThumbsUp, ThumbsDown, Loader2, FileSpreadsheet, History, Trash2, X,
+  FileText, Tags, Ship, Package, ChevronDown, CornerDownRight, AlertTriangle, ArrowRight, CalendarDays, ArrowUp, Layers,
 } from 'lucide-react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { getHeaders } from '@/lib/api-client';
@@ -109,6 +109,49 @@ async function readEvents(res: Response, onEvent: (event: string, data: any) => 
     }
     if (done) break;
   }
+}
+
+// PillMenu: a compact choice (scope, period) in the question box; the list
+// opens upward because the box sits at the bottom of the page.
+function PillMenu({ label, icon, value, options, onChange }: {
+  label: string; icon: React.ReactNode; value: string; options: Option[]; onChange: (key: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!open) return;
+    const close = (e: MouseEvent) => { if (!ref.current?.contains(e.target as Node)) setOpen(false); };
+    const esc = (e: KeyboardEvent) => { if (e.key === 'Escape') setOpen(false); };
+    document.addEventListener('mousedown', close);
+    document.addEventListener('keydown', esc);
+    return () => { document.removeEventListener('mousedown', close); document.removeEventListener('keydown', esc); };
+  }, [open]);
+  const current = options.find(o => o.key === value) || options[0];
+  const active = value !== '';
+  return (
+    <div ref={ref} className="relative min-w-0">
+      <button type="button" onClick={() => setOpen(o => !o)} aria-haspopup="listbox" aria-expanded={open} aria-label={`${label}: ${current.label}`}
+        className={`inline-flex max-w-[11rem] items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs ${active ? 'border-slate-900 bg-slate-900 text-white' : 'border-slate-200 bg-white text-slate-600 hover:border-slate-400'}`}>
+        {icon}
+        <span className="truncate">{current.label}</span>
+        <ChevronDown size={12} className={`shrink-0 transition-transform ${open ? 'rotate-180' : ''}`} aria-hidden="true" />
+      </button>
+      {open && (
+        <ul role="listbox" aria-label={label}
+          className="absolute bottom-full left-0 z-40 mb-2 w-56 max-w-[80vw] rounded-xl border border-slate-200 bg-white p-1 shadow-lg">
+          {options.map(o => (
+            <li key={o.key || 'all'}>
+              <button type="button" role="option" aria-selected={o.key === value} onClick={() => { onChange(o.key); setOpen(false); }}
+                className={`flex w-full items-center justify-between gap-2 rounded-lg px-2.5 py-2 text-left text-sm ${o.key === value ? 'bg-slate-100 font-medium text-slate-900' : 'text-slate-700 hover:bg-slate-50'}`}>
+                {o.label}
+                {o.key === value && <Check size={14} aria-hidden="true" />}
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
 }
 
 export default function AIAssistant() {
@@ -235,6 +278,7 @@ export default function AIAssistant() {
     setMessages([...messages.map(m => ({ ...m, suggestions: undefined })), { role: 'user', content: question },
       { role: 'assistant', content: '', streaming: true, activity: ['Membaca pertanyaan'] }]);
     setDraft('');
+    if (inputRef.current) inputRef.current.style.height = 'auto';
     setSending(true);
     const finish = (data: any) => {
       if (data.conversation_id) setConversationId(data.conversation_id);
@@ -557,52 +601,41 @@ export default function AIAssistant() {
           </div>
 
           <form
-            className="sticky bottom-4 mt-auto flex flex-col gap-2 p-2 rounded-2xl border border-slate-300 bg-white shadow-sm"
+            className="sticky bottom-4 mt-auto rounded-3xl border border-slate-300 bg-white shadow-sm focus-within:border-slate-400"
             onSubmit={e => { e.preventDefault(); send(draft); }}
           >
-            {(scopes.length > 0 || periods.length > 0) && (
-              <div className="flex flex-wrap items-center gap-1.5 px-1">
-                <div role="radiogroup" aria-label="Cakupan data" className="flex flex-wrap gap-1.5">
-                  {[{ key: '', label: 'Semua data' }, ...scopes].map(o => {
-                    const on = (scopes.some(s => s.key === scope) ? scope : '') === o.key;
-                    return (
-                      <button key={o.key || 'all'} type="button" role="radio" aria-checked={on} onClick={() => chooseScope(o.key)}
-                        className={`px-2.5 py-1 rounded-full text-xs border ${on ? 'bg-slate-900 text-white border-slate-900' : 'bg-white text-slate-600 border-slate-200 hover:border-slate-400'}`}>
-                        {o.label}
-                      </button>
-                    );
-                  })}
-                </div>
-                {periods.length > 0 && (
-                  <label className="ml-auto inline-flex items-center gap-1 text-xs text-slate-600">
-                    <CalendarDays size={13} aria-hidden="true" />
-                    <span className="sr-only">Periode</span>
-                    <select value={periods.some(p => p.key === period) ? period : ''} onChange={e => choosePeriod(e.target.value)}
-                      className="py-1 pl-1.5 pr-6 rounded-lg border border-slate-200 bg-white text-xs text-slate-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-slate-400">
-                      <option value="">Semua periode</option>
-                      {periods.map(p => <option key={p.key} value={p.key}>{p.label}</option>)}
-                    </select>
-                  </label>
-                )}
-              </div>
-            )}
-            <div className="flex gap-2">
             <label htmlFor="ai-question" className="sr-only">Pertanyaan</label>
             <textarea
               id="ai-question"
               ref={inputRef}
-              rows={2}
+              rows={1}
               value={draft}
-              onChange={e => setDraft(e.target.value)}
+              onChange={e => {
+                setDraft(e.target.value);
+                e.target.style.height = 'auto';
+                e.target.style.height = `${Math.min(e.target.scrollHeight, 200)}px`;
+              }}
               onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(draft); } }}
               disabled={!canAsk || sending}
-              placeholder={canAsk ? 'Tanya tentang WO, tagihan, atau harga… (Enter kirim, Shift+Enter baris baru)' : status?.enabled ? 'Batas pertanyaan hari ini sudah tercapai' : 'AI Asisten belum aktif'}
-              className="flex-1 resize-none px-3 py-2 text-sm outline-none rounded-lg disabled:bg-slate-50"
+              placeholder={canAsk ? 'Tanya tentang WO, tagihan, material…' : status?.enabled ? 'Batas pertanyaan hari ini sudah tercapai' : 'AI Asisten belum aktif'}
+              className="block w-full resize-none bg-transparent px-4 pt-3.5 pb-1 text-sm leading-6 text-slate-800 placeholder:text-slate-400 outline-none disabled:cursor-not-allowed"
             />
-            <button type="submit" disabled={!canAsk || sending || !draft.trim()} aria-label="Kirim pertanyaan"
-              className="self-end inline-flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-semibold bg-[#FDB913] text-slate-900 hover:bg-[#e5a611] disabled:opacity-50">
-              {sending ? <Loader2 size={14} className="animate-spin" aria-hidden="true" /> : <Send size={14} aria-hidden="true" />} Kirim
-            </button>
+            <div className="flex items-center gap-1.5 px-2.5 pb-2.5 pt-1">
+              {scopes.length > 0 && (
+                <PillMenu label="Cakupan data" icon={<Layers size={14} aria-hidden="true" />}
+                  value={scopes.some(s => s.key === scope) ? scope : ''}
+                  options={[{ key: '', label: 'Semua data' }, ...scopes]} onChange={chooseScope} />
+              )}
+              {periods.length > 0 && (
+                <PillMenu label="Periode" icon={<CalendarDays size={14} aria-hidden="true" />}
+                  value={periods.some(p => p.key === period) ? period : ''}
+                  options={[{ key: '', label: 'Semua periode' }, ...periods]} onChange={choosePeriod} />
+              )}
+              <span className="ml-auto hidden sm:inline text-[11px] text-slate-400">Shift+Enter baris baru</span>
+              <button type="submit" disabled={!canAsk || sending || !draft.trim()} aria-label="Kirim pertanyaan" title="Kirim"
+                className="ml-auto sm:ml-2 grid h-8 w-8 shrink-0 place-items-center rounded-full bg-slate-900 text-white hover:bg-slate-700 disabled:bg-slate-200 disabled:text-slate-400">
+                {sending ? <Loader2 size={16} className="animate-spin" aria-hidden="true" /> : <ArrowUp size={17} strokeWidth={2.5} aria-hidden="true" />}
+              </button>
             </div>
           </form>
         </main>
