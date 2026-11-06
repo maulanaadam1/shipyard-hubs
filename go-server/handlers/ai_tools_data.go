@@ -271,10 +271,14 @@ func runQueryAppData(r *http.Request, input json.RawMessage) (interface{}, error
 		}
 		return d
 	}
-	matched := rows[:0:0]
-	for _, row := range rows {
+	// keep: the row passes the date range and search, and the filters when
+	// withFilters.
+	keep := func(row map[string]interface{}, withFilters bool) bool {
 		ok := true
 		for c, v := range filters {
+			if !withFilters {
+				break
+			}
 			if strings.ToLower(strings.TrimSpace(aiDataText(row[c]))) != v {
 				ok = false
 				break
@@ -305,7 +309,11 @@ func runQueryAppData(r *http.Request, input json.RawMessage) (interface{}, error
 				}
 			}
 		}
-		if ok {
+		return ok
+	}
+	matched := rows[:0:0]
+	for _, row := range rows {
+		if keep(row, true) {
 			matched = append(matched, row)
 		}
 	}
@@ -316,6 +324,29 @@ func runQueryAppData(r *http.Request, input json.RawMessage) (interface{}, error
 		return nil, err
 	}
 	out := map[string]interface{}{"source": src.Key, "label": src.Label, "total_rows": len(rows), "matched": len(matched)}
+	// Nothing passed the filters: say what the rows without them hold, so an
+	// unasked-for filter (e.g. status Approved) doesn't read as "no data".
+	if len(matched) == 0 && len(filters) > 0 {
+		values := map[string]map[string]int{}
+		without := 0
+		for _, row := range rows {
+			if !keep(row, false) {
+				continue
+			}
+			without++
+			for c := range filters {
+				if values[c] == nil {
+					values[c] = map[string]int{}
+				}
+				values[c][aiDataText(row[c])]++
+			}
+		}
+		if without > 0 {
+			out["without_filters"] = map[string]interface{}{"matched": without, "values": values}
+			out["note"] = fmt.Sprintf("tidak ada baris yang cocok dengan filters, tetapi %d baris cocok tanpa filters (nilai kolomnya di without_filters). "+
+				"Bila pengguna tidak meminta filter itu, jawab dengan baris tersebut dan sebutkan nilainya (mis. jumlah per status)", without)
+		}
+	}
 
 	if groupCol, err := col("group_by", in.GroupBy); err != nil {
 		return nil, err
