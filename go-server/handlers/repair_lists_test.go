@@ -36,6 +36,13 @@ func fakeRepairListServer(t *testing.T, requests *[]string) *httptest.Server {
 			w.Write([]byte(`{"current_page": 1, "last_page": 1, "data": []}`)) // no repair list
 			return
 		}
+		if r.URL.Query().Get("version") == "2" {
+			// Version 2 is an additional repair list, not yet priced.
+			w.Write([]byte(`{"current_page": 1, "last_page": 1, "data": [
+				{"uniqcode": "act-4", "path": "1", "description": "Bantalan shaft (tambahan)", "unit": "", "price": "0.00", "quantity": "0",
+				 "version": 2, "children": []}]}`))
+			return
+		}
 		if r.URL.Query().Get("page") == "1" {
 			w.Write([]byte(`{"current_page": 1, "last_page": 2, "data": [
 				{"uniqcode": "grp-1", "path": "1", "description": "Kontruksi", "price": "0.00", "quantity": "0", "version": 2, "children": [
@@ -100,12 +107,13 @@ func TestRepairLists(t *testing.T) {
 			jo77 = append(jo77, r)
 		}
 	}
-	if len(jo77) != 2 || !strings.Contains(jo77[0], "version=2") {
+	// Every version: 1 (two pages) and the additional version 2.
+	if len(jo77) != 3 || !strings.Contains(jo77[0], "version=1&page=1") || !strings.Contains(jo77[2], "version=2&page=1") {
 		t.Errorf("Job Order 77 requests: %v", jo77)
 	}
 	var v88, items88 int
 	db.QueryRow(`SELECT version, items FROM jo_repair_lists WHERE jo_id = '88'`).Scan(&v88, &items88)
-	if v88 != 2 || items88 != 1 {
+	if v88 != 2 || items88 != 4 { // two version groups, one activity each
 		t.Errorf("Job Order 88: version %d, items %d", v88, items88)
 	}
 	var failure99 string
@@ -133,20 +141,23 @@ func TestRepairLists(t *testing.T) {
 
 	detail := get("rl-admin", "/api/repair-lists/77")
 	sum := detail["summary"].(map[string]interface{})
-	want := map[string]float64{"items": 3, "items_in_wo": 2, "total_price": 3500000, "price_in_wo": 2500000, "price_without_wo": 1000000, "cost": 700000, "margin": 2800000}
+	want := map[string]float64{"items": 4, "items_in_wo": 2, "total_price": 3500000, "price_in_wo": 2500000, "price_without_wo": 1000000, "cost": 700000, "margin": 2800000}
 	for k, v := range want {
 		if sum[k] != v {
 			t.Errorf("summary %s = %v, want %v", k, sum[k], v)
 		}
 	}
 	items := detail["items"].([]interface{})
-	if len(items) != 5 || items[0].(map[string]interface{})["description"] != "Kontruksi" || items[1].(map[string]interface{})["depth"] != float64(1) {
+	// Version groups first: "Repair list versi 1" > Kontruksi > activities, then the additional version 2.
+	if len(items) != 8 || items[0].(map[string]interface{})["description"] != "Repair list versi 1" ||
+		items[1].(map[string]interface{})["description"] != "Kontruksi" || items[2].(map[string]interface{})["depth"] != float64(2) ||
+		items[6].(map[string]interface{})["description"] != "Repair list tambahan versi 2" {
 		t.Fatalf("items: %v", items)
 	}
-	if wos := items[1].(map[string]interface{})["wos"].([]interface{}); len(wos) != 2 {
+	if wos := items[2].(map[string]interface{})["wos"].([]interface{}); len(wos) != 2 {
 		t.Errorf("act-1 WOs: %v", wos)
 	}
-	if wos := items[4].(map[string]interface{})["wos"].([]interface{}); len(wos) != 0 {
+	if wos := items[5].(map[string]interface{})["wos"].([]interface{}); len(wos) != 0 {
 		t.Errorf("act-3 should have no WO: %v", wos)
 	}
 
@@ -155,7 +166,7 @@ func TestRepairLists(t *testing.T) {
 	if _, ok := viewer["summary"].(map[string]interface{})["total_price"]; ok {
 		t.Error("prices shown without Harga Penawaran")
 	}
-	if _, ok := viewer["items"].([]interface{})[1].(map[string]interface{})["total_price"]; ok {
+	if _, ok := viewer["items"].([]interface{})[2].(map[string]interface{})["total_price"]; ok {
 		t.Error("item price shown without Harga Penawaran")
 	}
 	list := get("rl-admin", "/api/repair-lists?q=uji")
