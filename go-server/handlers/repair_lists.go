@@ -101,6 +101,21 @@ func flattenRepairList(top []map[string]interface{}) []repairItem {
 
 var repairListClient = &http.Client{Timeout: 60 * time.Second}
 
+// repairListOverride reads an active "RepairLists" API Sync Config: its URL
+// template replaces the default one, and its headers, when set, replace the
+// WO detail config's.
+func repairListOverride(src *detailSource) string {
+	var u, hdrs string
+	if db.QueryRow(`SELECT COALESCE(url, ''), COALESCE(headers, '') FROM sync_configs WHERE id = 'RepairLists' AND is_active = true`).Scan(&u, &hdrs) != nil {
+		return ""
+	}
+	var h map[string]string
+	if strings.TrimSpace(hdrs) != "" && json.Unmarshal([]byte(hdrs), &h) == nil && len(h) > 0 {
+		src.headers = h
+	}
+	return strings.TrimSpace(u)
+}
+
 // fetchRepairPage pulls one page of a repair list version.
 func fetchRepairPage(src detailSource, override, joID string, version, page int) (repairListPage, error) {
 	var p repairListPage
@@ -296,8 +311,7 @@ func syncRepairLists() (int, error) {
 	if err != nil || !src.active || src.url == "" {
 		return 0, err
 	}
-	var override string
-	db.QueryRow(`SELECT COALESCE(url, '') FROM sync_configs WHERE id = 'RepairLists' AND is_active = true`).Scan(&override)
+	override := repairListOverride(&src)
 
 	type storedList struct {
 		version int
@@ -549,8 +563,7 @@ func PostRepairListSync(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "API Sync Config untuk Work Order belum diatur"})
 		return
 	}
-	var override string
-	db.QueryRow(`SELECT COALESCE(url, '') FROM sync_configs WHERE id = 'RepairLists' AND is_active = true`).Scan(&override)
+	override := repairListOverride(&src)
 	items, version, err := fetchRepairList(src, override, joID, repairListJobs()[joID])
 	if err != nil {
 		recordRepairListError(joID, err.Error())

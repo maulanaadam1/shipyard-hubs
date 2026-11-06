@@ -618,6 +618,7 @@ export default function ApiSyncManagement() {
                       <option value="Materials">Materials (Master Data Material)</option>
                       <option value="Invoices">Invoices (Data Tagihan)</option>
                       <option value="MaterialRequisitions">MaterialRequisitions (Data Permintaan Material)</option>
+                      <option value="RepairLists">RepairLists (Repair List per Job Order, opsional)</option>
                     </select>
                   </div>
                   <div className="space-y-1.5">
@@ -761,6 +762,19 @@ export default function ApiSyncManagement() {
                         ))}
                       </div>
                     )}
+                  </div>
+                )}
+
+                {formConfigId === 'RepairLists' && (
+                  <div className="bg-indigo-50/50 border border-indigo-100 rounded-xl p-4 mt-2 text-xs text-slate-700 space-y-1.5">
+                    <h4 className="font-bold text-indigo-800 uppercase tracking-wider flex items-center gap-1.5">
+                      <Database className="w-3.5 h-3.5 text-indigo-500" />
+                      Repair List (Job Order ➔ menu Repair List)
+                    </h4>
+                    <p>Opsional. Tanpa config ini, repair list ditarik memakai host dan headers config WorkOrderDetails. Headers di config ini (bila diisi) menggantikan headers WorkOrderDetails.</p>
+                    <p>Isi URL dengan template per Job Order; <code className="font-mono">{'{{id}}'}</code>, <code className="font-mono">{'{{version}}'}</code> dan <code className="font-mono">{'{{page}}'}</code> diisi otomatis:</p>
+                    <p className="font-mono break-all bg-white rounded-lg border border-indigo-100 px-2 py-1">{'https://shipyard-siaga.samudera.id/api/v2/repair-lists/{{id}}/activities?modul_id=t_job_orders&version={{version}}&page={{page}}'}</p>
+                    <p>Ditarik oleh worker repair list (tiap 6 jam), bukan oleh jadwal sinkron di halaman ini.</p>
                   </div>
                 )}
 
