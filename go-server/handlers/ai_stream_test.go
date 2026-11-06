@@ -121,7 +121,7 @@ func TestAIChatStreamOpenAI(t *testing.T) {
 	system := msgs[0].(map[string]interface{})["content"].(string)
 	user := msgs[len(msgs)-1].(map[string]interface{})["content"].(string)
 	today := time.Now().In(mustJakarta(t)).Format("2006-01-02")
-	if !strings.Contains(system, "hari ini = "+today) || !strings.HasPrefix(user, "[Waktu sekarang: ") ||
+	if !strings.Contains(system, "hari ini = "+today) || !strings.HasPrefix(user, "[Konteks sistem, jangan dikutip: Waktu sekarang: ") ||
 		!strings.Contains(user, "hari ini = "+today) || !strings.HasSuffix(user, "]\nJenis pekerjaan terbanyak?") {
 		t.Errorf("date context: system %q..., user %q", system[len(system)-200:], user)
 	}
