@@ -94,7 +94,7 @@ func seedAttendanceWorld(t *testing.T) {
 
 	db.Exec("DELETE FROM profiles WHERE id IN ('att-admin', 'att-viewer', 'att-nobody')")
 	db.Exec(`INSERT INTO profiles (id, email, username, name, role) VALUES ('att-admin', 'att-admin@example.test', 'attadmin', 'Att Admin', 'Admin')`)
-	db.Exec(`INSERT INTO profiles (id, email, username, name, role, roles, extra_roles) VALUES ('att-viewer', 'att-viewer@example.test', 'attviewer', 'Viewer', 'Staff', '', ?)`, ResourceIngestSources)
+	db.Exec(`INSERT INTO profiles (id, email, username, name, role, roles, extra_roles) VALUES ('att-viewer', 'att-viewer@example.test', 'attviewer', 'Viewer', 'Staff', '', ?)`, ResourceDataAttendance)
 	db.Exec(`INSERT INTO profiles (id, email, username, name, role, roles) VALUES ('att-nobody', 'att-nobody@example.test', 'attnobody', 'Nobody', 'Staff', '')`)
 	t.Cleanup(func() { db.Exec("DELETE FROM profiles WHERE id IN ('att-admin', 'att-viewer', 'att-nobody')") })
 }

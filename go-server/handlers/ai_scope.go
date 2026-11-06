@@ -136,7 +136,7 @@ func GetAIInsights(w http.ResponseWriter, r *http.Request) {
 		add(aiInsight{Key: "stock", Label: "Material perlu dipesan ulang", Count: n, Tone: "warning",
 			Question: "Material apa saja yang statusnya PESAN ULANG atau STOK NEGATIF? Tampilkan per gudang.", Link: "/material-stock"})
 	}
-	if HasResourcePermission(r, ResourceIngestSources, "view") {
+	if HasResourcePermission(r, ResourceDataHSE, "view") {
 		n := 0
 		if rows, err := loadExternalSheet("workpermit"); err == nil {
 			for _, row := range rows {
@@ -228,7 +228,7 @@ func aiLatestToday(r *http.Request, now time.Time) []aiInsight {
 				(SELECT COUNT(*) FROM inv_usages WHERE SUBSTR(CAST(tanggal AS TEXT), 1, 10) = ?)`, today, today),
 			Question: "Material apa saja yang dibeli dan dipakai hari ini, untuk proyek apa?"})
 	}
-	if HasResourcePermission(r, ResourceIngestSources, "view") {
+	if HasResourcePermission(r, ResourceDataHSE, "view") {
 		n := 0
 		if rows, err := loadExternalSheet("workpermit"); err == nil {
 			for _, row := range rows {

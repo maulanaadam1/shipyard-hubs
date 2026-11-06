@@ -119,3 +119,22 @@ func TestQueryAppData(t *testing.T) {
 		}
 	}
 }
+
+// Spreadsheet data is opened per data permission, not by Sumber Data Eksternal.
+func TestQueryAppDataSpreadsheetPermissions(t *testing.T) {
+	db.Exec("DELETE FROM external_records WHERE source_id = 'perm-test'")
+	defer db.Exec("DELETE FROM external_records WHERE source_id = 'perm-test'")
+	db.Exec(`INSERT INTO external_records (source_id, record_key, data) VALUES ('perm-test', 'wp1', ?), ('perm-test', 'p1', ?)`,
+		`{"_key":"wp1","_sheet":"workpermit","no_workpermit":"WP-1","vendor":"Vendor A"}`,
+		`{"_key":"p1","_sheet":"project","shipname":"KM Uji"}`)
+	db.Exec("DELETE FROM profiles WHERE id = 'perm-hse'")
+	defer db.Exec("DELETE FROM profiles WHERE id = 'perm-hse'")
+	db.Exec(`INSERT INTO profiles (id, email, username, name, role, roles, extra_roles) VALUES ('perm-hse', 'perm-hse@example.test', 'permhse', 'HSE', 'Staff', '', ?)`, ResourceDataHSE)
+
+	if _, err := runQueryAppData(aiRequest("perm-hse"), json.RawMessage(`{"source": "hse_work_permits"}`)); err != nil {
+		t.Errorf("HSE data with Data HSE: %v", err)
+	}
+	if _, err := runQueryAppData(aiRequest("perm-hse"), json.RawMessage(`{"source": "mo_projects"}`)); err == nil {
+		t.Error("MasterOperation data readable with only Data HSE")
+	}
+}

@@ -40,6 +40,14 @@ type aiDataLookup struct {
 
 var aiLocationLookup = aiDataLookup{Column: "location", Table: "master_locations", IDColumn: "id", NameColumn: "name", As: "location_name"}
 
+// Data permissions for spreadsheet data: no menu of their own, given per role
+// in Role Management so the AI can read that data. Admin always has them.
+const (
+	ResourceDataMasterOperation = "Data MasterOperation"
+	ResourceDataAttendance      = "Data Absensi"
+	ResourceDataHSE             = "Data HSE"
+)
+
 var aiDataSources = []aiDataSource{
 	{Key: "job_orders", Label: "Job Order / proyek kapal dengan lokasi (location_name)", Resource: "Job Order", Table: "projects", Lookups: []aiDataLookup{aiLocationLookup}, Hide: aiDockingColumns},
 	{Key: "job_orders_siaga", Label: "Job Order dari SIAGA (sinkron)", Resource: "Job Order", Table: "sync_job_orders"},
@@ -64,25 +72,25 @@ var aiDataSources = []aiDataSource{
 	{Key: "approval_workflows", Label: "Approval Workflow", Resource: "Master Workflow", Table: "approval_workflow"},
 	{Key: "dropdown_configs", Label: "Master Configuration (pilihan dropdown)", Resource: "Master Configuration", Table: "dropdown_configs"},
 	// Spreadsheet MasterOperation (operational data kept by the yard team),
-	// pushed by apps-script/attendance-sync. Admin only for now: the Sumber
-	// Data Eksternal resource is Admin's.
-	{Key: "mo_vendor_heads", Label: "MasterOperation vendor: kepala vendor (kolom vendor), nama_pt, kategori, jumlah anggota", Resource: ResourceIngestSources, Sheet: "vendor"},
-	{Key: "mo_vendor_members", Label: "MasterOperation vendor_detail: anggota subkon, emp_code (= kode absen fingerprint), nama, kepala_subkon, nama_pt, keahlian, status, safety induction, status BPJS", Resource: ResourceIngestSources, Sheet: "vendor_detail"},
-	{Key: "mo_manpower_plan", Label: "MasterOperation wo_vendor: rencana manpower vendor per proyek/kapal (est_manpower, rate_manpower, cost)", Resource: ResourceIngestSources, Sheet: "wo_vendor"},
-	{Key: "mo_manpower_updates", Label: "MasterOperation wo_mp_update: update manpower harian vendor per proyek/kapal", Resource: ResourceIngestSources, Sheet: "wo_mp_update"},
-	{Key: "mo_projects", Label: "MasterOperation project: proyek kapal dengan tanggal rencana/aktual, docking, harga kontrak, biaya aktual, gross profit, tim, manpower", Resource: ResourceIngestSources, Sheet: "project"},
-	{Key: "mo_progress", Label: "MasterOperation progress: progres proyek (plan vs aktual, planned/earned value, SPI, CPI, biaya kumulatif)", Resource: ResourceIngestSources, Sheet: "progress"},
-	{Key: "mo_wbs", Label: "MasterOperation wbs_data: WBS pekerjaan per proyek (divisi, pekerjaan, biaya, volume, jadwal rencana/aktual, status, progres)", Resource: ResourceIngestSources, Sheet: "wbs_data"},
-	{Key: "mo_daily_cost", Label: "MasterOperation daily_cost: biaya harian per proyek dan vendor (work orders, cost)", Resource: ResourceIngestSources, Sheet: "daily_cost"},
-	{Key: "mo_daily_material", Label: "MasterOperation daily_material: material harian per proyek (kode, material, ukuran, jumlah, harga, vendor)", Resource: ResourceIngestSources, Sheet: "daily_material"},
-	{Key: "mo_wo_detail", Label: "MasterOperation wo_detail: WO vendor per proyek dengan WBS dan biaya", Resource: ResourceIngestSources, Sheet: "wo_detail"},
-	{Key: "mo_ships", Label: "MasterOperation master_ship: kapal (tipe, perusahaan, LOA, lebar, tinggi, sarat)", Resource: ResourceIngestSources, Sheet: "master_ship"},
-	{Key: "mo_companies", Label: "MasterOperation master_company: perusahaan (tipe, nama)", Resource: ResourceIngestSources, Sheet: "master_company"},
-	{Key: "mo_locations", Label: "MasterOperation master_location: lokasi dock (kode, nama, koordinat)", Resource: ResourceIngestSources, Sheet: "master_location"},
+	// pushed by apps-script/attendance-sync. Readable with the Data
+	// MasterOperation permission (Role Management).
+	{Key: "mo_vendor_heads", Label: "MasterOperation vendor: kepala vendor (kolom vendor), nama_pt, kategori, jumlah anggota", Resource: ResourceDataMasterOperation, Sheet: "vendor"},
+	{Key: "mo_vendor_members", Label: "MasterOperation vendor_detail: anggota subkon, emp_code (= kode absen fingerprint), nama, kepala_subkon, nama_pt, keahlian, status, safety induction, status BPJS", Resource: ResourceDataMasterOperation, Sheet: "vendor_detail"},
+	{Key: "mo_manpower_plan", Label: "MasterOperation wo_vendor: rencana manpower vendor per proyek/kapal (est_manpower, rate_manpower, cost)", Resource: ResourceDataMasterOperation, Sheet: "wo_vendor"},
+	{Key: "mo_manpower_updates", Label: "MasterOperation wo_mp_update: update manpower harian vendor per proyek/kapal", Resource: ResourceDataMasterOperation, Sheet: "wo_mp_update"},
+	{Key: "mo_projects", Label: "MasterOperation project: proyek kapal dengan tanggal rencana/aktual, docking, harga kontrak, biaya aktual, gross profit, tim, manpower", Resource: ResourceDataMasterOperation, Sheet: "project"},
+	{Key: "mo_progress", Label: "MasterOperation progress: progres proyek (plan vs aktual, planned/earned value, SPI, CPI, biaya kumulatif)", Resource: ResourceDataMasterOperation, Sheet: "progress"},
+	{Key: "mo_wbs", Label: "MasterOperation wbs_data: WBS pekerjaan per proyek (divisi, pekerjaan, biaya, volume, jadwal rencana/aktual, status, progres)", Resource: ResourceDataMasterOperation, Sheet: "wbs_data"},
+	{Key: "mo_daily_cost", Label: "MasterOperation daily_cost: biaya harian per proyek dan vendor (work orders, cost)", Resource: ResourceDataMasterOperation, Sheet: "daily_cost"},
+	{Key: "mo_daily_material", Label: "MasterOperation daily_material: material harian per proyek (kode, material, ukuran, jumlah, harga, vendor)", Resource: ResourceDataMasterOperation, Sheet: "daily_material"},
+	{Key: "mo_wo_detail", Label: "MasterOperation wo_detail: WO vendor per proyek dengan WBS dan biaya", Resource: ResourceDataMasterOperation, Sheet: "wo_detail"},
+	{Key: "mo_ships", Label: "MasterOperation master_ship: kapal (tipe, perusahaan, LOA, lebar, tinggi, sarat)", Resource: ResourceDataMasterOperation, Sheet: "master_ship"},
+	{Key: "mo_companies", Label: "MasterOperation master_company: perusahaan (tipe, nama)", Resource: ResourceDataMasterOperation, Sheet: "master_company"},
+	{Key: "mo_locations", Label: "MasterOperation master_location: lokasi dock (kode, nama, koordinat)", Resource: ResourceDataMasterOperation, Sheet: "master_location"},
 	// The attendance spreadsheet's Personal-Data tab (fingerprint users).
-	{Key: "att_personnel", Label: "Personal-Data dari spreadsheet absensi: pengguna mesin absen dengan emp_code, nama, department dan jabatan (karyawan internal galangan)", Resource: ResourceIngestSources, Sheet: "Personal-Data"},
+	{Key: "att_personnel", Label: "Personal-Data dari spreadsheet absensi: pengguna mesin absen dengan emp_code, nama, department dan jabatan (karyawan internal galangan)", Resource: ResourceDataAttendance, Sheet: "Personal-Data"},
 	// MasterHSE's workpermit tab (HSE team's work permits).
-	{Key: "hse_work_permits", Label: "MasterHSE workpermit: izin kerja (work permit) per vendor dan kapal: no_workpermit, category (PROJECT/NON PROJECT), project_id, shipname, bagian/dept, supervisi, vendor, manpower, person_list, area_kerja, pekerjaan, date_start/date_finish (YYYY-MM-DD), time_start/time_end, durationWP (hari), wpclass_1 jenis pekerjaan berisiko (Panas, Ruang Terbatas, Pengangkatan, ...), wpclass_2 bahaya, wpclass_3 pengendalian, wpclass_4 alat, wpclass_5 APD, wpclass_6 lainnya, project_lead, safetyman, status (Draft, Approval 1, Approval 2, Approved)", Resource: ResourceIngestSources, Sheet: "workpermit"},
+	{Key: "hse_work_permits", Label: "MasterHSE workpermit: izin kerja (work permit) per vendor dan kapal: no_workpermit, category (PROJECT/NON PROJECT), project_id, shipname, bagian/dept, supervisi, vendor, manpower, person_list, area_kerja, pekerjaan, date_start/date_finish (YYYY-MM-DD), time_start/time_end, durationWP (hari), wpclass_1 jenis pekerjaan berisiko (Panas, Ruang Terbatas, Pengangkatan, ...), wpclass_2 bahaya, wpclass_3 pengendalian, wpclass_4 alat, wpclass_5 APD, wpclass_6 lainnya, project_lead, safetyman, status (Draft, Approval 1, Approval 2, Approved)", Resource: ResourceDataHSE, Sheet: "workpermit"},
 }
 
 // aiHidden: columns never returned from any source: secrets, blobs and

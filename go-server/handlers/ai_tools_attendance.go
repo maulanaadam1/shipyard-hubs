@@ -42,7 +42,7 @@ func attendanceHoursTool() aiTool {
 			"sort":      aiString("hours = most hours first (default), overtime = most overtime first, incomplete = most days with a missing punch first.", "hours", "overtime", "incomplete"),
 			"limit":     aiInteger("Rows to return (default 20).", 1, 100),
 		}),
-		Resource: ResourceIngestSources,
+		Resource: ResourceDataAttendance,
 		Run:      runAttendanceHours,
 	}
 }
