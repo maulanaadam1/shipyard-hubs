@@ -2,11 +2,14 @@ package handlers
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/url"
 	"regexp"
+	"sort"
 	"strconv"
 	"strings"
+	"time"
 
 	"shipyard/db"
 )
@@ -368,10 +371,93 @@ func runBillingSummary(r *http.Request, input json.RawMessage) (interface{}, err
 	if err != nil {
 		return nil, err
 	}
+	rng, _ := res["range"].(map[string]interface{})
+	trend := billingTrend(res["trend"], toString(rng["start"]), toString(rng["end"]), in.Group)
 	return map[string]interface{}{
-		"period": res["range"], "newest_approval_date": res["latest_date"], "totals": res["totals"], "trend": trimList(res["trend"], 60),
+		"period": res["range"], "newest_approval_date": res["latest_date"], "totals": res["totals"], "trend": trimList(trend, 60),
+		"trend_note": "trend memuat setiap " + map[string]string{"day": "hari", "week": "minggu tagihan (Sabtu-Jumat)", "month": "bulan"}[in.Group] +
+			" yang bersinggungan dengan periode, termasuk yang bernilai 0. Di tepi periode, partial = true: hanya tanggal from s.d. to " +
+			"yang dihitung, label sudah menyebut tanggalnya. Tampilkan semua baris (juga partial dan 0) agar jumlahnya sama dengan totals.",
 		"top_vendors": trimList(res["vendors"], 10), "top_ships": trimList(res["ships"], 10), "latest_transactions": res["rows"],
 	}, nil
+}
+
+var shortMonths = []string{"", "Jan", "Feb", "Mar", "Apr", "Mei", "Jun", "Jul", "Agu", "Sep", "Okt", "Nov", "Des"}
+
+// billingTrend lays the dashboard's trend out on every day / billing week /
+// month that touches [start, end], with zero buckets filled in and the edge
+// buckets clipped to the period and marked partial, so a chart of "Oktober"
+// shows 1-2 Okt and 31 Okt instead of dropping them. Without a closed range
+// the trend is passed through with labels only.
+func billingTrend(raw interface{}, start, end, group string) []interface{} {
+	costs := map[string]float64{}
+	var keys []string
+	if list, ok := raw.([]interface{}); ok {
+		for _, p := range list {
+			if m, ok := p.(map[string]interface{}); ok {
+				k := toString(m["period"])
+				costs[k] += toFloat(m["cost"])
+				keys = append(keys, k)
+			}
+		}
+	}
+	span := func(key string) (time.Time, time.Time) {
+		from, _ := time.Parse("2006-01-02", key)
+		switch group {
+		case "week":
+			return from, from.AddDate(0, 0, 6)
+		case "month":
+			return from, from.AddDate(0, 1, -1)
+		}
+		return from, from
+	}
+	label := func(from, to time.Time) string {
+		switch {
+		case group == "month" && from.Day() == 1 && to.AddDate(0, 0, 1).Day() == 1:
+			return fmt.Sprintf("%s %d", shortMonths[from.Month()], from.Year())
+		case from.Equal(to):
+			return fmt.Sprintf("%d %s", from.Day(), shortMonths[from.Month()])
+		case from.Month() == to.Month():
+			return fmt.Sprintf("%d–%d %s", from.Day(), to.Day(), shortMonths[to.Month()])
+		}
+		return fmt.Sprintf("%d %s–%d %s", from.Day(), shortMonths[from.Month()], to.Day(), shortMonths[to.Month()])
+	}
+	point := func(key string, from, to time.Time, partial bool) map[string]interface{} {
+		l := label(from, to)
+		if partial {
+			l += " (sebagian)"
+		}
+		return map[string]interface{}{"period": key, "label": l, "from": from.Format("2006-01-02"), "to": to.Format("2006-01-02"),
+			"partial": partial, "cost": costs[key]}
+	}
+
+	s, errS := time.Parse("2006-01-02", start)
+	e, errE := time.Parse("2006-01-02", end)
+	out := []interface{}{}
+	if errS != nil || errE != nil || e.Before(s) {
+		sort.Strings(keys)
+		for _, k := range keys {
+			from, to := span(k)
+			out = append(out, point(k, from, to, false))
+		}
+		return out
+	}
+	for k := financeBucket(start, group); k != "" && k <= end; {
+		from, to := span(k)
+		cf, ct := from, to
+		if cf.Before(s) {
+			cf = s
+		}
+		if ct.After(e) {
+			ct = e
+		}
+		out = append(out, point(k, cf, ct, !cf.Equal(from) || !ct.Equal(to)))
+		k = financeBucket(to.AddDate(0, 0, 1).Format("2006-01-02"), group)
+		if len(out) > 400 {
+			break // a day trend over years: the 60 shown are enough
+		}
+	}
+	return out
 }
 
 func runSearchWorkItems(r *http.Request, input json.RawMessage) (interface{}, error) {
