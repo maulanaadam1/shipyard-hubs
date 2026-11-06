@@ -93,9 +93,9 @@ export default function Sidebar({ onTabChange }: { onTabChange: () => void }) {
         { icon: ClipboardList, label: 'Approval Workflow', path: '/master-workflow', resource: 'Master Workflow' },
         { icon: Settings, label: 'Master Configuration', path: '/master-config', resource: 'Master Configuration' },
         { icon: Server, label: 'API Sync Config', path: '/master-api-sync', resource: 'API Sync Config' },
-        { icon: Inbox, label: 'Sumber Data Eksternal', path: '/ingest-sources', resource: 'Sumber Data Eksternal', adminOnly: true },
-        { icon: Bot, label: 'Pengaturan AI', path: '/ai-settings', resource: 'Pengaturan AI', adminOnly: true },
-        { icon: ScrollText, label: 'Log AI', path: '/ai-logs', resource: 'Log AI', adminOnly: true },
+        { icon: Inbox, label: 'Sumber Data Eksternal', path: '/ingest-sources', resource: 'Sumber Data Eksternal' },
+        { icon: Bot, label: 'Pengaturan AI', path: '/ai-settings', resource: 'Pengaturan AI' },
+        { icon: ScrollText, label: 'Log AI', path: '/ai-logs', resource: 'Log AI' },
         { icon: Shield, label: 'Role Management', path: '/master-roles', resource: 'Role Management' },
         { icon: Users, label: 'User Management', path: '/user-management', resource: 'User Management' },
       ]

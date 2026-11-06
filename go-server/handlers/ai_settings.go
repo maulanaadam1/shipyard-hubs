@@ -24,6 +24,12 @@ import (
 // API key is encrypted at rest (AES-GCM with a key derived from the server's
 // NEXTAUTH_SECRET) and never sent back to the browser.
 
+// RBAC resources of the Pengaturan AI and Log AI pages (Role Management).
+const (
+	ResourceAISettings = "Pengaturan AI"
+	ResourceAILogs     = "Log AI"
+)
+
 // RequireAdmin lets only Admins through: the AI settings hold a paid API key
 // and decide where company data is sent, so they are not a role permission.
 func RequireAdmin(next http.Handler) http.Handler {

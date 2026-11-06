@@ -3,7 +3,7 @@ import { ScrollText, ThumbsUp, ThumbsDown, AlertTriangle, ChevronDown, ChevronRi
 import { getHeaders } from '@/lib/api-client';
 import AIMarkdown from './AIMarkdown';
 
-// Log AI (Admin only): who asked the AI Assistant what, which data it used,
+// Log AI (Role Management permission): who asked the AI Assistant what, which data it used,
 // failed answers, ratings, and token use per day.
 
 type ToolCall = { name: string; input: Record<string, unknown>; is_error: boolean };

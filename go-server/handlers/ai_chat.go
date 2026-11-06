@@ -59,7 +59,7 @@ func GetAIStatus(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]interface{}{
 		"enabled": enabled, "provider": cfg.Provider, "model": cfg.Model, "daily_limit": settings.DailyLimit,
-		"used_today": aiUsedToday(claims.ID), "tools": tools, "is_admin": isAdminRequest(r),
+		"used_today": aiUsedToday(claims.ID), "tools": tools, "is_admin": isAdminRequest(r), "can_configure": HasResourcePermission(r, ResourceAISettings, "view"),
 	})
 }
 

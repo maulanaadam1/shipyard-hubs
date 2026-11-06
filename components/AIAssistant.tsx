@@ -19,7 +19,7 @@ type Message = {
   id?: string; feedback?: 'up' | 'down' | ''; streaming?: boolean; activity?: string[];
   suggestions?: string[]; durationMs?: number; stopped?: boolean;
 };
-type Status = { enabled: boolean; provider: string; model: string; daily_limit: number; used_today: number; tools: string[]; is_admin: boolean };
+type Status = { enabled: boolean; provider: string; model: string; daily_limit: number; used_today: number; tools: string[]; is_admin: boolean; can_configure?: boolean };
 type Conversation = { id: string; title: string; updated_at: string; questions: number };
 type Insight = { key: string; label: string; count: number; value?: number; tone: 'danger' | 'warning' | 'neutral'; question: string; link?: string };
 
@@ -504,7 +504,7 @@ export default function AIAssistant() {
               <p className="font-semibold">AI Assistant belum aktif.</p>
               <p className="mt-1">
                 Fitur ini memakai layanan AI eksternal. Setelah ada persetujuan perusahaan, Admin memilih provider dan mengaktifkannya di menu Pengaturan AI; sebelum itu tidak ada data yang dikirim ke luar.
-                {status.is_admin && <> <Link to="/ai-settings" className="font-semibold underline">Buka Pengaturan AI</Link></>}
+                {(status.can_configure ?? status.is_admin) && <> <Link to="/ai-settings" className="font-semibold underline">Buka Pengaturan AI</Link></>}
               </p>
             </section>
           )}

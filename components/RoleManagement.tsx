@@ -56,6 +56,9 @@ const RESOURCES = [
   { id: 'Master Dock Status', type: 'menu' },
   { id: 'Master Layout', type: 'menu' },
   { id: 'Vessel Layout', type: 'menu' },
+  { id: 'Sumber Data Eksternal', type: 'menu' },
+  { id: 'Pengaturan AI', type: 'menu' },
+  { id: 'Log AI', type: 'menu' },
   // Data permissions: no menu; they let the AI Assistant read spreadsheet data.
   { id: 'Data MasterOperation', type: 'data', note: 'Data spreadsheet MasterOperation untuk AI Assistant: proyek, progres, biaya, manpower, vendor' },
   { id: 'Data Absensi', type: 'data', note: 'Data absensi untuk AI Assistant: jam kerja dan data karyawan' },

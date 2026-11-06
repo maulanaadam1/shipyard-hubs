@@ -23,8 +23,8 @@ func TestAISettingsSecretHandling(t *testing.T) {
 	defer db.Exec("DELETE FROM profiles WHERE id IN ('ai-admin', 'ai-nobody')")
 
 	router := chi.NewRouter()
-	router.With(RequireAdmin).Get("/api/ai/settings", GetAISettings)
-	router.With(RequireAdmin).Put("/api/ai/settings", PutAISettings)
+	router.With(RequirePermission(ResourceAISettings, "view")).Get("/api/ai/settings", GetAISettings)
+	router.With(RequirePermission(ResourceAISettings, "edit")).Put("/api/ai/settings", PutAISettings)
 	call := func(user, method, body string) (int, string) {
 		rec := httptest.NewRecorder()
 		router.ServeHTTP(rec, httptest.NewRequest(method, "/api/ai/settings", strings.NewReader(body)).WithContext(asUser(user)))
@@ -166,5 +166,47 @@ func TestAIUnlimitedQuestions(t *testing.T) {
 		if rec.Code != 200 {
 			t.Fatalf("question %d: %d %s", i+1, rec.Code, rec.Body.String())
 		}
+	}
+}
+
+// Pengaturan AI and Log AI are role permissions: a non-Admin with the right
+// can open them, view alone can't change the settings.
+func TestAISettingsRolePermission(t *testing.T) {
+	t.Setenv("NEXTAUTH_SECRET", "test-secret")
+	db.Exec("DELETE FROM profiles WHERE id IN ('ai-mgr', 'ai-viewer')")
+	db.Exec(`INSERT INTO profiles (id, email, username, name, role, roles, extra_roles) VALUES ('ai-mgr', 'ai-mgr@example.test', 'aimgr', 'Mgr', 'Manager', '', ?)`,
+		ResourceAISettings+","+ResourceAISettings+":edit,"+ResourceAILogs)
+	db.Exec(`INSERT INTO profiles (id, email, username, name, role, roles, extra_roles) VALUES ('ai-viewer', 'ai-viewer@example.test', 'aiviewer', 'Viewer', 'Staff', '', ?)`,
+		ResourceAISettings+":view")
+	defer db.Exec("DELETE FROM profiles WHERE id IN ('ai-mgr', 'ai-viewer')")
+	defer db.Exec("DELETE FROM ai_settings")
+
+	router := chi.NewRouter()
+	router.With(RequirePermission(ResourceAISettings, "view")).Get("/api/ai/settings", GetAISettings)
+	router.With(RequirePermission(ResourceAISettings, "edit")).Put("/api/ai/settings", PutAISettings)
+	router.With(RequirePermission(ResourceAILogs, "view")).Get("/api/ai/logs", GetAILogs)
+	call := func(user, method, path, body string) int {
+		rec := httptest.NewRecorder()
+		router.ServeHTTP(rec, httptest.NewRequest(method, path, strings.NewReader(body)).WithContext(asUser(user)))
+		return rec.Code
+	}
+	body := `{"provider": "openai", "model": "m", "daily_limit": 0}`
+	if c := call("ai-mgr", "GET", "/api/ai/settings", ""); c != 200 {
+		t.Errorf("manager view: %d", c)
+	}
+	if c := call("ai-mgr", "PUT", "/api/ai/settings", body); c != 200 {
+		t.Errorf("manager edit: %d", c)
+	}
+	if c := call("ai-mgr", "GET", "/api/ai/logs", ""); c != 200 {
+		t.Errorf("manager logs: %d", c)
+	}
+	if c := call("ai-viewer", "GET", "/api/ai/settings", ""); c != 200 {
+		t.Errorf("viewer view: %d", c)
+	}
+	if c := call("ai-viewer", "PUT", "/api/ai/settings", body); c != http.StatusForbidden {
+		t.Errorf("viewer edit: %d", c)
+	}
+	if c := call("ai-viewer", "GET", "/api/ai/logs", ""); c != http.StatusForbidden {
+		t.Errorf("viewer logs: %d", c)
 	}
 }
