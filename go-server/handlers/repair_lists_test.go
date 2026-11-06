@@ -210,6 +210,48 @@ func TestRepairLists(t *testing.T) {
 	}
 	db.Exec("DELETE FROM projects WHERE id = 'rl-p66'")
 
+	// The AI tool reads the same data.
+	runTool := func(user, input string) map[string]interface{} {
+		t.Helper()
+		out, err := runRepairList(aiRequest(user), json.RawMessage(input))
+		if err != nil {
+			t.Fatalf("repair_list %s: %v", input, err)
+		}
+		return out.(map[string]interface{})
+	}
+	toolList := runTool("rl-admin", `{"state": "ok"}`)
+	if toolList["matched"] != 2 { // 77 and 88
+		t.Errorf("repair_list ok list: %v", toolList)
+	}
+	// One match gives the detail: version totals and the activities without a WO.
+	without := runTool("rl-admin", `{"query": "delapan"}`)
+	if without["job_order"].(map[string]interface{})["jo_id"] != "88" {
+		t.Errorf("repair_list single match: %v", without)
+	}
+	without = runTool("rl-admin", `{"jo_id": "77", "wo": "without"}`)
+	acts := without["activities"].([]map[string]interface{})
+	if without["matching_activities"] != 2 || len(acts) != 2 || acts[0]["activity"] != "Ganti pipa" || acts[0]["group"] != "Perpipaan" ||
+		acts[1]["version"] != 2 || without["matching_total_price"] != float64(1000000) {
+		t.Errorf("repair_list without WO: %v", without)
+	}
+	if v, _ := json.Marshal(without["versions"]); !strings.Contains(string(v), `{"version":1,"activities":3,"activities_with_wo":2,"total_price":3500000,"price_without_wo":1000000}`) ||
+		!strings.Contains(string(v), `{"version":2,"activities":1,"activities_with_wo":0}`) {
+		t.Errorf("repair_list versions: %s", v)
+	}
+	withWO := runTool("rl-admin", `{"jo_id": "77", "wo": "with", "activity": "manhole"}`)
+	if a := withWO["activities"].([]map[string]interface{}); len(a) != 1 || len(a[0]["wo"].([]string)) != 2 || a[0]["total_price"] != float64(2000000) {
+		t.Errorf("repair_list with WO: %v", withWO)
+	}
+	if v2 := runTool("rl-admin", `{"jo_id": "77", "version": 2}`); v2["matching_activities"] != 1 {
+		t.Errorf("repair_list version 2: %v", v2)
+	}
+	if noPrice := runTool("rl-viewer", `{"jo_id": "77"}`); noPrice["activities"].([]map[string]interface{})[0]["total_price"] != nil || noPrice["matching_total_price"] != nil {
+		t.Errorf("repair_list prices without Harga Penawaran: %v", noPrice)
+	}
+	if none := runTool("rl-admin", `{"jo_id": "99"}`); !strings.Contains(none["note"].(string), "tidak punya repair list") {
+		t.Errorf("repair_list none: %v", none)
+	}
+
 	// Job Order margins now use the whole repair list.
 	rec := httptest.NewRecorder()
 	GetJobMargins(rec, httptest.NewRequest("GET", "/api/job-margins?q=uji", nil))
