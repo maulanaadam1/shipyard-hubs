@@ -130,7 +130,8 @@ func aiQueryDataTool() aiTool {
 			"services, employees, configuration), or the yard's MasterOperation spreadsheet (mo_* sources: vendor heads, subcontractor " +
 			"members by emp_code, planned and daily manpower, projects, progress, WBS, daily cost and material per project). Sources: " + aiDataSourceList() + ". " +
 			"Column names differ per source: call with describe=true first to see a source's columns and sample values, then " +
-			"search (words that must all appear in a row), filter on exact column values, a date range on a date column, " +
+			"search (words that must all appear in a row), filter on exact column values, a date range on a date column " +
+			"(with end_column: rows whose start-end period overlaps the range, e.g. permits valid on a day), " +
 			"group_by a column for counts (and sum_column for totals), or list rows. For Work Order, billing, work items, reference " +
 			"prices and data checks use the specialised tools instead.",
 		Schema: aiSchema(map[string]interface{}{
@@ -139,6 +140,7 @@ func aiQueryDataTool() aiTool {
 			"search":      aiString("Words that must all appear somewhere in a row (case-insensitive)."),
 			"filters":     map[string]interface{}{"type": "object", "description": "Exact column values (case-insensitive), e.g. {\"status\": \"Docking\"}.", "additionalProperties": map[string]interface{}{"type": "string"}},
 			"date_column": aiString("Column holding a date, for date_from/date_to."),
+			"end_column":  aiString("With date_column as the start: column holding the end date of each row's period. date_from/date_to then match rows whose period overlaps the range (for \"valid / active on a day\" set date_from = date_to = that day); an empty end counts as still running."),
 			"date_from":   aiString("Earliest date, YYYY-MM-DD."),
 			"date_to":     aiString("Latest date, YYYY-MM-DD."),
 			"group_by":    aiString("Column to group by; returns one row per value with a count."),
@@ -159,6 +161,7 @@ type aiDataInput struct {
 	Search     string            `json:"search"`
 	Filters    map[string]string `json:"filters"`
 	DateColumn string            `json:"date_column"`
+	EndColumn  string            `json:"end_column"`
 	DateFrom   string            `json:"date_from"`
 	DateTo     string            `json:"date_to"`
 	GroupBy    string            `json:"group_by"`
@@ -254,6 +257,20 @@ func runQueryAppData(r *http.Request, input json.RawMessage) (interface{}, error
 	if dateCol == "" && (in.DateFrom != "" || in.DateTo != "") {
 		return nil, inputErrorf("isi date_column untuk date_from/date_to")
 	}
+	endCol, err := col("end_column", in.EndColumn)
+	if err != nil {
+		return nil, err
+	}
+	if endCol != "" && dateCol == "" {
+		return nil, inputErrorf("end_column dipakai bersama date_column (kolom tanggal mulai)")
+	}
+	day := func(row map[string]interface{}, c string) string {
+		d := aiDataText(row[c])
+		if len(d) >= 10 {
+			d = d[:10]
+		}
+		return d
+	}
 	matched := rows[:0:0]
 	for _, row := range rows {
 		ok := true
@@ -264,11 +281,13 @@ func runQueryAppData(r *http.Request, input json.RawMessage) (interface{}, error
 			}
 		}
 		if ok && dateCol != "" {
-			d := aiDataText(row[dateCol])
-			if len(d) >= 10 {
-				d = d[:10]
+			// One date: inside the range. A period (end_column): overlaps it;
+			// an empty end is still running.
+			start, end := day(row, dateCol), day(row, dateCol)
+			if endCol != "" {
+				end = day(row, endCol)
 			}
-			if d == "" || (in.DateFrom != "" && d < in.DateFrom) || (in.DateTo != "" && d > in.DateTo) {
+			if start == "" || (in.DateTo != "" && start > in.DateTo) || (in.DateFrom != "" && end != "" && end < in.DateFrom) {
 				ok = false
 			}
 		}

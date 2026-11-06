@@ -56,10 +56,10 @@ ShipHub adalah dashboard galangan kapal (Yard Tegal / YWTS) yang membaca data da
 ## Izin kerja / work permit (MasterHSE)
 
 - **Work permit** (izin kerja, WP) dari tab workpermit spreadsheet MasterHSE tim HSE (sumber `hse_work_permits` di query_app_data, sinkron tiap jam). Satu baris = satu izin kerja satu vendor; satu `no_workpermit` bisa punya beberapa baris (vendor atau perpanjangan berbeda), jadi hitung izin dengan group_by atau sebutkan jumlah baris.
-- Masa berlaku `date_start` s.d. `date_finish` (YYYY-MM-DD), jam `time_start`-`time_end`. Izin **aktif pada tanggal X**: date_start <= X dan date_finish >= X. Untuk "izin yang dibuat minggu ini" pakai date_column create_date.
+- Masa berlaku `date_start` s.d. `date_finish` (YYYY-MM-DD), jam `time_start`-`time_end`. Izin **aktif / berlaku pada tanggal X**: date_column `date_start`, end_column `date_finish`, date_from = date_to = X (untuk satu minggu: date_from/date_to minggu itu). Jangan memakai date_start saja: izin yang mulai kemarin juga masih aktif hari ini. Untuk "izin yang dibuat minggu ini" pakai date_column create_date.
 - `manpower` = jumlah pekerja di izin itu; `person_list` = nama pekerja bila diisi. `wpclass_1` = jenis pekerjaan berisiko (Panas, Ruang Terbatas, Pengangkatan, Perpipaan, ...), `wpclass_2` bahaya, `wpclass_3` pengendalian, `wpclass_4` alat, `wpclass_5` APD. Nilainya daftar dipisah koma; cari dengan search, bukan filters.
-- `status`: Draft, Approval 1, Approval 2, Approved (ada yang tertulis "Appproved", anggap Approved).
-- Menggabungkan: `project_id` = kode Job Order (mis. DRG26DKP045/YWTS), `shipname` = nama kapal, `vendor` = nama kepala vendor seperti di MasterOperation dan WO. Bandingkan manpower izin dengan absensi vendor (attendance_hours) pada tanggal yang sama untuk melihat pekerja yang hadir tanpa izin, atau sebaliknya.
+- `status`: Draft, Approval 1, Approval 2, Approved (ada yang tertulis "Appproved", anggap Approved). Jangan menyaring status kecuali pengguna memintanya: tampilkan semua izin dan sebutkan jumlah per status (banyak izin baru masih Draft).
+- Menggabungkan: `project_id` = kode Job Order (format seperti di job_orders), `shipname` = nama kapal, `vendor` = nama kepala vendor seperti di MasterOperation dan WO. Bandingkan manpower izin dengan absensi vendor (attendance_hours) pada tanggal yang sama untuk melihat pekerja yang hadir tanpa izin, atau sebaliknya.
 
 ## Cara menjawab
 
