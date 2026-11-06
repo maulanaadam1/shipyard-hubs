@@ -1,15 +1,17 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { FileSpreadsheet } from 'lucide-react';
+import { BarChart3, FileSpreadsheet } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import AIChart from './AIChart';
-import { ChartSpec, chartTable, formatValue, parseChartSpec } from '@/lib/ai-chart';
+import { ChartSpec, chartTable, formatValue, parseChartSpec, tableToChart } from '@/lib/ai-chart';
 
 // A small Markdown renderer for AI Asisten answers: headings, paragraphs,
 // lists, tables, code, **bold**, *italic*, `code`. Builds React elements (no
 // raw HTML). WO codes become links to the Work Order page; each table can be
 // downloaded as Excel. A ```chart block (JSON data from the AI's tools, see
 // lib/ai-chart.ts) is drawn as a chart; while it streams in, a placeholder.
+// A table with numbers can also be shown as a chart, so a chart never depends
+// on the model remembering to send one.
 
 type Block =
   | { kind: 'heading'; level: number; text: string }
@@ -160,9 +162,56 @@ export const tablesIn = (text: string): TableBlock[] => parseMarkdown(text).flat
 });
 export const downloadAnswerTables = (text: string) => { const t = tablesIn(text); if (t.length) downloadTables(t); };
 
+const linkButton = 'self-start inline-flex items-center gap-1 min-h-11 px-1 text-xs font-medium text-slate-600 hover:text-slate-900 rounded focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500';
+
+// AnswerTable: one table of an answer, with its Excel link and, when it has
+// a label column and numbers, a toggle that draws it as a chart.
+function AnswerTable({ id, table, download, chartable }: { id: string; table: TableBlock; download: boolean; chartable: boolean }) {
+  const [showChart, setShowChart] = useState(false);
+  const spec = chartable ? tableToChart(table.header, table.rows) : null;
+  return (
+    <div className="flex flex-col gap-1">
+      <div className="overflow-x-auto rounded-lg border border-slate-200">
+        <table className="min-w-full text-xs">
+          <thead className="bg-slate-50 text-slate-600">
+            <tr>{table.header.map((h, j) => <th key={j} scope="col" className="px-2.5 py-1.5 text-left font-semibold whitespace-nowrap">{inline(h, `${id}-h${j}`)}</th>)}</tr>
+          </thead>
+          <tbody className="divide-y divide-slate-100">
+            {table.rows.map((r, j) => (
+              <tr key={j}>
+                {table.header.map((_, c) => {
+                  const cell = r[c] ?? '';
+                  const numeric = typeof cellValue(cell) === 'number';
+                  return <td key={c} className={`px-2.5 py-1.5 align-top ${numeric ? 'text-right tabular-nums whitespace-nowrap' : ''}`}>{inline(cell, `${id}-${j}-${c}`)}</td>;
+                })}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      {(spec || download) && (
+        <div className="flex flex-wrap items-center gap-x-3">
+          {spec && (
+            <button type="button" className={linkButton} aria-expanded={showChart} onClick={() => setShowChart(v => !v)}>
+              <BarChart3 size={13} aria-hidden="true" /> {showChart ? 'Sembunyikan grafik' : 'Tampilkan grafik'}
+            </button>
+          )}
+          {download && (
+            <button type="button" onClick={() => downloadTables([table])} className={linkButton}>
+              <FileSpreadsheet size={13} aria-hidden="true" /> Unduh tabel (Excel)
+            </button>
+          )}
+        </div>
+      )}
+      {spec && showChart && <AIChart spec={spec} />}
+    </div>
+  );
+}
+
 // tableDownload: a download link under each table (off when the page has its own button).
 export default function AIMarkdown({ text, tableDownload = true }: { text: string; tableDownload?: boolean }) {
   const blocks = parseMarkdown(text);
+  const hasChart = blocks.some(b => b.kind === 'chart');
   return (
     <div className="flex flex-col gap-2 leading-relaxed">
       {blocks.map((b, i) => {
@@ -179,32 +228,7 @@ export default function AIMarkdown({ text, tableDownload = true }: { text: strin
             );
           }
           case 'table':
-            return (
-              <div key={k} className="flex flex-col gap-1">
-                <div className="overflow-x-auto rounded-lg border border-slate-200">
-                  <table className="min-w-full text-xs">
-                    <thead className="bg-slate-50 text-slate-600">
-                      <tr>{b.header.map((h, j) => <th key={j} scope="col" className="px-2.5 py-1.5 text-left font-semibold whitespace-nowrap">{inline(h, `${k}-h${j}`)}</th>)}</tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-100">
-                      {b.rows.map((r, j) => (
-                        <tr key={j}>
-                          {b.header.map((_, c) => {
-                            const cell = r[c] ?? '';
-                            const numeric = typeof cellValue(cell) === 'number';
-                            return <td key={c} className={`px-2.5 py-1.5 align-top ${numeric ? 'text-right tabular-nums whitespace-nowrap' : ''}`}>{inline(cell, `${k}-${j}-${c}`)}</td>;
-                          })}
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-                {tableDownload && <button type="button" onClick={() => downloadTables([b])}
-                  className="self-start inline-flex items-center gap-1 text-xs font-medium text-slate-600 hover:text-slate-900">
-                  <FileSpreadsheet size={13} aria-hidden="true" /> Unduh tabel (Excel)
-                </button>}
-              </div>
-            );
+            return <AnswerTable key={k} id={k} table={b} download={tableDownload} chartable={!hasChart} />;
           case 'code':
             return <pre key={k} className="p-2.5 rounded-lg bg-slate-100 text-xs font-mono overflow-x-auto whitespace-pre">{b.text}</pre>;
           case 'chart':
