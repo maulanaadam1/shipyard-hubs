@@ -24,7 +24,13 @@ type aiDataSource struct {
 	Cache                string // a synced SIAGA response (sync_configs id), or
 	Sheet                string // a spreadsheet tab pushed to Sumber Data Eksternal
 	Lookups              []aiDataLookup
+	Hide                 []string // columns left out (data not to rely on yet)
 }
+
+// aiDockingColumns: Ship Docking fields on Job Orders (dates, status, map
+// position). Not reliable yet, so the AI doesn't read them.
+var aiDockingColumns = []string{"docking", "undocking", "status_dock", "est_docking_date", "est_undocking_date", "docking_id",
+	"docking_type", "duration_dock", "x_coordinate", "y_coordinate", "rotation", "ship_visibility"}
 
 // aiDataLookup adds a readable column for an id column, e.g. a Job Order's
 // location id ("1") → location_name "Slipway D".
@@ -35,10 +41,9 @@ type aiDataLookup struct {
 var aiLocationLookup = aiDataLookup{Column: "location", Table: "master_locations", IDColumn: "id", NameColumn: "name", As: "location_name"}
 
 var aiDataSources = []aiDataSource{
-	{Key: "job_orders", Label: "Job Order / proyek kapal, termasuk lokasi dock (location_name), status docking (status_dock) dan tanggal docking/undocking", Resource: "Job Order", Table: "projects", Lookups: []aiDataLookup{aiLocationLookup}},
+	{Key: "job_orders", Label: "Job Order / proyek kapal dengan lokasi (location_name)", Resource: "Job Order", Table: "projects", Lookups: []aiDataLookup{aiLocationLookup}, Hide: aiDockingColumns},
 	{Key: "job_orders_siaga", Label: "Job Order dari SIAGA (sinkron)", Resource: "Job Order", Table: "sync_job_orders"},
 	{Key: "material_requests", Label: "Request Material (dari SIAGA)", Resource: "Request", Cache: "MaterialRequisitions"},
-	{Key: "ship_movements", Label: "riwayat perpindahan kapal antar dock (sering kosong; lokasi dan status docking per kapal ada di job_orders)", Resource: "Ship Docking", Table: "ship_movements", Lookups: []aiDataLookup{aiLocationLookup}},
 	{Key: "equipment", Label: "Master Equipment / Inventory peralatan", Resource: "Master Equipment", Table: "equipment"},
 	{Key: "equipment_loans", Label: "Peminjaman peralatan (Equipment Loans / Request)", Resource: "Request", Table: "loan_requests"},
 	{Key: "equipment_releases", Label: "Release peralatan", Resource: "Release", Table: "equipment_release"},
@@ -55,7 +60,6 @@ var aiDataSources = []aiDataSource{
 	{Key: "locations", Label: "Master Location", Resource: "Master Location", Table: "master_locations"},
 	{Key: "services", Label: "Master Service", Resource: "Master Service", Table: "master_services"},
 	{Key: "employees", Label: "Master Employee (karyawan galangan)", Resource: "Master Employee", Table: "master_employees"},
-	{Key: "dock_statuses", Label: "Master Dock Status", Resource: "Master Dock Status", Table: "master_status_dock"},
 	{Key: "vessel_layouts", Label: "Master Layout (denah)", Resource: "Master Layout", Table: "vessel_layouts"},
 	{Key: "approval_workflows", Label: "Approval Workflow", Resource: "Master Workflow", Table: "approval_workflow"},
 	{Key: "dropdown_configs", Label: "Master Configuration (pilihan dropdown)", Resource: "Master Configuration", Table: "dropdown_configs"},
@@ -126,7 +130,7 @@ func aiQueryDataTool() aiTool {
 	return aiTool{
 		Name: "query_app_data",
 		Description: "Read any other ShipHub data that the specialised tools don't cover. Call this when the user asks about Job Orders, " +
-			"Ship Docking, equipment and loans, Request Material, or master data (vendors, ships, companies, components, locations, " +
+			"equipment and loans, Request Material, or master data (vendors, ships, companies, components, locations, " +
 			"services, employees, configuration), or the yard's MasterOperation spreadsheet (mo_* sources: vendor heads, subcontractor " +
 			"members by emp_code, planned and daily manpower, projects, progress, WBS, daily cost and material per project). Sources: " + aiDataSourceList() + ". " +
 			"Column names differ per source: call with describe=true first to see a source's columns and sample values, then " +
@@ -473,6 +477,24 @@ func loadAIDataSource(src aiDataSource) ([]string, []map[string]interface{}, err
 	columns, rows, err := loadAIDataRows(src)
 	if err != nil {
 		return nil, nil, err
+	}
+	if len(src.Hide) > 0 {
+		hide := map[string]bool{}
+		for _, c := range src.Hide {
+			hide[c] = true
+		}
+		kept := columns[:0:0]
+		for _, c := range columns {
+			if !hide[c] {
+				kept = append(kept, c)
+			}
+		}
+		columns = kept
+		for _, row := range rows {
+			for c := range hide {
+				delete(row, c)
+			}
+		}
 	}
 	for _, l := range src.Lookups {
 		has := false

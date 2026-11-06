@@ -68,7 +68,7 @@ const PROGRESS_LABELS: Record<string, string> = {
 const CATEGORIES = [
   { icon: FileText, title: 'Work Order dan tagihan', questions: ['Berapa WO yang masih Waiting dan berapa nilainya?', 'Tagihan approved sebulan terakhir, per minggu'] },
   { icon: Tags, title: 'Harga dan data perlu dicek', questions: ['Berapa harga wajar bongkar & ganti baru kampas rem?', 'Item belum approved yang harganya perlu dicek'] },
-  { icon: Ship, title: 'Job Order dan docking', questions: ['Kapal apa saja yang sedang docking?', 'Job Order yang aktif per lokasi dock'] },
+  { icon: Ship, title: 'Job Order', questions: ['Job Order yang aktif per lokasi', 'Job Order yang selesai bulan ini'] },
   { icon: Package, title: 'Material dan peralatan', questions: ['Request material yang belum dikirim per Job Order', 'Peralatan yang sedang dipinjam'] },
 ];
 

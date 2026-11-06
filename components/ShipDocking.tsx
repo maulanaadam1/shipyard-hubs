@@ -9,7 +9,6 @@ import {
 } from 'lucide-react';
 import { useData } from '@/context/DataContext';
 import { api } from '@/lib/api-client';
-import AskAIButton from './AskAIButton';
 
 // Removed hardcoded STATUS_DOCK_OPTIONS, using dockStatuses from context instead
 
@@ -270,7 +269,6 @@ export default function ShipDocking() {
         <div>
           <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
             <h1 className="font-display font-bold text-2xl text-slate-800 tracking-tight">Ship Docking</h1>
-            <AskAIButton scope="project" questions={["Kapal apa saja yang sedang docking dan di mana?", "Kapal yang rencana docking 7 hari ke depan", "Kapal yang melewati rencana undocking"]} />
           </div>
           <p className="text-slate-500 text-sm mt-1">Update tanggal aktual, status dok, dan log pergerakan kapal.</p>
         </div>
