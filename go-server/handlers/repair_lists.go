@@ -101,37 +101,76 @@ func flattenRepairList(top []map[string]interface{}) []repairItem {
 
 var repairListClient = &http.Client{Timeout: 60 * time.Second}
 
-// fetchRepairList pulls every page of one Job Order's repair list.
-func fetchRepairList(src detailSource, override, joID string, version int) ([]repairItem, error) {
+// fetchRepairPage pulls one page of a repair list version.
+func fetchRepairPage(src detailSource, override, joID string, version, page int) (repairListPage, error) {
+	var p repairListPage
+	u, err := repairListURL(src, override, joID, version, page)
+	if err != nil {
+		return p, err
+	}
+	req, err := http.NewRequest("GET", u, nil)
+	if err != nil {
+		return p, err
+	}
+	for k, v := range src.headers {
+		req.Header.Set(k, v)
+	}
+	req.Header.Set("Accept", "application/json")
+	resp, err := repairListClient.Do(req)
+	if err != nil {
+		return p, err
+	}
+	body, err := io.ReadAll(io.LimitReader(resp.Body, 64<<20))
+	resp.Body.Close()
+	if err != nil {
+		return p, err
+	}
+	if resp.StatusCode != http.StatusOK {
+		return p, &workers.HTTPStatusError{URL: u, Code: resp.StatusCode}
+	}
+	if err := json.Unmarshal(body, &p); err != nil {
+		return p, fmt.Errorf("repair list %s tidak terbaca: %v", joID, err)
+	}
+	return p, nil
+}
+
+// latestRepairVersion finds the newest version when ShipHub doesn't know it
+// (a Job Order only in Job Order / projects): versions with activities, from
+// 1 up, until one is empty.
+func latestRepairVersion(src detailSource, override, joID string) (int, error) {
+	latest := 0
+	for v := 1; v <= 20; v++ {
+		p, err := fetchRepairPage(src, override, joID, v, 1)
+		if err != nil {
+			return latest, err
+		}
+		if len(p.Data) == 0 {
+			break
+		}
+		latest = v
+		time.Sleep(300 * time.Millisecond)
+	}
+	return latest, nil
+}
+
+// fetchRepairList pulls every page of one Job Order's repair list. Version 0
+// means unknown: the latest one is looked up first. It returns the version used.
+func fetchRepairList(src detailSource, override, joID string, version int) ([]repairItem, int, error) {
+	if version <= 0 {
+		v, err := latestRepairVersion(src, override, joID)
+		if err != nil {
+			return nil, 0, err
+		}
+		if v == 0 {
+			return nil, 0, nil // no repair list in SIAGA
+		}
+		version = v
+	}
 	var top []map[string]interface{}
 	for page := 1; page <= 200; page++ {
-		u, err := repairListURL(src, override, joID, version, page)
+		p, err := fetchRepairPage(src, override, joID, version, page)
 		if err != nil {
-			return nil, err
-		}
-		req, err := http.NewRequest("GET", u, nil)
-		if err != nil {
-			return nil, err
-		}
-		for k, v := range src.headers {
-			req.Header.Set(k, v)
-		}
-		req.Header.Set("Accept", "application/json")
-		resp, err := repairListClient.Do(req)
-		if err != nil {
-			return nil, err
-		}
-		body, err := io.ReadAll(io.LimitReader(resp.Body, 64<<20))
-		resp.Body.Close()
-		if err != nil {
-			return nil, err
-		}
-		if resp.StatusCode != http.StatusOK {
-			return nil, &workers.HTTPStatusError{URL: u, Code: resp.StatusCode}
-		}
-		var p repairListPage
-		if err := json.Unmarshal(body, &p); err != nil {
-			return nil, fmt.Errorf("repair list %s tidak terbaca: %v", joID, err)
+			return nil, version, err
 		}
 		top = append(top, p.Data...)
 		if p.LastPage <= page || len(p.Data) == 0 {
@@ -139,7 +178,7 @@ func fetchRepairList(src detailSource, override, joID string, version int) ([]re
 		}
 		time.Sleep(300 * time.Millisecond)
 	}
-	return flattenRepairList(top), nil
+	return flattenRepairList(top), version, nil
 }
 
 // storeRepairList replaces one Job Order's stored repair list.
@@ -198,11 +237,12 @@ func recordRepairListError(joID, msg string) {
 		db.Exec(`INSERT INTO jo_repair_lists (jo_id, fetched_at, error) VALUES (?, ?, ?)`, joID, time.Now().Format("2006-01-02 15:04:05"), msg)
 		return
 	}
-	db.Exec(`UPDATE jo_repair_lists SET error = ? WHERE jo_id = ?`, msg, joID)
+	db.Exec(`UPDATE jo_repair_lists SET error = ?, fetched_at = ? WHERE jo_id = ?`, msg, time.Now().Format("2006-01-02 15:04:05"), joID)
 }
 
-// repairListJobs lists Job Orders to fetch with their latest version: from
-// the Job Order sync and from the WOs' details, the newest first.
+// repairListJobs lists Job Orders to fetch with their latest version (0 =
+// unknown): from the WOs' details, the Job Order sync and the Job Order menu
+// (projects.id_siaga), so Job Orders without a WO yet are included.
 func repairListJobs() map[string]int {
 	jobs := map[string]int{}
 	if rows, err := db.Query(`SELECT jo_id, MAX(COALESCE(jo_version, 0)) FROM wo_repair_activities WHERE COALESCE(jo_id, '') <> '' GROUP BY jo_id`); err == nil {
@@ -225,10 +265,16 @@ func repairListJobs() map[string]int {
 		}
 		rows.Close()
 	}
-	for id, v := range jobs {
-		if v <= 0 {
-			jobs[id] = 1
+	if rows, err := db.Query(`SELECT DISTINCT CAST(id_siaga AS TEXT) FROM projects WHERE id_siaga IS NOT NULL AND id_siaga > 0`); err == nil {
+		for rows.Next() {
+			var id string
+			if rows.Scan(&id) == nil && id != "" {
+				if _, ok := jobs[id]; !ok {
+					jobs[id] = 0
+				}
+			}
 		}
+		rows.Close()
 	}
 	return jobs
 }
@@ -253,19 +299,18 @@ func syncRepairLists() (int, error) {
 	var override string
 	db.QueryRow(`SELECT COALESCE(url, '') FROM sync_configs WHERE id = 'RepairLists' AND is_active = true`).Scan(&override)
 
-	stored := map[string]struct {
+	type storedList struct {
 		version int
 		at      string
-	}{}
-	if rows, err := db.Query(`SELECT jo_id, COALESCE(version, 0), COALESCE(fetched_at, '') FROM jo_repair_lists WHERE COALESCE(error, '') = ''`); err == nil {
+		failed  bool
+	}
+	stored := map[string]storedList{}
+	if rows, err := db.Query(`SELECT jo_id, COALESCE(version, 0), COALESCE(fetched_at, ''), COALESCE(error, '') <> '' FROM jo_repair_lists`); err == nil {
 		for rows.Next() {
-			var id, at string
-			var v int
-			if rows.Scan(&id, &v, &at) == nil {
-				stored[id] = struct {
-					version int
-					at      string
-				}{v, at}
+			var s storedList
+			var id string
+			if rows.Scan(&id, &s.version, &s.at, &s.failed) == nil {
+				stored[id] = s
 			}
 		}
 		rows.Close()
@@ -286,10 +331,15 @@ func syncRepairLists() (int, error) {
 	pause := time.Duration(envInt("REPAIR_LIST_PAUSE_MS", 1500)) * time.Millisecond
 	done := 0
 	for joID, version := range repairListJobs() {
-		if s, ok := stored[joID]; ok && s.version >= version && (!active[joID] || s.at >= cutoff) {
-			continue
+		if s, ok := stored[joID]; ok {
+			if s.failed && s.at >= cutoff {
+				continue // failed or no repair list: tried again after a day
+			}
+			if !s.failed && s.version >= version && (!active[joID] || s.at >= cutoff) {
+				continue
+			}
 		}
-		items, err := fetchRepairList(src, override, joID, version)
+		items, used, err := fetchRepairList(src, override, joID, version)
 		if err != nil {
 			var status *workers.HTTPStatusError
 			if se, ok := err.(*workers.HTTPStatusError); ok {
@@ -300,7 +350,9 @@ func syncRepairLists() (int, error) {
 			}
 			recordRepairListError(joID, err.Error())
 			log.Printf("[REPAIR LIST] %s: %v", joID, err)
-		} else if err := storeRepairList(joID, version, items); err != nil {
+		} else if used == 0 {
+			recordRepairListError(joID, "tidak ada repair list di SIAGA")
+		} else if err := storeRepairList(joID, used, items); err != nil {
 			return done, err
 		} else {
 			done++
@@ -347,15 +399,17 @@ func GetRepairLists(w http.ResponseWriter, r *http.Request) {
 	}
 	where, args := "", []interface{}{}
 	if q != "" {
-		where = " WHERE LOWER(COALESCE(c.jo_code, '')) LIKE ?"
+		where = " AND LOWER(COALESCE(c.jo_code, '')) LIKE ?"
 		args = append(args, "%"+strings.ToLower(q)+"%")
 	}
 	rows, err := db.Query(`
 		WITH c AS (
-			SELECT l.jo_id, COALESCE(MAX(a.jo_code), MAX(j.code || ' - ' || COALESCE(j.m_ship_name, '')), '') AS jo_code
+			SELECT l.jo_id, COALESCE(MAX(a.jo_code), MAX(j.code || ' - ' || COALESCE(j.m_ship_name, '')),
+				MAX(p.idproject || ' - ' || COALESCE(p.shipname, '')), '') AS jo_code
 			FROM jo_repair_lists l
 			LEFT JOIN wo_repair_activities a ON a.jo_id = l.jo_id
 			LEFT JOIN sync_job_orders j ON j.id = l.jo_id
+			LEFT JOIN projects p ON CAST(p.id_siaga AS TEXT) = l.jo_id
 			GROUP BY l.jo_id
 		), inwo AS (
 			SELECT i.jo_id, COUNT(*) AS n, COALESCE(SUM(i.total_price), 0) AS price
@@ -369,7 +423,8 @@ func GetRepairLists(w http.ResponseWriter, r *http.Request) {
 			COALESCE(inwo.n, 0), COALESCE(inwo.price, 0), COALESCE(l.fetched_at, ''), COALESCE(l.error, '')
 		FROM jo_repair_lists l JOIN c ON c.jo_id = l.jo_id
 		LEFT JOIN inwo ON inwo.jo_id = l.jo_id
-		LEFT JOIN leaf ON leaf.jo_id = l.jo_id`+where+`
+		LEFT JOIN leaf ON leaf.jo_id = l.jo_id
+		WHERE (COALESCE(l.items, 0) > 0 OR COALESCE(l.error, '') NOT IN ('', 'tidak ada repair list di SIAGA'))`+where+`
 		ORDER BY l.total_price DESC LIMIT `+strconv.Itoa(limit), args...)
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
@@ -470,6 +525,9 @@ func GetRepairList(w http.ResponseWriter, r *http.Request) {
 	if code == "" {
 		db.QueryRow(`SELECT COALESCE(code, '') || ' - ' || COALESCE(m_ship_name, '') FROM sync_job_orders WHERE id = ?`, joID).Scan(&code)
 	}
+	if code == "" {
+		db.QueryRow(`SELECT COALESCE(idproject, '') || ' - ' || COALESCE(shipname, '') FROM projects WHERE CAST(id_siaga AS TEXT) = ?`, joID).Scan(&code)
+	}
 	summary := map[string]interface{}{"jo_id": joID, "jo_code": code, "version": version, "fetched_at": fetched, "error": failure,
 		"items": leaves, "items_in_wo": leavesInWO}
 	if showPrice {
@@ -493,14 +551,14 @@ func PostRepairListSync(w http.ResponseWriter, r *http.Request) {
 	}
 	var override string
 	db.QueryRow(`SELECT COALESCE(url, '') FROM sync_configs WHERE id = 'RepairLists' AND is_active = true`).Scan(&override)
-	version := repairListJobs()[joID]
-	if version <= 0 {
-		version = 1
-	}
-	items, err := fetchRepairList(src, override, joID, version)
+	items, version, err := fetchRepairList(src, override, joID, repairListJobs()[joID])
 	if err != nil {
 		recordRepairListError(joID, err.Error())
 		writeJSON(w, http.StatusBadGateway, map[string]string{"error": "Gagal menarik repair list dari SIAGA: " + err.Error()})
+		return
+	}
+	if version == 0 {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "Job Order ini tidak punya repair list di SIAGA"})
 		return
 	}
 	if err := storeRepairList(joID, version, items); err != nil {

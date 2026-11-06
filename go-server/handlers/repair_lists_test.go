@@ -22,6 +22,20 @@ func fakeRepairListServer(t *testing.T, requests *[]string) *httptest.Server {
 			return
 		}
 		w.Header().Set("Content-Type", "application/json")
+		if strings.Contains(r.URL.Path, "/88/") {
+			// A Job Order only in projects: versions 1 and 2 exist.
+			if v := r.URL.Query().Get("version"); v == "1" || v == "2" {
+				w.Write([]byte(`{"current_page": 1, "last_page": 1, "data": [{"uniqcode": "p88-` + v + `", "path": "1", "description": "Pekerjaan v` + v + `",
+					"unit": "ls", "price": "100", "quantity": "1", "version": ` + v + `, "parameter": {"total_price": 100}, "children": []}]}`))
+				return
+			}
+			w.Write([]byte(`{"current_page": 1, "last_page": 1, "data": []}`))
+			return
+		}
+		if strings.Contains(r.URL.Path, "/99/") {
+			w.Write([]byte(`{"current_page": 1, "last_page": 1, "data": []}`)) // no repair list
+			return
+		}
 		if r.URL.Query().Get("page") == "1" {
 			w.Write([]byte(`{"current_page": 1, "last_page": 2, "data": [
 				{"uniqcode": "grp-1", "path": "1", "description": "Kontruksi", "price": "0.00", "quantity": "0", "version": 2, "children": [
@@ -70,12 +84,34 @@ func TestRepairLists(t *testing.T) {
 	db.Exec(`INSERT INTO sync_configs (id, name, url, headers, is_active) VALUES ('WorkOrderDetails', 'WorkOrderDetails', ?, '{"X-Test-Auth": "secret"}', true)`,
 		server.URL+"/api/v1/work-orders/{{id}}")
 
+	// Job Orders only in the Job Order menu (projects): 88 has a repair list
+	// at version 2, 99 has none.
+	db.Exec("DELETE FROM projects WHERE id IN ('rl-p88', 'rl-p99')")
+	t.Cleanup(func() { db.Exec("DELETE FROM projects WHERE id IN ('rl-p88', 'rl-p99')") })
+	db.Exec(`INSERT INTO projects (id, id_siaga, idproject, shipname) VALUES ('rl-p88', 88, 'JO-88/T', 'KM DELAPAN'), ('rl-p99', 99, 'JO-99/T', 'KM SEMBILAN')`)
+
 	n, err := syncRepairLists()
-	if err != nil || n != 1 {
+	if err != nil || n != 2 {
 		t.Fatalf("sync: %d, %v (requests %v)", n, err, requests)
 	}
-	if len(requests) != 2 || !strings.Contains(requests[0], "/api/v2/repair-lists/77/activities") || !strings.Contains(requests[0], "version=2") {
-		t.Errorf("requests: %v", requests)
+	var jo77 []string
+	for _, r := range requests {
+		if strings.Contains(r, "/77/") {
+			jo77 = append(jo77, r)
+		}
+	}
+	if len(jo77) != 2 || !strings.Contains(jo77[0], "version=2") {
+		t.Errorf("Job Order 77 requests: %v", jo77)
+	}
+	var v88, items88 int
+	db.QueryRow(`SELECT version, items FROM jo_repair_lists WHERE jo_id = '88'`).Scan(&v88, &items88)
+	if v88 != 2 || items88 != 1 {
+		t.Errorf("Job Order 88: version %d, items %d", v88, items88)
+	}
+	var failure99 string
+	db.QueryRow(`SELECT COALESCE(error, '') FROM jo_repair_lists WHERE jo_id = '99'`).Scan(&failure99)
+	if failure99 != "tidak ada repair list di SIAGA" {
+		t.Errorf("Job Order 99: %q", failure99)
 	}
 	// Up to date: nothing fetched again.
 	if n, _ := syncRepairLists(); n != 0 {
@@ -125,6 +161,15 @@ func TestRepairLists(t *testing.T) {
 	list := get("rl-admin", "/api/repair-lists?q=uji")
 	if jos := list["job_orders"].([]interface{}); len(jos) != 1 || jos[0].(map[string]interface{})["total_price"] != float64(3500000) {
 		t.Errorf("list: %v", list)
+	}
+	// The projects-only Job Order shows with its code; the one without a repair list doesn't.
+	all := get("rl-admin", "/api/repair-lists")
+	codes := []string{}
+	for _, j := range all["job_orders"].([]interface{}) {
+		codes = append(codes, j.(map[string]interface{})["jo_code"].(string))
+	}
+	if len(codes) != 2 || !strings.Contains(strings.Join(codes, "|"), "JO-88/T - KM DELAPAN") {
+		t.Errorf("list codes: %v", codes)
 	}
 
 	// Job Order margins now use the whole repair list.
