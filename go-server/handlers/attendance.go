@@ -544,7 +544,8 @@ func loadAttendancePersonnel() map[string]attendancePerson {
 
 // fillFromMembers completes days from the vendor member list (vendor_detail):
 // a punch without name, kepala subkon or PT gets them from the worker's
-// entry, matched on emp_code. Values on the punch win.
+// entry, matched on emp_code. Values on the punch win. A day still without
+// a PT takes its kepala subkon as the vendor.
 func fillFromMembers(days []attendanceDay, members map[string]vendorMember) {
 	for i := range days {
 		m, ok := members[days[i].EmpCode]
@@ -562,5 +563,10 @@ func fillFromMembers(days []attendanceDay, members map[string]vendorMember) {
 			d.NamaPT = m.NamaPT
 		}
 		d.Keahlian = m.Keahlian
+	}
+	// Still no PT but a kepala subkon (on the punch or from the list): the
+	// vendor is the kepala subkon, the column before nama_pt.
+	for i := range days {
+		days[i].NamaPT = orNeighbour(days[i].NamaPT, days[i].KepalaSubkon)
 	}
 }

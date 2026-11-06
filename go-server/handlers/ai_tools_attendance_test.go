@@ -316,3 +316,49 @@ func mustDate(s string) time.Time {
 	t, _ := time.Parse("2006-01-02", s)
 	return t
 }
+
+// nama_pt empty or "-": the vendor name in the column before it counts as
+// the vendor (kepala_subkon in vendor_detail and on punches, vendor in the
+// vendor tab).
+func TestNamaPTFallsBackToNeighbour(t *testing.T) {
+	seedAttendanceWorld(t)
+	var token string
+	_, token = createIngestSource(t, `{"id": "master-op-2", "name": "MasterOperation 2", "kind": "records", "key_column": "_key"}`)
+	ingestCall(t, "POST", "/api/ingest/master-op-2", token, `{"rows": [
+		{"_sheet": "vendor_detail", "_key": "vendor_detail:9", "emp_code": "E4", "name": "Wawan", "kepala_subkon": "CV Kepala Usaha", "nama_pt": ""},
+		{"_sheet": "vendor", "_key": "vendor:9", "id": "9", "vendor": "TEMU", "nama_pt": "-"}]}`)
+	upsertAttendancePunches("absen", []attendancePunch{
+		{ID: "20", EmpCode: "E4", PunchTime: "2026-11-02 08:00:00"},
+		{ID: "21", EmpCode: "E4", PunchTime: "2026-11-02 16:00:00"},
+		{ID: "22", EmpCode: "E3", KepalaSubkon: "Pak Mandor", NamaPT: "-", PunchTime: "2026-11-02 08:00:00"},
+	})
+	db.Exec(`INSERT INTO work_order_summary (wo_id, wo_code, vendor_name) VALUES ('903', 'WO-903', 'KEPALA USAHA, CV'), ('904', 'WO-904', 'TEMU')`)
+	db.Exec(`INSERT INTO work_order_daily_costs (wo_id, cost_date, approved_cost) VALUES ('903', '2026-11-04', 800000)`)
+
+	out, err := runAttendanceTool(t, "att-admin", `{"date_from": "2026-11-02", "date_to": "2026-11-08"}`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	byVendor := map[string]map[string]interface{}{}
+	for _, r := range out["rows"].([]interface{}) {
+		row := r.(map[string]interface{})
+		byVendor[row["vendor"].(string)] = row
+	}
+	// From the member list: no PT, so the kepala subkon is the vendor, and
+	// its WO (spelled the SIAGA way) is found.
+	if k := byVendor["CV Kepala Usaha"]; k == nil || k["worked_hours"] != float64(8) || k["wo_vendor"] != "KEPALA USAHA, CV" || k["wo_approved_value"] != float64(800000) {
+		t.Errorf("member without PT: %v", k)
+	}
+	// From the punch itself: PT "-", kepala subkon on the punch.
+	if m := byVendor["Pak Mandor"]; m == nil || m["workers"] != float64(1) {
+		t.Errorf("punch without PT: %v", m)
+	}
+	if aliases := vendorAliases()["TEMU"]; len(aliases) != 1 || aliases[0] != "TEMU" {
+		t.Errorf("vendor tab row without PT: %v", aliases)
+	}
+	for in, want := range map[[2]string]string{{"PT A", "X"}: "PT A", {"", "X"}: "X", {"-", "X"}: "X", {"", "-"}: "", {" ", ""}: ""} {
+		if got := orNeighbour(in[0], in[1]); got != want {
+			t.Errorf("orNeighbour(%q, %q) = %q, want %q", in[0], in[1], got, want)
+		}
+	}
+}

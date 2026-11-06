@@ -65,6 +65,19 @@ func normalizeVendorName(name string) string {
 	return strings.Join(strings.Fields(s), " ")
 }
 
+// orNeighbour: the PT name, or when it is empty or "-", the vendor name
+// from the column before nama_pt (vendor in the vendor tab, kepala_subkon in
+// vendor_detail and on punches).
+func orNeighbour(pt, neighbour string) string {
+	if p := strings.TrimSpace(pt); p != "" && p != "-" {
+		return p
+	}
+	if n := strings.TrimSpace(neighbour); n != "-" {
+		return n
+	}
+	return ""
+}
+
 // vendorMember is a subcontractor worker from the vendor_detail tab.
 type vendorMember struct {
 	EmpCode, Name, KepalaSubkon, NamaPT, Keahlian, Status string
@@ -87,6 +100,8 @@ func loadVendorMembers() map[string]vendorMember {
 			Keahlian:     cellString(row["keahlian"]),
 			Status:       cellString(row["status"]),
 		}
+		// No PT: the vendor is the kepala subkon in the column before it.
+		m.NamaPT = orNeighbour(m.NamaPT, m.KepalaSubkon)
 		if m.EmpCode != "" {
 			out[m.EmpCode] = m
 		}
@@ -113,7 +128,9 @@ func vendorAliases() map[string][]string {
 	if heads, err := loadExternalSheet("vendor"); err == nil {
 		for _, raw := range heads {
 			row := normalizeRow(raw)
-			add(cellString(row["nama_pt"]), cellString(row["vendor"]))
+			vendor := cellString(row["vendor"])
+			// No PT: the vendor name in the column before it stands for it.
+			add(orNeighbour(cellString(row["nama_pt"]), vendor), vendor)
 		}
 	}
 	for _, m := range loadVendorMembers() {
