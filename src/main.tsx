@@ -78,6 +78,7 @@ import MaterialStock from '../components/MaterialStock';
 import AIAssistant from '../components/AIAssistant';
 import AISettings from '../components/AISettings';
 import AILogs from '../components/AILogs';
+import RepairList from '../components/RepairList';
 import FinancialDashboard from '../components/FinancialDashboard';
 import ApiSyncManagement from '../components/ApiSyncManagement';
 import IngestSources from '../components/IngestSources';
@@ -214,6 +215,11 @@ createRoot(document.getElementById('root')!).render(
             <Route path="utility" element={
               <ProtectedRoute resource="Utility">
                 <UtilityDashboard />
+              </ProtectedRoute>
+            } />
+            <Route path="repair-list" element={
+              <ProtectedRoute resource="Repair List">
+                <RepairList />
               </ProtectedRoute>
             } />
             <Route path="job-order" element={

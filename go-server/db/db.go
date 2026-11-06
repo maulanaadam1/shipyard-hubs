@@ -649,6 +649,34 @@ func createTables() {
 		PRIMARY KEY (wo_id, activity_key)
 	);`)
 	DB.Exec("CREATE INDEX IF NOT EXISTS idx_wo_repair_activities_jo ON wo_repair_activities(jo_id, activity_key)")
+	DB.Exec("ALTER TABLE wo_repair_activities ADD COLUMN jo_version INTEGER DEFAULT 0")
+	// The full repair list of each Job Order from SIAGA (repair_lists.go):
+	// one row per Job Order with the fetch state, and its activity tree flat.
+	DB.Exec(`CREATE TABLE IF NOT EXISTS jo_repair_lists (
+		jo_id TEXT PRIMARY KEY,
+		version INTEGER DEFAULT 0,
+		items INTEGER DEFAULT 0,
+		total_price NUMERIC DEFAULT 0,
+		fetched_at TEXT,
+		error TEXT
+	);`)
+	DB.Exec(`CREATE TABLE IF NOT EXISTS jo_repair_items (
+		jo_id TEXT NOT NULL,
+		uniqcode TEXT NOT NULL,
+		parent_uniqcode TEXT,
+		seq INTEGER DEFAULT 0,
+		depth INTEGER DEFAULT 0,
+		path TEXT,
+		description TEXT,
+		full_name TEXT,
+		unit TEXT,
+		quantity NUMERIC DEFAULT 0,
+		unit_price NUMERIC DEFAULT 0,
+		total_price NUMERIC DEFAULT 0,
+		is_leaf BOOLEAN DEFAULT false,
+		version INTEGER DEFAULT 0,
+		PRIMARY KEY (jo_id, uniqcode)
+	);`)
 	DB.Exec("CREATE INDEX IF NOT EXISTS idx_wo_items_wo_activity ON wo_items(wo_id, activity_path)")
 
 	// AI Asisten conversations (history panel); the messages are the

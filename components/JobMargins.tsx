@@ -10,6 +10,7 @@ import { getHeaders } from '@/lib/api-client';
 type Margin = {
   jo_id: string; jo_code: string; price: number; cost: number; cost_approved: number; margin: number; margin_pct: number;
   activities: number; shared_activities: number; double_counted: number; wo_count: number;
+  price_in_wo: number; from_repair_list: boolean;
 };
 type Activity = {
   key: string; name: string; unit: string; quantity: number; unit_price: number; price: number; cost: number;
@@ -87,7 +88,7 @@ export default function JobMargins({ formatIDR }: { formatIDR: (v: number) => st
       <div className="flex items-start gap-2 p-3 rounded-xl bg-slate-50 text-xs text-slate-600">
         <Info size={14} className="mt-0.5 shrink-0" aria-hidden="true" />
         <p>
-          Harga penawaran diambil dari repair list Job Order. Aktivitas yang dikerjakan beberapa WO dihitung <b className="font-semibold">sekali</b>;
+          Harga penawaran diambil dari repair list lengkap Job Order (menu Repair List); bila belum ditarik, dari aktivitas yang sudah ada di WO. Aktivitas yang dikerjakan beberapa WO dihitung <b className="font-semibold">sekali</b>;
           biaya vendor dijumlah dari semua WO (item rejected tidak dihitung). Margin hanya dihitung per Job Order, karena vendor sering mencatat
           semua biayanya di bawah satu aktivitas.
         </p>
@@ -156,7 +157,10 @@ export default function JobMargins({ formatIDR }: { formatIDR: (v: number) => st
                           {open === m.jo_id ? <ChevronDown size={15} className="mt-0.5 shrink-0" aria-hidden="true" /> : <ChevronRight size={15} className="mt-0.5 shrink-0" aria-hidden="true" />}
                           <span>
                             {m.jo_code || `Job Order ${m.jo_id}`}
-                            {m.shared_activities > 0 && <span className="block text-[11px] font-normal text-slate-500">{m.shared_activities} aktivitas dipakai beberapa WO</span>}
+                            <span className="block text-[11px] font-normal text-slate-500">
+                              {m.from_repair_list ? `Repair list lengkap · ${formatIDR(m.price_in_wo)} sudah ada WO` : 'Dari aktivitas di WO (repair list belum ditarik)'}
+                              {m.shared_activities > 0 ? ` · ${m.shared_activities} aktivitas dipakai beberapa WO` : ''}
+                            </span>
                           </span>
                         </button>
                       </td>

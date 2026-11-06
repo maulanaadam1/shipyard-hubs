@@ -50,6 +50,7 @@ export default function Sidebar({ onTabChange }: { onTabChange: () => void }) {
         { icon: MapIcon, label: 'Vessel Layout', path: '/vessel-layout', resource: 'Vessel Layout' },
         { icon: Activity, label: 'Utility', path: '/utility', resource: 'Utility' },
         { icon: Briefcase, label: 'Job Order', path: '/job-order', resource: 'Job Order' },
+        { icon: ClipboardList, label: 'Repair List', path: '/repair-list', resource: 'Repair List' },
         { icon: FileSpreadsheet, label: 'Work Order', path: '/work-order', resource: 'Work Order' },
         { icon: ListChecks, label: 'Item Pekerjaan WO', path: '/work-order-items', resource: 'Item Pekerjaan WO' },
         { icon: SearchCheck, label: 'Data Perlu Dicek', path: '/data-findings', resource: 'Data Perlu Dicek' },
