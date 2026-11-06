@@ -135,7 +135,7 @@ export default function Sidebar({ onTabChange }: { onTabChange: () => void }) {
                   onTabChange();
                 }}
                 className={`w-full flex items-center justify-between p-3 rounded-xl transition-colors ${
-                  location.pathname === item.path 
+                  (location.pathname === item.path || location.pathname.startsWith(`${item.path}/`)) 
                     ? 'bg-[#FDB913]/10 text-[#e5a611] font-medium' 
                     : 'text-slate-500 hover:bg-slate-50 hover:text-slate-900'
                 }`}
@@ -144,7 +144,7 @@ export default function Sidebar({ onTabChange }: { onTabChange: () => void }) {
                   <item.icon className="w-5 h-5 shrink-0" />
                   <span className="text-sm text-left leading-tight break-words pr-2">{item.label}</span>
                 </div>
-                {location.pathname === item.path && <ChevronRight className="w-4 h-4 shrink-0" />}
+                {(location.pathname === item.path || location.pathname.startsWith(`${item.path}/`)) && <ChevronRight className="w-4 h-4 shrink-0" />}
               </motion.button>
             ))}
           </div>

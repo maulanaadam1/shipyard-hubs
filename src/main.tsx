@@ -222,6 +222,11 @@ createRoot(document.getElementById('root')!).render(
                 <RepairList />
               </ProtectedRoute>
             } />
+            <Route path="repair-list/:joId" element={
+              <ProtectedRoute resource="Repair List">
+                <RepairList />
+              </ProtectedRoute>
+            } />
             <Route path="job-order" element={
               <ProtectedRoute resource="Job Order">
                 <ProjectManagement />
