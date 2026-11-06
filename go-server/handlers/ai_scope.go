@@ -99,12 +99,13 @@ func aiFocusNote(scope *aiScope, periodKey string, now time.Time) string {
 }
 
 type aiInsight struct {
-	Key      string `json:"key"`
-	Label    string `json:"label"`
-	Count    int    `json:"count"`
-	Tone     string `json:"tone"` // danger, warning, neutral
-	Question string `json:"question"`
-	Link     string `json:"link"`
+	Key      string  `json:"key"`
+	Label    string  `json:"label"`
+	Count    int     `json:"count"`
+	Value    float64 `json:"value,omitempty"` // rupiah, when the item is a sum
+	Tone     string  `json:"tone"`            // danger, warning, neutral
+	Question string  `json:"question"`
+	Link     string  `json:"link"`
 }
 
 // GetAIInsights counts what needs attention today, straight from the
@@ -166,8 +167,9 @@ func GetAIInsights(w http.ResponseWriter, r *http.Request) {
 			Question: "Kapal apa saja yang rencana docking dalam 7 hari ke depan, di lokasi mana?", Link: "/ship-docking"})
 	}
 
+	latest := aiLatestToday(r, now)
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]interface{}{"date": today, "insights": insights})
+	json.NewEncoder(w).Encode(map[string]interface{}{"date": today, "insights": insights, "latest": latest})
 }
 
 // GetAIScopes lists the scopes and periods for the question box.
@@ -192,4 +194,66 @@ func GetAIScopes(w http.ResponseWriter, r *http.Request) {
 	}
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]interface{}{"scopes": scopes, "periods": periods})
+}
+
+// aiLatestToday: what is new today (WIB), each only with view rights on its
+// page. Dates are compared on their first 10 characters (YYYY-MM-DD).
+func aiLatestToday(r *http.Request, now time.Time) []aiInsight {
+	today := now.Format("2006-01-02")
+	latest := []aiInsight{}
+	add := func(i aiInsight) {
+		if i.Count > 0 {
+			latest = append(latest, i)
+		}
+	}
+	count := func(query string, args ...interface{}) int {
+		var n int
+		db.QueryRow(query, args...).Scan(&n)
+		return n
+	}
+
+	if HasResourcePermission(r, "Work Order", "view") {
+		add(aiInsight{Key: "new_wo", Label: "WO baru masuk", Tone: "neutral", Link: "/work-order",
+			Count:    count(`SELECT COUNT(*) FROM work_order_summary WHERE SUBSTR(COALESCE(created_source_at, ''), 1, 10) = ?`, today),
+			Question: "WO apa saja yang baru masuk hari ini? Sebutkan kapal, vendor dan nilainya."})
+	}
+	if HasResourcePermission(r, ResourceFinancialDashboard, "view") {
+		var n int
+		var value float64
+		db.QueryRow(`SELECT COUNT(DISTINCT wo_id), COALESCE(SUM(approved_cost), 0) FROM work_order_daily_costs WHERE SUBSTR(cost_date, 1, 10) = ?`, today).Scan(&n, &value)
+		add(aiInsight{Key: "approved_today", Label: "Nilai WO di-approve", Count: n, Value: value, Tone: "neutral", Link: "/financial-dashboard",
+			Question: "WO apa saja yang di-approve hari ini dan berapa nilainya per vendor?"})
+	}
+	if HasResourcePermission(r, ResourceItemFindings, "view") {
+		add(aiInsight{Key: "new_findings", Label: "Temuan harga baru", Tone: "danger", Link: "/data-findings",
+			Count:    count(`SELECT COUNT(*) FROM wo_item_findings WHERE status = 'open' AND SUBSTR(COALESCE(first_seen, ''), 1, 10) = ?`, today),
+			Question: "Item apa saja yang hari ini baru terdeteksi di atas harga acuan? Urutkan dari kelebihan terbesar."})
+	}
+	if HasResourcePermission(r, "Job Order", "view") {
+		day := func(col string) string { return `SUBSTR(COALESCE(NULLIF(` + col + `, ''), ''), 1, 10)` }
+		add(aiInsight{Key: "docking_today", Label: "Kapal docking atau undocking", Tone: "neutral", Link: "/ship-docking",
+			Count: count(`SELECT COUNT(*) FROM projects WHERE `+day("COALESCE(NULLIF(docking, ''), est_docking_date)")+` = ? OR `+
+				day("COALESCE(NULLIF(undocking, ''), est_undocking_date)")+` = ?`, today, today),
+			Question: "Kapal apa saja yang docking atau undocking hari ini, di lokasi mana?"})
+	}
+	if HasResourcePermission(r, ResourceInventory, "view") {
+		add(aiInsight{Key: "material_today", Label: "Pembelian dan pemakaian material", Tone: "neutral", Link: "/material-stock",
+			Count: count(`SELECT (SELECT COUNT(*) FROM inv_purchases WHERE SUBSTR(CAST(tanggal AS TEXT), 1, 10) = ?) +
+				(SELECT COUNT(*) FROM inv_usages WHERE SUBSTR(CAST(tanggal AS TEXT), 1, 10) = ?)`, today, today),
+			Question: "Material apa saja yang dibeli dan dipakai hari ini, untuk proyek apa?"})
+	}
+	if HasResourcePermission(r, ResourceIngestSources, "view") {
+		n := 0
+		if rows, err := loadExternalSheet("workpermit"); err == nil {
+			for _, row := range rows {
+				start := strings.TrimSpace(aiDataText(row["date_start"]))
+				if len(start) >= 10 && start[:10] == today {
+					n++
+				}
+			}
+		}
+		add(aiInsight{Key: "permits_today", Label: "Izin kerja mulai hari ini", Count: n, Tone: "neutral",
+			Question: "Izin kerja apa saja yang mulai hari ini? Sebutkan vendor, kapal, area dan jenis pekerjaannya."})
+	}
+	return latest
 }

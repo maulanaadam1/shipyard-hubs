@@ -107,9 +107,16 @@ func TestAIInsights(t *testing.T) {
 		router.ServeHTTP(rec, httptest.NewRequest("GET", "/api/ai/insights", nil).WithContext(asUser(user)))
 		var out struct {
 			Insights []aiInsight `json:"insights"`
+			Latest   []aiInsight `json:"latest"`
 		}
 		json.Unmarshal(rec.Body.Bytes(), &out)
 		counts := map[string]int{}
+		for _, i := range out.Latest {
+			counts["latest:"+i.Key] = i.Count
+			if i.Key == "approved_today" && i.Value != 1500000 {
+				t.Errorf("approved today value %v", i.Value)
+			}
+		}
 		for _, i := range out.Insights {
 			if i.Question == "" {
 				t.Errorf("%s has no question", i.Key)
@@ -118,7 +125,19 @@ func TestAIInsights(t *testing.T) {
 		}
 		return counts
 	}
+	today := now.Format("2006-01-02")
+	db.Exec("DELETE FROM work_order_daily_costs WHERE wo_id = 'ai-latest'")
+	defer db.Exec("DELETE FROM work_order_daily_costs WHERE wo_id = 'ai-latest'")
+	db.Exec(`INSERT INTO work_order_daily_costs (wo_id, cost_date, approved_cost) VALUES ('ai-latest', ?, 1500000)`, today)
+	db.Exec(`UPDATE wo_item_findings SET first_seen = ? WHERE item_id = 'i1'`, today+" 08:00:00")
+	db.Exec("DELETE FROM projects WHERE id = 'ai-latest'")
+	defer db.Exec("DELETE FROM projects WHERE id = 'ai-latest'")
+	db.Exec(`INSERT INTO projects (id, shipname, est_docking_date) VALUES ('ai-latest', 'KM Uji', ?)`, today)
+
 	admin := get("ai-admin")
+	if admin["latest:approved_today"] != 1 || admin["latest:new_findings"] != 1 || admin["latest:docking_today"] != 1 {
+		t.Errorf("latest: %v", admin)
+	}
 	if admin["findings"] != 2 || admin["stock"] != 2 || admin["permits"] != 1 {
 		t.Errorf("admin insights: %v", admin)
 	}
