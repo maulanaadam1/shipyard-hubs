@@ -91,6 +91,18 @@ func TestQueryAppData(t *testing.T) {
 		t.Fatalf("location name: %v %v", out, err)
 	}
 
+	// Ship Docking fields are left out of Job Orders, and its tables aren't sources.
+	db.Exec(`UPDATE projects SET status_dock = 'Docking', docking = '2026-11-01' WHERE id = 'aijo-1'`)
+	out, _ = run("ai-admin", `{"source": "job_orders", "search": "KM Uji Lokasi"}`)
+	if b, _ := json.Marshal(out); strings.Contains(string(b), "status_dock") || strings.Contains(string(b), `"docking"`) {
+		t.Errorf("docking columns returned: %s", b)
+	}
+	for _, src := range []string{"ship_movements", "dock_statuses"} {
+		if _, err := run("ai-admin", `{"source": "`+src+`"}`); err == nil {
+			t.Errorf("source %s accepted", src)
+		}
+	}
+
 	// Users, roles, permissions and credentials are not sources.
 	for _, src := range []string{"profiles", "users", "roles_master", "role_permissions", "sync_configs", "ai_settings", "ai_chat_log"} {
 		if _, err := run("ai-admin", `{"source": "`+src+`"}`); err == nil {

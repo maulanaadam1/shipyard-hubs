@@ -21,8 +21,8 @@ type aiScope struct {
 var aiScopes = []aiScope{
 	{Key: "wo", Label: "Work Order dan tagihan", Tools: []string{"search_work_orders", "get_work_order", "billing_summary", "search_work_items", "price_reference", "data_findings", "unrecognized_activities"},
 		Hint: "Work Order, item pekerjaan, tagihan, harga acuan dan data perlu dicek"},
-	{Key: "project", Label: "Job Order dan docking", Tools: []string{"query_app_data", "search_work_orders"},
-		Hint: "job_orders, ship_movements, mo_projects, mo_progress, mo_wbs, locations dan dock_statuses lewat query_app_data"},
+	{Key: "project", Label: "Job Order", Tools: []string{"query_app_data", "search_work_orders"},
+		Hint: "job_orders, mo_projects, mo_progress, mo_wbs dan locations lewat query_app_data"},
 	{Key: "material", Label: "Material", Tools: []string{"query_app_data"},
 		Hint: "material_stock, material_purchases, material_usages, material_master, material_requests dan components lewat query_app_data"},
 	{Key: "manpower", Label: "Manpower dan absensi", Tools: []string{"attendance_hours", "query_app_data"},
@@ -159,13 +159,6 @@ func GetAIInsights(w http.ResponseWriter, r *http.Request) {
 		add(aiInsight{Key: "waiting", Label: "WO Waiting lebih dari 30 hari", Count: n, Tone: "neutral",
 			Question: "WO mana saja yang masih Waiting lebih dari 30 hari? Tampilkan nilai dan vendornya, urutkan dari yang terlama.", Link: "/work-order"})
 	}
-	if HasResourcePermission(r, "Job Order", "view") {
-		var n int
-		db.QueryRow(`SELECT COUNT(*) FROM projects WHERE SUBSTR(COALESCE(est_docking_date, ''), 1, 10) BETWEEN ? AND ?`,
-			today, now.AddDate(0, 0, 7).Format("2006-01-02")).Scan(&n)
-		add(aiInsight{Key: "docking", Label: "Kapal rencana docking 7 hari ke depan", Count: n, Tone: "neutral",
-			Question: "Kapal apa saja yang rencana docking dalam 7 hari ke depan, di lokasi mana?", Link: "/ship-docking"})
-	}
 
 	latest := aiLatestToday(r, now)
 	w.Header().Set("Content-Type", "application/json")
@@ -228,13 +221,6 @@ func aiLatestToday(r *http.Request, now time.Time) []aiInsight {
 		add(aiInsight{Key: "new_findings", Label: "Temuan harga baru", Tone: "danger", Link: "/data-findings",
 			Count:    count(`SELECT COUNT(*) FROM wo_item_findings WHERE status = 'open' AND SUBSTR(COALESCE(first_seen, ''), 1, 10) = ?`, today),
 			Question: "Item apa saja yang hari ini baru terdeteksi di atas harga acuan? Urutkan dari kelebihan terbesar."})
-	}
-	if HasResourcePermission(r, "Job Order", "view") {
-		day := func(col string) string { return `SUBSTR(COALESCE(NULLIF(` + col + `, ''), ''), 1, 10)` }
-		add(aiInsight{Key: "docking_today", Label: "Kapal docking atau undocking", Tone: "neutral", Link: "/ship-docking",
-			Count: count(`SELECT COUNT(*) FROM projects WHERE `+day("COALESCE(NULLIF(docking, ''), est_docking_date)")+` = ? OR `+
-				day("COALESCE(NULLIF(undocking, ''), est_undocking_date)")+` = ?`, today, today),
-			Question: "Kapal apa saja yang docking atau undocking hari ini, di lokasi mana?"})
 	}
 	if HasResourcePermission(r, ResourceInventory, "view") {
 		add(aiInsight{Key: "material_today", Label: "Pembelian dan pemakaian material", Tone: "neutral", Link: "/material-stock",

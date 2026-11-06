@@ -135,8 +135,15 @@ func TestAIInsights(t *testing.T) {
 	db.Exec(`INSERT INTO projects (id, shipname, est_docking_date) VALUES ('ai-latest', 'KM Uji', ?)`, today)
 
 	admin := get("ai-admin")
-	if admin["latest:approved_today"] != 1 || admin["latest:new_findings"] != 1 || admin["latest:docking_today"] != 1 {
+	if admin["latest:approved_today"] != 1 || admin["latest:new_findings"] != 1 {
 		t.Errorf("latest: %v", admin)
+	}
+	// Ship Docking data isn't used yet.
+	if _, ok := admin["latest:docking_today"]; ok {
+		t.Error("docking still in latest")
+	}
+	if _, ok := admin["docking"]; ok {
+		t.Error("docking still in insights")
 	}
 	if admin["findings"] != 2 || admin["stock"] != 2 || admin["permits"] != 1 {
 		t.Errorf("admin insights: %v", admin)
