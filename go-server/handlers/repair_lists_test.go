@@ -182,6 +182,19 @@ func TestRepairLists(t *testing.T) {
 		t.Errorf("margin: %v", jo)
 	}
 
+	// A RepairLists config: its URL template and headers are used.
+	db.Exec("DELETE FROM sync_configs WHERE id = 'RepairLists'")
+	t.Cleanup(func() { db.Exec("DELETE FROM sync_configs WHERE id = 'RepairLists'") })
+	db.Exec(`UPDATE sync_configs SET headers = '{}' WHERE id = 'WorkOrderDetails'`)
+	db.Exec(`INSERT INTO sync_configs (id, name, url, headers, is_active) VALUES ('RepairLists', 'RepairLists', ?, '{"X-Test-Auth": "secret"}', true)`,
+		server.URL+"/custom/{{id}}/activities?version={{version}}&page={{page}}")
+	db.Exec("DELETE FROM jo_repair_lists WHERE jo_id = '77'")
+	requests = nil
+	if n, err := syncRepairLists(); err != nil || n != 1 || !strings.HasPrefix(requests[0], "/custom/77/activities") {
+		t.Fatalf("override: %d, %v, %v", n, err, requests)
+	}
+	db.Exec("DELETE FROM sync_configs WHERE id = 'RepairLists'")
+
 	// Credentials refused: the sync stops with a clear error.
 	db.Exec(`UPDATE sync_configs SET headers = '{}' WHERE id = 'WorkOrderDetails'`)
 	db.Exec("DELETE FROM jo_repair_lists")
