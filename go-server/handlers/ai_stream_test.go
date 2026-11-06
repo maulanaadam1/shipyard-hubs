@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -304,4 +305,40 @@ func TestAIDateContext(t *testing.T) {
 	check(aiDateContext(time.Date(2028, 1, 1, 8, 0, 0, 0, loc)),
 		"- kemarin: 2027-12-31 s.d. 2027-12-31", "- bulan lalu: 2027-12-01 s.d. 2027-12-31", "- tahun lalu: 2027-01-01 s.d. 2027-12-31")
 	check(aiDateContext(time.Date(2028, 3, 10, 8, 0, 0, 0, loc)), "- bulan lalu: 2028-02-01 s.d. 2028-02-29")
+}
+
+// Stop: the page closes the stream; the answer ends and is logged as stopped.
+func TestAIChatStopped(t *testing.T) {
+	setupStreamTest(t)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		io.ReadAll(r.Body)
+		select { // a slow model
+		case <-r.Context().Done():
+		case <-time.After(5 * time.Second):
+		}
+	}))
+	defer server.Close()
+	putSettings(t, "ai-admin", `{"provider": "openai", "base_url": "`+server.URL+`", "model": "m", "daily_limit": 0, "enabled": true}`)
+
+	ctx, cancel := context.WithCancel(asUser("ai-admin"))
+	req := httptest.NewRequest("POST", "/api/ai/chat", strings.NewReader(`{"messages": [{"role": "user", "content": "Pertanyaan panjang"}]}`)).WithContext(ctx)
+	req.Header.Set("Accept", "text/event-stream")
+	rec := httptest.NewRecorder()
+	done := make(chan struct{})
+	go func() { PostAIChat(rec, req); close(done) }()
+	time.Sleep(200 * time.Millisecond)
+	cancel()
+	select {
+	case <-done:
+	case <-time.After(3 * time.Second):
+		t.Fatal("answer did not stop")
+	}
+	if !strings.Contains(rec.Body.String(), "event: start") {
+		t.Errorf("no start event: %s", rec.Body.String())
+	}
+	var failure, stop string
+	db.QueryRow(`SELECT error, stop_reason FROM ai_chat_log WHERE user_id = 'ai-admin'`).Scan(&failure, &stop)
+	if failure != aiStoppedMessage || stop != "stopped" {
+		t.Errorf("logged %q / %q", failure, stop)
+	}
 }

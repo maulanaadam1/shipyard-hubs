@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import {
   Bot, Plus, Database, Copy, Check, ThumbsUp, ThumbsDown, Loader2, FileSpreadsheet, History, Trash2, X,
-  FileText, Tags, Ship, Package, ChevronDown, CornerDownRight, AlertTriangle, ArrowRight, CalendarDays, ArrowUp, Layers, Sparkles,
+  FileText, Tags, Ship, Package, ChevronDown, CornerDownRight, AlertTriangle, ArrowRight, CalendarDays, ArrowUp, Layers, Sparkles, Square,
 } from 'lucide-react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { getHeaders } from '@/lib/api-client';
@@ -17,7 +17,7 @@ type ToolCall = { name: string; input: Record<string, unknown>; is_error: boolea
 type Message = {
   role: 'user' | 'assistant'; content: string; tools?: ToolCall[]; error?: boolean;
   id?: string; feedback?: 'up' | 'down' | ''; streaming?: boolean; activity?: string[];
-  suggestions?: string[]; durationMs?: number;
+  suggestions?: string[]; durationMs?: number; stopped?: boolean;
 };
 type Status = { enabled: boolean; provider: string; model: string; daily_limit: number; used_today: number; tools: string[]; is_admin: boolean };
 type Conversation = { id: string; title: string; updated_at: string; questions: number };
@@ -182,6 +182,7 @@ export default function AIAssistant() {
   const [period, setPeriod] = useState(() => remembered('ai.period'));
   const [params, setParams] = useSearchParams();
   const endRef = useRef<HTMLDivElement>(null);
+  const abortRef = useRef<AbortController | null>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
   const loadStatus = async () => {
@@ -287,7 +288,7 @@ export default function AIAssistant() {
   const send = async (text: string) => {
     const question = text.trim();
     if (!question || sending) return;
-    const history = messages.filter(m => !m.error && !m.streaming);
+    const history = messages.filter(m => !m.error && !m.streaming && !m.stopped);
     setMessages([...messages.map(m => ({ ...m, suggestions: undefined })), { role: 'user', content: question },
       { role: 'assistant', content: '', streaming: true, activity: ['Membaca pertanyaan'] }]);
     setDraft('');
@@ -300,9 +301,12 @@ export default function AIAssistant() {
         suggestions: data.suggestions, durationMs: data.duration_ms,
       }));
     };
+    const controller = new AbortController();
+    abortRef.current = controller;
     try {
       const res = await fetch('/api/ai/chat', {
         method: 'POST',
+        signal: controller.signal,
         headers: { ...(await getHeaders()), Accept: 'text/event-stream' },
         body: JSON.stringify({
           conversation_id: conversationId || undefined,
@@ -321,7 +325,9 @@ export default function AIAssistant() {
       }
       let finished = false;
       await readEvents(res, (event, data) => {
-        if (event === 'round') {
+        if (event === 'start') {
+          if (data.conversation_id) setConversationId(data.conversation_id);
+        } else if (event === 'round') {
           updateLast(m => ({ ...m, content: '' }));
         } else if (event === 'tool') {
           const label = PROGRESS_LABELS[data.name] || `Menjalankan ${data.name}`;
@@ -339,14 +345,22 @@ export default function AIAssistant() {
       });
       if (!finished) throw new Error('Koneksi terputus sebelum jawaban selesai. Coba lagi.');
     } catch (e: any) {
-      updateLast(() => ({ role: 'assistant', content: e?.message || 'Gagal menghubungi AI Asisten.', error: true }));
+      if (controller.signal.aborted) {
+        // Stopped by the user: keep what was written so far.
+        updateLast(m => ({ role: 'assistant', content: visibleText(m.content).trim(), stopped: true }));
+      } else {
+        updateLast(() => ({ role: 'assistant', content: e?.message || 'Gagal menghubungi AI Asisten.', error: true }));
+      }
     } finally {
+      abortRef.current = null;
       setSending(false);
       loadStatus();
       loadConversations();
       loadInsights();
     }
   };
+
+  const stop = () => abortRef.current?.abort();
 
   const rate = async (index: number, rating: 'up' | 'down') => {
     const m = messages[index];
@@ -571,7 +585,8 @@ export default function AIAssistant() {
 
                   {(text || !m.streaming) && (
                     <div className="rounded-2xl px-4 py-3 text-sm bg-white text-slate-800 border border-slate-200 min-w-0">
-                      <AIMarkdown text={text} tableDownload={false} />
+                      {text ? <AIMarkdown text={text} tableDownload={false} /> : null}
+                      {m.stopped && <p className={`text-xs text-slate-500 ${text ? 'mt-2' : ''}`}>{text ? 'Dihentikan.' : 'Dihentikan sebelum ada jawaban.'}</p>}
                       {m.streaming && <span className="inline-block w-1.5 h-4 align-text-bottom bg-slate-400 animate-pulse" aria-hidden="true" />}
                       {!m.streaming && steps > 0 && (
                         <div className="mt-3 pt-2 border-t border-slate-100 flex flex-wrap items-center gap-1.5 text-xs text-slate-600">
@@ -645,8 +660,11 @@ export default function AIAssistant() {
                 e.target.style.height = 'auto';
                 e.target.style.height = `${Math.min(e.target.scrollHeight, 200)}px`;
               }}
-              onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(draft); } }}
-              disabled={!canAsk || sending}
+              onKeyDown={e => {
+                if (e.key === 'Escape' && sending) { e.preventDefault(); stop(); }
+                else if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(draft); }
+              }}
+              disabled={!canAsk}
               placeholder={canAsk ? 'Tanya tentang WO, tagihan, material…' : status?.enabled ? 'Batas pertanyaan hari ini sudah tercapai' : 'AI Asisten belum aktif'}
               className="block w-full resize-none bg-transparent px-4 pt-3.5 pb-1 text-sm leading-6 text-slate-800 placeholder:text-slate-400 outline-none disabled:cursor-not-allowed"
             />
@@ -661,11 +679,18 @@ export default function AIAssistant() {
                   value={periods.some(p => p.key === period) ? period : ''}
                   options={[{ key: '', label: 'Semua periode' }, ...periods]} onChange={choosePeriod} />
               )}
-              <span className="ml-auto hidden sm:inline text-[11px] text-slate-400">Shift+Enter baris baru</span>
-              <button type="submit" disabled={!canAsk || sending || !draft.trim()} aria-label="Kirim pertanyaan" title="Kirim"
-                className="ml-auto sm:ml-2 grid h-8 w-8 shrink-0 place-items-center rounded-full bg-slate-900 text-white hover:bg-slate-700 disabled:bg-slate-200 disabled:text-slate-400">
-                {sending ? <Loader2 size={16} className="animate-spin" aria-hidden="true" /> : <ArrowUp size={17} strokeWidth={2.5} aria-hidden="true" />}
-              </button>
+              <span className="ml-auto hidden sm:inline text-[11px] text-slate-400">{sending ? 'Esc untuk berhenti' : 'Shift+Enter baris baru'}</span>
+              {sending ? (
+                <button type="button" onClick={stop} aria-label="Hentikan jawaban" title="Hentikan (Esc)"
+                  className="ml-auto sm:ml-2 grid h-8 w-8 shrink-0 place-items-center rounded-full bg-slate-900 text-white hover:bg-slate-700">
+                  <Square size={12} fill="currentColor" aria-hidden="true" />
+                </button>
+              ) : (
+                <button type="submit" disabled={!canAsk || !draft.trim()} aria-label="Kirim pertanyaan" title="Kirim"
+                  className="ml-auto sm:ml-2 grid h-8 w-8 shrink-0 place-items-center rounded-full bg-slate-900 text-white hover:bg-slate-700 disabled:bg-slate-200 disabled:text-slate-400">
+                  <ArrowUp size={17} strokeWidth={2.5} aria-hidden="true" />
+                </button>
+              )}
             </div>
           </form>
         </main>
