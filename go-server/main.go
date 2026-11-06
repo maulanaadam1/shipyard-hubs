@@ -127,6 +127,8 @@ func main() {
 		r.With(aiView).Get("/api/ai/status", handlers.GetAIStatus)
 		r.With(aiView).Post("/api/ai/chat", handlers.PostAIChat)
 		r.With(aiView).Post("/api/ai/feedback", handlers.PostAIFeedback)
+		r.With(aiView).Get("/api/ai/insights", handlers.GetAIInsights)
+		r.With(aiView).Get("/api/ai/scopes", handlers.GetAIScopes)
 		r.With(aiView).Get("/api/ai/conversations", handlers.GetAIConversations)
 		r.With(aiView).Get("/api/ai/conversations/{id}", handlers.GetAIConversation)
 		r.With(aiView).Delete("/api/ai/conversations/{id}", handlers.DeleteAIConversation)

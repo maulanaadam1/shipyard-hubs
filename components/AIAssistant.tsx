@@ -1,9 +1,9 @@
 import React, { useEffect, useRef, useState } from 'react';
 import {
   Bot, Send, Plus, Database, Copy, Check, ThumbsUp, ThumbsDown, Loader2, FileSpreadsheet, History, Trash2, X,
-  FileText, Tags, Ship, Package, ChevronDown, CornerDownRight,
+  FileText, Tags, Ship, Package, ChevronDown, CornerDownRight, AlertTriangle, ArrowRight, CalendarDays,
 } from 'lucide-react';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { getHeaders } from '@/lib/api-client';
 import AIMarkdown, { tablesIn, downloadAnswerTables } from './AIMarkdown';
 
@@ -21,6 +21,18 @@ type Message = {
 };
 type Status = { enabled: boolean; provider: string; model: string; daily_limit: number; used_today: number; tools: string[]; is_admin: boolean };
 type Conversation = { id: string; title: string; updated_at: string; questions: number };
+type Insight = { key: string; label: string; count: number; tone: 'danger' | 'warning' | 'neutral'; question: string; link?: string };
+type Option = { key: string; label: string };
+
+const TONE: Record<Insight['tone'], string> = {
+  danger: 'bg-rose-50 text-rose-800',
+  warning: 'bg-amber-50 text-amber-900',
+  neutral: 'bg-slate-100 text-slate-700',
+};
+
+// Remembered per browser: the scope and period last used.
+const remembered = (key: string) => { try { return localStorage.getItem(key) || ''; } catch { return ''; } };
+const remember = (key: string, value: string) => { try { localStorage.setItem(key, value); } catch { /* storage blocked */ } };
 
 const TOOL_LABELS: Record<string, string> = {
   search_work_orders: 'Pencarian WO',
@@ -110,6 +122,12 @@ export default function AIAssistant() {
   const [draft, setDraft] = useState('');
   const [sending, setSending] = useState(false);
   const [copied, setCopied] = useState<number | null>(null);
+  const [insights, setInsights] = useState<Insight[] | null>(null);
+  const [scopes, setScopes] = useState<Option[]>([]);
+  const [periods, setPeriods] = useState<Option[]>([]);
+  const [scope, setScope] = useState(() => remembered('ai.scope'));
+  const [period, setPeriod] = useState(() => remembered('ai.period'));
+  const [params, setParams] = useSearchParams();
   const endRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
@@ -129,7 +147,35 @@ export default function AIAssistant() {
       if (res.ok) setConversations((await res.json()).conversations || []);
     } catch { /* the history panel stays as it was */ }
   };
-  useEffect(() => { loadStatus(); loadConversations(); }, []);
+  const loadInsights = async () => {
+    try {
+      const res = await fetch('/api/ai/insights', { headers: await getHeaders() });
+      if (res.ok) setInsights((await res.json()).insights || []);
+    } catch { /* the card stays hidden */ }
+  };
+  const loadScopes = async () => {
+    try {
+      const res = await fetch('/api/ai/scopes', { headers: await getHeaders() });
+      if (!res.ok) return;
+      const body = await res.json();
+      setScopes(body.scopes || []);
+      setPeriods(body.periods || []);
+    } catch { /* the chips stay hidden */ }
+  };
+  const chooseScope = (key: string) => { setScope(key); remember('ai.scope', key); };
+  const choosePeriod = (key: string) => { setPeriod(key); remember('ai.period', key); };
+  useEffect(() => { loadStatus(); loadConversations(); loadInsights(); loadScopes(); }, []);
+  // "Tanya AI" on other pages opens this page with ?q= (and ?scope=): the
+  // question is put in the box, not sent, so the user can edit it first.
+  useEffect(() => {
+    const q = params.get('q');
+    const s = params.get('scope');
+    if (!q && s === null) return;
+    if (q) setDraft(q);
+    if (s !== null) chooseScope(s);
+    setParams({}, { replace: true });
+    setTimeout(() => inputRef.current?.focus(), 0);
+  }, [params]);
   // Follow the conversation; with no messages yet, stay at the top.
   useEffect(() => {
     if (messages.length) endRef.current?.scrollIntoView({ behavior: sending ? 'auto' : 'smooth', block: 'end' });
@@ -203,6 +249,8 @@ export default function AIAssistant() {
         headers: { ...(await getHeaders()), Accept: 'text/event-stream' },
         body: JSON.stringify({
           conversation_id: conversationId || undefined,
+          scope: scopes.some(s => s.key === scope) ? scope : undefined,
+          period: periods.some(p => p.key === period) ? period : undefined,
           messages: [...history, { role: 'user', content: question }].map(m => ({ role: m.role, content: m.content })),
         }),
       });
@@ -239,6 +287,7 @@ export default function AIAssistant() {
       setSending(false);
       loadStatus();
       loadConversations();
+      loadInsights();
     }
   };
 
@@ -266,6 +315,26 @@ export default function AIAssistant() {
     (acc[dayGroup(c.updated_at)] ||= []).push(c);
     return acc;
   }, {});
+
+  const insightsCard = insights && insights.length > 0 && (
+    <section className="p-4 rounded-2xl border border-slate-200 bg-white" aria-labelledby="ai-insights-title">
+      <p id="ai-insights-title" className="text-sm font-semibold text-slate-800 flex items-center gap-2">
+        <AlertTriangle size={16} className="text-amber-700" aria-hidden="true" /> Perlu perhatian hari ini
+      </p>
+      <ul className="mt-2 flex flex-col">
+        {insights.map(i => (
+          <li key={i.key} className="border-t border-slate-100 first:border-t-0">
+            <button type="button" onClick={() => send(i.question)} disabled={!canAsk || sending}
+              className="w-full flex items-center justify-between gap-3 py-2 text-left text-sm text-slate-700 hover:text-slate-900 disabled:opacity-50">
+              <span className="min-w-0">{i.label}</span>
+              <span className={`shrink-0 min-w-[2rem] text-center text-xs font-semibold px-2 py-0.5 rounded-full tabular-nums ${TONE[i.tone] || TONE.neutral}`}>{i.count}</span>
+            </button>
+          </li>
+        ))}
+      </ul>
+      <p className="mt-1 text-xs text-slate-500 flex items-center gap-1">Klik untuk tanya AI <ArrowRight size={12} aria-hidden="true" /></p>
+    </section>
+  );
 
   const historyPanel = (
     <nav aria-label="Riwayat percakapan" className="flex flex-col gap-4 p-3">
@@ -352,6 +421,8 @@ export default function AIAssistant() {
           )}
 
           {loadingConversation && <p className="text-sm text-slate-500 flex items-center gap-2"><Loader2 size={14} className="animate-spin" aria-hidden="true" /> Membuka percakapan…</p>}
+
+          {messages.length === 0 && !loadingConversation && insightsCard && <div className="xl:hidden">{insightsCard}</div>}
 
           {messages.length === 0 && !loadingConversation && (
             <section>
@@ -485,9 +556,36 @@ export default function AIAssistant() {
           </div>
 
           <form
-            className="sticky bottom-4 mt-auto flex gap-2 p-2 rounded-2xl border border-slate-300 bg-white shadow-sm"
+            className="sticky bottom-4 mt-auto flex flex-col gap-2 p-2 rounded-2xl border border-slate-300 bg-white shadow-sm"
             onSubmit={e => { e.preventDefault(); send(draft); }}
           >
+            {(scopes.length > 0 || periods.length > 0) && (
+              <div className="flex flex-wrap items-center gap-1.5 px-1">
+                <div role="radiogroup" aria-label="Cakupan data" className="flex flex-wrap gap-1.5">
+                  {[{ key: '', label: 'Semua data' }, ...scopes].map(o => {
+                    const on = (scopes.some(s => s.key === scope) ? scope : '') === o.key;
+                    return (
+                      <button key={o.key || 'all'} type="button" role="radio" aria-checked={on} onClick={() => chooseScope(o.key)}
+                        className={`px-2.5 py-1 rounded-full text-xs border ${on ? 'bg-slate-900 text-white border-slate-900' : 'bg-white text-slate-600 border-slate-200 hover:border-slate-400'}`}>
+                        {o.label}
+                      </button>
+                    );
+                  })}
+                </div>
+                {periods.length > 0 && (
+                  <label className="ml-auto inline-flex items-center gap-1 text-xs text-slate-600">
+                    <CalendarDays size={13} aria-hidden="true" />
+                    <span className="sr-only">Periode</span>
+                    <select value={periods.some(p => p.key === period) ? period : ''} onChange={e => choosePeriod(e.target.value)}
+                      className="py-1 pl-1.5 pr-6 rounded-lg border border-slate-200 bg-white text-xs text-slate-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-slate-400">
+                      <option value="">Semua periode</option>
+                      {periods.map(p => <option key={p.key} value={p.key}>{p.label}</option>)}
+                    </select>
+                  </label>
+                )}
+              </div>
+            )}
+            <div className="flex gap-2">
             <label htmlFor="ai-question" className="sr-only">Pertanyaan</label>
             <textarea
               id="ai-question"
@@ -504,8 +602,15 @@ export default function AIAssistant() {
               className="self-end inline-flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-semibold bg-[#FDB913] text-slate-900 hover:bg-[#e5a611] disabled:opacity-50">
               {sending ? <Loader2 size={14} className="animate-spin" aria-hidden="true" /> : <Send size={14} aria-hidden="true" />} Kirim
             </button>
+            </div>
           </form>
         </main>
+
+        {insightsCard && (
+          <aside className="hidden xl:block w-72 shrink-0 pr-6 pt-6" aria-label="Ringkasan">
+            <div className="sticky top-[73px]">{insightsCard}</div>
+          </aside>
+        )}
       </div>
     </div>
   );

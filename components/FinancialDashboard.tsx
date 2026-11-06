@@ -25,6 +25,7 @@ import {
 } from 'lucide-react';
 import { api, getHeaders } from '@/lib/api-client';
 import { SearchableSelect } from './SearchableSelect';
+import AskAIButton from './AskAIButton';
 
 const MOCK_DATA: any[] = [];
 
@@ -582,7 +583,10 @@ export default function FinancialDashboard() {
       
       <header className="sticky top-0 z-30 border-b backdrop-blur-md px-6 py-4 flex flex-wrap justify-between items-center gap-4 bg-white/80 border-slate-200">
         <div>
-          <h2 className="font-display font-bold text-xl md:text-2xl tracking-tight text-slate-800">Financial Dashboard</h2>
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+            <h2 className="font-display font-bold text-xl md:text-2xl tracking-tight text-slate-800">Financial Dashboard</h2>
+            <AskAIButton scope="wo" questions={["Tagihan approved sebulan terakhir, per minggu", "Vendor dengan tagihan terbesar bulan ini", "Bandingkan tagihan bulan ini dengan bulan lalu"]} />
+          </div>
           <p className="text-xs md:text-sm text-slate-500 mt-1">Monitoring Arus Kas & Tagihan Mingguan (Berdasarkan Approval Date)</p>
         </div>
         <div className="flex items-center gap-3">

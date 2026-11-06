@@ -25,6 +25,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import { api } from '@/lib/api-client';
 import Papa from 'papaparse';
 import * as XLSX from 'xlsx';
+import AskAIButton from './AskAIButton';
 
 export default function ProjectManagement() {
   const { projects, setProjects, dropdownConfigs, locations, ships, fetchData, canAccess, employees, services } = useData();
@@ -451,7 +452,10 @@ export default function ProjectManagement() {
       {/* Header Section */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
-          <h1 className="font-display font-bold text-2xl text-slate-800 tracking-tight">Job Order</h1>
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+            <h1 className="font-display font-bold text-2xl text-slate-800 tracking-tight">Job Order</h1>
+            <AskAIButton scope="project" questions={["Job Order aktif per lokasi dock", "Job Order yang selesai bulan ini", "Progres proyek yang tertinggal dari rencana"]} />
+          </div>
           <p className="text-slate-500 text-sm mt-1">Manage project IDs and vessel assignments.</p>
         </div>
         <div className="flex flex-wrap items-center gap-3">

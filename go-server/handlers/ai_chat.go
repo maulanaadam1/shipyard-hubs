@@ -133,6 +133,8 @@ func PostAIChat(w http.ResponseWriter, r *http.Request) {
 	var body struct {
 		Messages       []aiChatMessage `json:"messages"`
 		ConversationID string          `json:"conversation_id"`
+		Scope          string          `json:"scope"`  // see aiScopes; empty = all data
+		Period         string          `json:"period"` // see aiPeriod; empty = none
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil || len(body.Messages) == 0 {
 		fail(http.StatusBadRequest, "messages wajib diisi")
@@ -186,7 +188,7 @@ func PostAIChat(w http.ResponseWriter, r *http.Request) {
 		fail(http.StatusNotFound, err.Error())
 		return
 	}
-	res := runAIChat(r, cfg, claims, convID, last.Content, history, emit)
+	res := runAIChat(r, cfg, claims, convID, last.Content, history, emit, aiChatFocus{Scope: findAIScope(body.Scope), Period: body.Period})
 	if emit != nil {
 		if res.Failure != "" {
 			emit("error", map[string]string{"error": res.Failure})
@@ -215,10 +217,16 @@ type aiChatResult struct {
 }
 
 // runAIChat runs the tool loop for one question and logs it.
-func runAIChat(r *http.Request, cfg aiProviderConfig, claims middleware.UserClaims, convID, question string, history []aiChatMessage, emit aiEmitter) aiChatResult {
+// aiChatFocus: the scope and period chosen above the question box.
+type aiChatFocus struct {
+	Scope  *aiScope
+	Period string
+}
+
+func runAIChat(r *http.Request, cfg aiProviderConfig, claims middleware.UserClaims, convID, question string, history []aiChatMessage, emit aiEmitter, focus aiChatFocus) aiChatResult {
 	start := time.Now()
 	res := aiChatResult{ID: uuid.New().String(), ConversationID: convID, ToolCalls: []aiToolCall{}, Suggestions: []string{}}
-	tools := availableAITools(r)
+	tools := scopeTools(availableAITools(r), focus.Scope)
 	var onText func(string)
 	if emit != nil {
 		onText = func(delta string) { emit("text", map[string]string{"delta": delta}) }
@@ -237,7 +245,11 @@ func runAIChat(r *http.Request, cfg aiProviderConfig, claims middleware.UserClai
 		if aiWantsChart(history[n-1].Content) {
 			suffix = "\n\n" + aiChartReminder
 		}
-		history = append(history[:n-1:n-1], aiChatMessage{Role: "user", Content: "[" + dateContext + "]\n" + history[n-1].Content + suffix})
+		context := dateContext
+		if note := aiFocusNote(focus.Scope, focus.Period, time.Now()); note != "" {
+			context += ". " + note
+		}
+		history = append(history[:n-1:n-1], aiChatMessage{Role: "user", Content: "[" + context + "]\n" + history[n-1].Content + suffix})
 	}
 	session, err := newAISession(cfg, aiInstructions+"\n\n"+aiGlossary, dateContext, history, tools)
 	if err != nil {
