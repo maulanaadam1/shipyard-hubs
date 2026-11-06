@@ -238,7 +238,7 @@ func TestAIStreamErrorAndLogs(t *testing.T) {
 	}
 
 	router := chi.NewRouter()
-	router.With(RequireAdmin).Get("/api/ai/logs", GetAILogs)
+	router.With(RequirePermission(ResourceAILogs, "view")).Get("/api/ai/logs", GetAILogs)
 	get := func(user, query string) (int, map[string]interface{}) {
 		rec := httptest.NewRecorder()
 		router.ServeHTTP(rec, httptest.NewRequest("GET", "/api/ai/logs"+query, nil).WithContext(asUser(user)))

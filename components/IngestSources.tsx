@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { Copy, Inbox, KeyRound, Pencil, Plus, Power, X } from 'lucide-react';
 import { getHeaders } from '@/lib/api-client';
 
-// Sumber Data Eksternal (Admin only): systems that push rows to
+// Sumber Data Eksternal (Role Management permission): systems that push rows to
 // POST /api/ingest/{id}, each with its own token. A token is shown once, when
 // a source is created or its token is rotated; the server keeps only a hash.
 //

@@ -173,15 +173,6 @@ function ProtectedRoute({ children, resource }: { children: React.ReactNode, res
   return <>{children}</>;
 }
 
-// AdminRoute: pages only Admins may open, whatever the role permissions say.
-function AdminRoute({ children, resource }: { children: React.ReactNode, resource: string }) {
-  const { currentUser } = useData();
-  if (currentUser?.role !== 'Admin') {
-    return <AccessDenied resource={resource} />;
-  }
-  return <>{children}</>;
-}
-
 function AppContent() {
   const { currentUser, isAuthLoading, isLoading } = useData();
 
@@ -246,19 +237,19 @@ createRoot(document.getElementById('root')!).render(
               </ProtectedRoute>
             } />
             <Route path="ai-logs" element={
-              <AdminRoute resource="Log AI">
+              <ProtectedRoute resource="Log AI">
                 <AILogs />
-              </AdminRoute>
+              </ProtectedRoute>
             } />
             <Route path="ingest-sources" element={
-              <AdminRoute resource="Sumber Data Eksternal">
+              <ProtectedRoute resource="Sumber Data Eksternal">
                 <IngestSources />
-              </AdminRoute>
+              </ProtectedRoute>
             } />
             <Route path="ai-settings" element={
-              <AdminRoute resource="Pengaturan AI">
+              <ProtectedRoute resource="Pengaturan AI">
                 <AISettings />
-              </AdminRoute>
+              </ProtectedRoute>
             } />
             <Route path="price-reference" element={
               <ProtectedRoute resource="Harga Acuan">

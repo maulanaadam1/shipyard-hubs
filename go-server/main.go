@@ -132,19 +132,23 @@ func main() {
 		r.With(aiView).Get("/api/ai/conversations", handlers.GetAIConversations)
 		r.With(aiView).Get("/api/ai/conversations/{id}", handlers.GetAIConversation)
 		r.With(aiView).Delete("/api/ai/conversations/{id}", handlers.DeleteAIConversation)
-		r.With(handlers.RequireAdmin).Get("/api/ai/logs", handlers.GetAILogs)
+		r.With(handlers.RequirePermission(handlers.ResourceAILogs, "view")).Get("/api/ai/logs", handlers.GetAILogs)
 		// Work hours from attendance punches; Admin only until it has a menu.
 		r.With(appMiddleware.RequireRole("Admin")).Get("/api/attendance/daily", handlers.GetAttendanceDaily)
 		// Sumber Data Eksternal: sources and their tokens, Admin only.
-		ingestAdmin := handlers.RequireAdminWith("hanya Admin yang bisa mengelola Sumber Data Eksternal")
-		r.With(ingestAdmin).Get("/api/ingest-sources", handlers.GetIngestSources)
-		r.With(ingestAdmin).Post("/api/ingest-sources", handlers.CreateIngestSource)
-		r.With(ingestAdmin).Put("/api/ingest-sources/{id}", handlers.UpdateIngestSource)
-		r.With(ingestAdmin).Post("/api/ingest-sources/{id}/rotate-token", handlers.RotateIngestSourceToken)
+		// Sumber Data Eksternal, Pengaturan AI and Log AI: role permissions
+		// (Role Management); Admin always has them.
+		ingestPerm := func(action string) func(http.Handler) http.Handler {
+			return handlers.RequirePermission(handlers.ResourceIngestSources, action)
+		}
+		r.With(ingestPerm("view")).Get("/api/ingest-sources", handlers.GetIngestSources)
+		r.With(ingestPerm("add")).Post("/api/ingest-sources", handlers.CreateIngestSource)
+		r.With(ingestPerm("edit")).Put("/api/ingest-sources/{id}", handlers.UpdateIngestSource)
+		r.With(ingestPerm("edit")).Post("/api/ingest-sources/{id}/rotate-token", handlers.RotateIngestSourceToken)
 		r.Post("/api/ai/tools/{name}", handlers.RunAITool)
-		r.With(handlers.RequireAdmin).Get("/api/ai/settings", handlers.GetAISettings)
-		r.With(handlers.RequireAdmin).Put("/api/ai/settings", handlers.PutAISettings)
-		r.With(handlers.RequireAdmin).Post("/api/ai/settings/test", handlers.TestAISettings)
+		r.With(handlers.RequirePermission(handlers.ResourceAISettings, "view")).Get("/api/ai/settings", handlers.GetAISettings)
+		r.With(handlers.RequirePermission(handlers.ResourceAISettings, "edit")).Put("/api/ai/settings", handlers.PutAISettings)
+		r.With(handlers.RequirePermission(handlers.ResourceAISettings, "edit")).Post("/api/ai/settings/test", handlers.TestAISettings)
 		// Harga Acuan: reference unit costs per work type, size and unit.
 		priceView := handlers.RequirePermission(handlers.ResourcePriceReference, "view")
 		r.With(priceView).Get("/api/price-reference", handlers.GetPriceReferences)

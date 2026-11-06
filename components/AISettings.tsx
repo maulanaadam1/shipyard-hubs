@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { Bot, KeyRound, PlugZap, Save } from 'lucide-react';
 import { getHeaders } from '@/lib/api-client';
 
-// Pengaturan AI (Admin only): which AI provider the AI Assistant uses. Saved in
+// Pengaturan AI (Role Management permission): which AI provider the AI Assistant uses. Saved in
 // the database; the API key is stored encrypted and never shown again.
 
 type Settings = {
@@ -109,7 +109,7 @@ export default function AISettings() {
           <Bot className="text-indigo-500" size={22} /> Pengaturan AI
         </h2>
         <p className="text-xs md:text-sm text-slate-500 mt-1">
-          Provider dan model yang dipakai AI Assistant. Hanya Admin yang bisa membuka halaman ini.
+          Provider dan model yang dipakai AI Assistant. Akses diatur di Role Management.
         </p>
       </header>
 
