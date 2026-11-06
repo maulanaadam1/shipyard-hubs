@@ -109,11 +109,20 @@ func repairListOverride(src *detailSource) string {
 	if db.QueryRow(`SELECT COALESCE(url, ''), COALESCE(headers, '') FROM sync_configs WHERE id = 'RepairLists' AND is_active = true`).Scan(&u, &hdrs) != nil {
 		return ""
 	}
+	u = strings.TrimSpace(u)
+	if !strings.Contains(u, "{{id}}") || !strings.Contains(u, "{{version}}") || !strings.Contains(u, "{{page}}") {
+		// A fixed URL (one Job Order, one version) would give every Job Order
+		// the same repair list: the default URL is used instead.
+		if u != "" {
+			log.Printf("[REPAIR LIST] RepairLists URL has no {{id}}/{{version}}/{{page}}; using the default URL")
+		}
+		return ""
+	}
 	var h map[string]string
 	if strings.TrimSpace(hdrs) != "" && json.Unmarshal([]byte(hdrs), &h) == nil && len(h) > 0 {
 		src.headers = h
 	}
-	return strings.TrimSpace(u)
+	return u
 }
 
 // fetchRepairPage pulls one page of a repair list version.
@@ -146,6 +155,11 @@ func fetchRepairPage(src detailSource, override, joID string, version, page int)
 	if err := json.Unmarshal(body, &p); err != nil {
 		return p, fmt.Errorf("repair list %s tidak terbaca: %v", joID, err)
 	}
+	for _, n := range p.Data {
+		if other := firstString(n, "t_job_order_id"); other != "" && other != joID {
+			return p, fmt.Errorf("SIAGA mengembalikan repair list Job Order %s untuk Job Order %s; periksa URL config RepairLists", other, joID)
+		}
+	}
 	return p, nil
 }
 
@@ -170,7 +184,7 @@ func latestRepairVersion(src detailSource, override, joID string) (int, error) {
 
 // repairListFormat changes when the stored repair lists must be fetched again
 // (2: every version, not only the latest).
-const repairListFormat = 2
+const repairListFormat = 3 // 3: refetch after the fixed-URL RepairLists config
 
 // fetchRepairList pulls one Job Order's repair list: every version from 1 to
 // the latest, every page. In SIAGA, version 2 and up are additional repair
@@ -273,6 +287,9 @@ func storeRepairList(joID string, version int, items []repairItem) error {
 }
 
 func recordRepairListError(joID, msg string) {
+	// Old items could be another Job Order's (a wrong URL): they go.
+	db.Exec(`DELETE FROM jo_repair_items WHERE jo_id = ?`, joID)
+	db.Exec(`UPDATE jo_repair_lists SET total_price = 0, items = 0 WHERE jo_id = ?`, joID)
 	var n int
 	db.QueryRow("SELECT COUNT(*) FROM jo_repair_lists WHERE jo_id = ?", joID).Scan(&n)
 	if n == 0 {
@@ -466,7 +483,8 @@ func GetRepairLists(w http.ResponseWriter, r *http.Request) {
 		FROM jo_repair_lists l JOIN c ON c.jo_id = l.jo_id
 		LEFT JOIN inwo ON inwo.jo_id = l.jo_id
 		LEFT JOIN leaf ON leaf.jo_id = l.jo_id
-		WHERE (COALESCE(l.items, 0) > 0 OR COALESCE(l.error, '') NOT IN ('', 'tidak ada repair list di SIAGA'))`+where+`
+		WHERE COALESCE(l.format, 0) >= `+strconv.Itoa(repairListFormat)+`
+			AND (COALESCE(l.items, 0) > 0 OR COALESCE(l.error, '') NOT IN ('', 'tidak ada repair list di SIAGA'))`+where+`
 		ORDER BY l.total_price DESC LIMIT `+strconv.Itoa(limit), args...)
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
@@ -560,9 +578,14 @@ func GetRepairList(w http.ResponseWriter, r *http.Request) {
 	}
 	rows.Close()
 
-	var version int
+	var version, format int
 	var fetched, failure, code string
-	db.QueryRow(`SELECT COALESCE(version, 0), COALESCE(fetched_at, ''), COALESCE(error, '') FROM jo_repair_lists WHERE jo_id = ?`, joID).Scan(&version, &fetched, &failure)
+	db.QueryRow(`SELECT COALESCE(version, 0), COALESCE(fetched_at, ''), COALESCE(error, ''), COALESCE(format, 0) FROM jo_repair_lists WHERE jo_id = ?`, joID).Scan(&version, &fetched, &failure, &format)
+	if format < repairListFormat && failure == "" {
+		// Stored before the current format: not shown until fetched again.
+		items, total, inWO, leaves, leavesInWO = []map[string]interface{}{}, 0, 0, 0, 0
+		failure = "Repair list sedang ditarik ulang dari SIAGA; coba lagi beberapa saat."
+	}
 	db.QueryRow(`SELECT COALESCE(MAX(jo_code), '') FROM wo_repair_activities WHERE jo_id = ?`, joID).Scan(&code)
 	if code == "" {
 		db.QueryRow(`SELECT COALESCE(code, '') || ' - ' || COALESCE(m_ship_name, '') FROM sync_job_orders WHERE id = ?`, joID).Scan(&code)
