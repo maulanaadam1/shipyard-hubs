@@ -39,7 +39,7 @@ WITH acts AS (
 	-- activities in WOs otherwise.
 	SELECT jo.jo_id, CASE WHEN COALESCE(rl.total_price, 0) > 0 THEN rl.total_price ELSE jo.price END AS price,
 		CASE WHEN COALESCE(rl.total_price, 0) > 0 THEN 1 ELSE 0 END AS from_repair_list
-	FROM jo LEFT JOIN jo_repair_lists rl ON rl.jo_id = jo.jo_id
+	FROM jo LEFT JOIN jo_repair_lists rl ON rl.jo_id = jo.jo_id AND COALESCE(rl.error, '') = '' AND COALESCE(rl.format, 0) >= 3
 )`
 
 type jobMargin struct {

@@ -32,6 +32,11 @@ func fakeRepairListServer(t *testing.T, requests *[]string) *httptest.Server {
 			w.Write([]byte(`{"current_page": 1, "last_page": 1, "data": []}`))
 			return
 		}
+		if strings.Contains(r.URL.Path, "/55/") {
+			// A wrong answer: another Job Order's repair list.
+			w.Write([]byte(`{"current_page": 1, "last_page": 1, "data": [{"uniqcode": "x", "t_job_order_id": 77, "description": "Lain", "children": []}]}`))
+			return
+		}
 		if strings.Contains(r.URL.Path, "/99/") {
 			w.Write([]byte(`{"current_page": 1, "last_page": 1, "data": []}`)) // no repair list
 			return
@@ -205,6 +210,31 @@ func TestRepairLists(t *testing.T) {
 		t.Fatalf("override: %d, %v, %v", n, err, requests)
 	}
 	db.Exec("DELETE FROM sync_configs WHERE id = 'RepairLists'")
+
+	// A RepairLists URL without placeholders (one fixed Job Order) is ignored.
+	db.Exec(`INSERT INTO sync_configs (id, name, url, headers, is_active) VALUES ('RepairLists', 'RepairLists', ?, '{}', true)`,
+		server.URL+"/api/v2/repair-lists/1200/activities?modul_id=t_job_orders&version=1&page=1")
+	db.Exec(`UPDATE sync_configs SET headers = '{"X-Test-Auth": "secret"}' WHERE id = 'WorkOrderDetails'`)
+	db.Exec("DELETE FROM jo_repair_lists WHERE jo_id = '77'")
+	requests = nil
+	if n, err := syncRepairLists(); err != nil || n != 1 || !strings.Contains(requests[0], "/repair-lists/77/") {
+		t.Fatalf("fixed URL not ignored: %d, %v, %v", n, err, requests)
+	}
+	db.Exec("DELETE FROM sync_configs WHERE id = 'RepairLists'")
+
+	// SIAGA answering with another Job Order's list: refused, nothing kept.
+	db.Exec(`INSERT INTO jo_repair_items (jo_id, uniqcode, description, is_leaf, total_price) VALUES ('55', 'old', 'lama', true, 999)`)
+	db.Exec(`INSERT INTO jo_repair_lists (jo_id, version, items, total_price, fetched_at, error, format) VALUES ('55', 1, 1, 999, '2000-01-01 00:00:00', '', 0)`)
+	db.Exec(`INSERT INTO projects (id, id_siaga, idproject) VALUES ('rl-p55', 55, 'JO-55/T')`)
+	t.Cleanup(func() { db.Exec("DELETE FROM projects WHERE id = 'rl-p55'") })
+	syncRepairLists()
+	var failure55 string
+	var items55 int
+	db.QueryRow(`SELECT COALESCE(error, '') FROM jo_repair_lists WHERE jo_id = '55'`).Scan(&failure55)
+	db.QueryRow(`SELECT COUNT(*) FROM jo_repair_items WHERE jo_id = '55'`).Scan(&items55)
+	if !strings.Contains(failure55, "Job Order 77") || items55 != 0 {
+		t.Errorf("mismatch: %q, %d items kept", failure55, items55)
+	}
 
 	// Credentials refused: the sync stops with a clear error.
 	db.Exec(`UPDATE sync_configs SET headers = '{}' WHERE id = 'WorkOrderDetails'`)
