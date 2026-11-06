@@ -12,7 +12,8 @@ import {
   Tags,
   Bot,
   ScrollText,
-  Package, 
+  Package,
+  Boxes,
   BarChart3,
   Settings,
   ChevronRight,
@@ -71,6 +72,7 @@ export default function Sidebar({ onTabChange }: { onTabChange: () => void }) {
         { icon: ClipboardList, label: 'Request Material', path: '/request-material', resource: 'Request' },
         { icon: Wrench, label: 'Maintenance', path: '/maintenance', resource: 'Maintenance' },
         { icon: Package, label: 'Inventory', path: '/inventory', resource: 'Inventory' },
+        { icon: Boxes, label: 'Persediaan Material', path: '/material-stock', resource: 'Persediaan Material' },
         { icon: BarChart3, label: 'Reports', path: '/reports', resource: 'Reports' },
       ]
     },
