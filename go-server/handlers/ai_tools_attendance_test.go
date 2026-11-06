@@ -373,7 +373,7 @@ func TestQueryAppDataWorkPermits(t *testing.T) {
 		{"_sheet": "workpermit", "_key": "workpermit:WP-1#2", "no_workpermit": "WP-1", "vendor": "Lasman", "manpower": 4, "wpclass_1": "Ruang Terbatas", "date_start": "2026-11-02", "date_finish": "2026-11-08", "status": "Draft"},
 		{"_sheet": "workpermit", "_key": "workpermit:WP-2", "no_workpermit": "WP-2", "vendor": "MARYONO", "manpower": 5, "wpclass_1": "Panas", "date_start": "2026-10-01", "date_finish": "2026-10-07", "status": "Approved"}]}`)
 	res, err := runQueryAppData(aiRequest("att-admin"), json.RawMessage(
-		`{"source": "hse_work_permits", "date_column": "date_finish", "date_from": "2026-11-06", "group_by": "vendor", "sum_column": "manpower"}`))
+		`{"source": "hse_work_permits", "date_column": "date_start", "end_column": "date_finish", "date_from": "2026-11-06", "date_to": "2026-11-06", "group_by": "vendor", "sum_column": "manpower"}`))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -393,6 +393,21 @@ func TestQueryAppDataWorkPermits(t *testing.T) {
 		if g.Value == "MARYONO" && (g.Count != 1 || g.Sum != 3) {
 			t.Errorf("MARYONO: %+v (the October permit is not active)", g)
 		}
+	}
+	// The start date alone misses permits that began before the day.
+	res, _ = runQueryAppData(aiRequest("att-admin"), json.RawMessage(
+		`{"source": "hse_work_permits", "date_column": "date_start", "date_from": "2026-11-06", "date_to": "2026-11-06"}`))
+	if m := res.(map[string]interface{})["matched"]; m != 0 {
+		t.Errorf("start date only: matched %v, want 0", m)
+	}
+	// A range overlapping the end of the October permit finds it.
+	res, _ = runQueryAppData(aiRequest("att-admin"), json.RawMessage(
+		`{"source": "hse_work_permits", "date_column": "date_start", "end_column": "date_finish", "date_from": "2026-10-05", "date_to": "2026-10-31"}`))
+	if m := res.(map[string]interface{})["matched"]; m != 1 {
+		t.Errorf("October overlap: matched %v, want 1", m)
+	}
+	if _, err := runQueryAppData(aiRequest("att-admin"), json.RawMessage(`{"source": "hse_work_permits", "end_column": "date_finish"}`)); err == nil {
+		t.Error("end_column without date_column accepted")
 	}
 	if _, err := runQueryAppData(aiRequest("att-nobody"), json.RawMessage(`{"source": "hse_work_permits"}`)); err == nil {
 		t.Error("a user without the resource read work permits")
