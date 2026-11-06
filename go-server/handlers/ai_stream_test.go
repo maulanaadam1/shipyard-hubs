@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 
@@ -113,6 +114,21 @@ func TestAIChatStreamOpenAI(t *testing.T) {
 	}
 	if requests[0]["stream"] != true || requests[0]["stream_options"] == nil {
 		t.Errorf("not a streaming request: %v", requests[0]["stream"])
+	}
+	// Today's date is in the system prompt and right before the question;
+	// the logged question stays as the user typed it.
+	msgs := requests[0]["messages"].([]interface{})
+	system := msgs[0].(map[string]interface{})["content"].(string)
+	user := msgs[len(msgs)-1].(map[string]interface{})["content"].(string)
+	today := time.Now().In(mustJakarta(t)).Format("2006-01-02")
+	if !strings.Contains(system, "hari ini = "+today) || !strings.HasPrefix(user, "[Waktu sekarang: ") ||
+		!strings.Contains(user, "hari ini = "+today) || !strings.HasSuffix(user, "]\nJenis pekerjaan terbanyak?") {
+		t.Errorf("date context: system %q..., user %q", system[len(system)-200:], user)
+	}
+	var logged string
+	db.QueryRow(`SELECT question FROM ai_chat_log WHERE id = ?`, done["id"]).Scan(&logged)
+	if logged != "Jenis pekerjaan terbanyak?" {
+		t.Errorf("logged question %q", logged)
 	}
 	// The rebuilt assistant message and the tool result go back.
 	second, _ := json.Marshal(requests[1]["messages"])
@@ -240,5 +256,34 @@ func TestAIStreamErrorAndLogs(t *testing.T) {
 	}
 	if _, out := get("ai-admin", "?filter=up"); len(out["entries"].([]interface{})) != 0 {
 		t.Error("up filter")
+	}
+}
+
+func mustJakarta(t *testing.T) *time.Location {
+	t.Helper()
+	loc, err := time.LoadLocation("Asia/Jakarta")
+	if err != nil {
+		t.Skip("no tz database")
+	}
+	return loc
+}
+
+func TestAIDateContext(t *testing.T) {
+	loc := mustJakarta(t)
+	// Friday morning in Jakarta, given in UTC (still Thursday there).
+	got := aiDateContext(time.Date(2026, 11, 5, 23, 30, 0, 0, time.UTC))
+	for _, want := range []string{
+		"Waktu sekarang: Jumat, 6 November 2026 pukul 06.30 WIB (hari ini = 2026-11-06)",
+		"Kemarin = 2026-11-05",
+		"Minggu ini (Senin-Minggu) = 2026-11-02 s.d. 2026-11-08",
+		"Bulan ini = 2026-11-01 s.d. 2026-11-30",
+	} {
+		if !strings.Contains(got, want) {
+			t.Errorf("missing %q in %q", want, got)
+		}
+	}
+	// Sunday belongs to the week that started on Monday.
+	if got := aiDateContext(time.Date(2026, 11, 8, 12, 0, 0, 0, loc)); !strings.Contains(got, "Minggu, 8 November 2026") || !strings.Contains(got, "2026-11-02 s.d. 2026-11-08") {
+		t.Errorf("Sunday: %q", got)
 	}
 }
