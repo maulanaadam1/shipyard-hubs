@@ -168,8 +168,15 @@ func latestRepairVersion(src detailSource, override, joID string) (int, error) {
 	return latest, nil
 }
 
-// fetchRepairList pulls every page of one Job Order's repair list. Version 0
-// means unknown: the latest one is looked up first. It returns the version used.
+// repairListFormat changes when the stored repair lists must be fetched again
+// (2: every version, not only the latest).
+const repairListFormat = 2
+
+// fetchRepairList pulls one Job Order's repair list: every version from 1 to
+// the latest, every page. In SIAGA, version 2 and up are additional repair
+// lists (t_repair_list_additionals), not revisions of version 1, so they are
+// added, each under its own group. Version 0 means unknown: the latest one is
+// looked up first. It returns the latest version.
 func fetchRepairList(src detailSource, override, joID string, version int) ([]repairItem, int, error) {
 	if version <= 0 {
 		v, err := latestRepairVersion(src, override, joID)
@@ -181,19 +188,39 @@ func fetchRepairList(src detailSource, override, joID string, version int) ([]re
 		}
 		version = v
 	}
-	var top []map[string]interface{}
-	for page := 1; page <= 200; page++ {
-		p, err := fetchRepairPage(src, override, joID, version, page)
-		if err != nil {
-			return nil, version, err
+	var roots []map[string]interface{}
+	for v := 1; v <= version; v++ {
+		var top []map[string]interface{}
+		for page := 1; page <= 200; page++ {
+			p, err := fetchRepairPage(src, override, joID, v, page)
+			if err != nil {
+				return nil, version, err
+			}
+			top = append(top, p.Data...)
+			if p.LastPage <= page || len(p.Data) == 0 {
+				break
+			}
+			time.Sleep(300 * time.Millisecond)
 		}
-		top = append(top, p.Data...)
-		if p.LastPage <= page || len(p.Data) == 0 {
+		if version == 1 {
+			roots = top // a single repair list: no version groups
 			break
 		}
+		if len(top) == 0 {
+			continue
+		}
+		label := "Repair list versi 1"
+		if v > 1 {
+			label = fmt.Sprintf("Repair list tambahan versi %d", v)
+		}
+		children := make([]interface{}, len(top))
+		for i, n := range top {
+			children[i] = n
+		}
+		roots = append(roots, map[string]interface{}{"uniqcode": fmt.Sprintf("version-%d", v), "description": label, "version": float64(v), "children": children})
 		time.Sleep(300 * time.Millisecond)
 	}
-	return flattenRepairList(top), version, nil
+	return flattenRepairList(roots), version, nil
 }
 
 // storeRepairList replaces one Job Order's stored repair list.
@@ -238,8 +265,8 @@ func storeRepairList(joID string, version int, items []repairItem) error {
 	if _, err := tx.Exec(db.FormatQuery("DELETE FROM jo_repair_lists WHERE jo_id = ?"), joID); err != nil {
 		return err
 	}
-	if _, err := tx.Exec(db.FormatQuery(`INSERT INTO jo_repair_lists (jo_id, version, items, total_price, fetched_at, error) VALUES (?, ?, ?, ?, ?, '')`),
-		joID, version, len(items), total, time.Now().Format("2006-01-02 15:04:05")); err != nil {
+	if _, err := tx.Exec(db.FormatQuery(`INSERT INTO jo_repair_lists (jo_id, version, items, total_price, fetched_at, error, format) VALUES (?, ?, ?, ?, ?, '', ?)`),
+		joID, version, len(items), total, time.Now().Format("2006-01-02 15:04:05"), repairListFormat); err != nil {
 		return err
 	}
 	return tx.Commit()
@@ -317,13 +344,14 @@ func syncRepairLists() (int, error) {
 		version int
 		at      string
 		failed  bool
+		format  int
 	}
 	stored := map[string]storedList{}
-	if rows, err := db.Query(`SELECT jo_id, COALESCE(version, 0), COALESCE(fetched_at, ''), COALESCE(error, '') <> '' FROM jo_repair_lists`); err == nil {
+	if rows, err := db.Query(`SELECT jo_id, COALESCE(version, 0), COALESCE(fetched_at, ''), COALESCE(error, '') <> '', COALESCE(format, 0) FROM jo_repair_lists`); err == nil {
 		for rows.Next() {
 			var s storedList
 			var id string
-			if rows.Scan(&id, &s.version, &s.at, &s.failed) == nil {
+			if rows.Scan(&id, &s.version, &s.at, &s.failed, &s.format) == nil {
 				stored[id] = s
 			}
 		}
@@ -349,7 +377,7 @@ func syncRepairLists() (int, error) {
 			if s.failed && s.at >= cutoff {
 				continue // failed or no repair list: tried again after a day
 			}
-			if !s.failed && s.version >= version && (!active[joID] || s.at >= cutoff) {
+			if !s.failed && s.format == repairListFormat && s.version >= version && (!active[joID] || s.at >= cutoff) {
 				continue
 			}
 		}

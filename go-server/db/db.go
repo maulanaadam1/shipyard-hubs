@@ -660,6 +660,7 @@ func createTables() {
 		fetched_at TEXT,
 		error TEXT
 	);`)
+	DB.Exec("ALTER TABLE jo_repair_lists ADD COLUMN format INTEGER DEFAULT 0")
 	DB.Exec(`CREATE TABLE IF NOT EXISTS jo_repair_items (
 		jo_id TEXT NOT NULL,
 		uniqcode TEXT NOT NULL,
