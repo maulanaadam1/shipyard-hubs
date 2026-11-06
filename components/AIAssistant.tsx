@@ -7,7 +7,7 @@ import { Link, useSearchParams } from 'react-router-dom';
 import { getHeaders } from '@/lib/api-client';
 import AIMarkdown, { tablesIn, downloadAnswerTables } from './AIMarkdown';
 
-// AI Asisten: questions about ShipHub data, answered by the AI provider set in
+// AI Assistant: questions about ShipHub data, answered by the AI provider set in
 // Pengaturan AI with the read-only tools of the backend (/api/ai/chat,
 // streamed as server-sent events). Conversations are kept on the server per
 // user (history panel); each answer lists the data it used, can be rated,
@@ -192,7 +192,7 @@ export default function AIAssistant() {
       setStatus(await res.json());
       setStatusError('');
     } catch (e: any) {
-      setStatusError(`Gagal memuat status AI Asisten: ${e?.message || 'koneksi terputus'}`);
+      setStatusError(`Gagal memuat status AI Assistant: ${e?.message || 'koneksi terputus'}`);
     }
   };
   const loadConversations = async () => {
@@ -340,7 +340,7 @@ export default function AIAssistant() {
           finish(data);
         } else if (event === 'error') {
           finished = true;
-          updateLast(() => ({ role: 'assistant', content: data.error || 'Gagal menghubungi AI Asisten.', error: true }));
+          updateLast(() => ({ role: 'assistant', content: data.error || 'Gagal menghubungi AI Assistant.', error: true }));
         }
       });
       if (!finished) throw new Error('Koneksi terputus sebelum jawaban selesai. Coba lagi.');
@@ -349,7 +349,7 @@ export default function AIAssistant() {
         // Stopped by the user: keep what was written so far.
         updateLast(m => ({ role: 'assistant', content: visibleText(m.content).trim(), stopped: true }));
       } else {
-        updateLast(() => ({ role: 'assistant', content: e?.message || 'Gagal menghubungi AI Asisten.', error: true }));
+        updateLast(() => ({ role: 'assistant', content: e?.message || 'Gagal menghubungi AI Assistant.', error: true }));
       }
     } finally {
       abortRef.current = null;
@@ -464,7 +464,7 @@ export default function AIAssistant() {
             <History size={20} aria-hidden="true" />
           </button>
           <h2 className="font-display font-bold text-xl tracking-tight text-slate-800 flex items-center gap-2">
-            <Bot className="text-slate-700" size={22} aria-hidden="true" /> AI Asisten
+            <Bot className="text-slate-700" size={22} aria-hidden="true" /> AI Assistant
           </h2>
           {status && (
             <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${status.enabled ? 'bg-emerald-50 text-emerald-800' : 'bg-amber-50 text-amber-900'}`}>
@@ -497,11 +497,11 @@ export default function AIAssistant() {
           </div>
         )}
 
-        <main className="flex-1 min-w-0 w-full max-w-4xl mx-auto px-4 md:px-8 pt-6 pb-4 flex flex-col gap-4">
+        <main className="flex-1 min-w-0 w-full max-w-4xl mx-auto px-4 md:px-8 pt-6 flex flex-col gap-4">
           {statusError && <p role="alert" className="text-sm text-rose-700">{statusError}</p>}
           {status && !status.enabled && (
             <section className="p-5 rounded-2xl border border-amber-200 bg-amber-50 text-sm text-amber-900">
-              <p className="font-semibold">AI Asisten belum aktif.</p>
+              <p className="font-semibold">AI Assistant belum aktif.</p>
               <p className="mt-1">
                 Fitur ini memakai layanan AI eksternal. Setelah ada persetujuan perusahaan, Admin memilih provider dan mengaktifkannya di menu Pengaturan AI; sebelum itu tidak ada data yang dikirim ke luar.
                 {status.is_admin && <> <Link to="/ai-settings" className="font-semibold underline">Buka Pengaturan AI</Link></>}
@@ -642,11 +642,14 @@ export default function AIAssistant() {
                 </div>
               );
             })}
-            <div ref={endRef} />
+            {/* scroll margin: scrolled into view, the last message ends above the question box */}
+            <div ref={endRef} className="scroll-mb-40" />
           </div>
 
+          {/* The question box sits on a solid band, so messages scroll up behind it, never into it. */}
+          <div className="sticky bottom-0 mt-auto bg-slate-50 pt-2 pb-4">
           <form
-            className="sticky bottom-4 mt-auto rounded-3xl border border-slate-300 bg-white shadow-sm focus-within:border-slate-400"
+            className="rounded-3xl border border-slate-300 bg-white shadow-sm focus-within:border-slate-400"
             onSubmit={e => { e.preventDefault(); send(draft); }}
           >
             <label htmlFor="ai-question" className="sr-only">Pertanyaan</label>
@@ -665,7 +668,7 @@ export default function AIAssistant() {
                 else if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(draft); }
               }}
               disabled={!canAsk}
-              placeholder={canAsk ? 'Tanya tentang WO, tagihan, material…' : status?.enabled ? 'Batas pertanyaan hari ini sudah tercapai' : 'AI Asisten belum aktif'}
+              placeholder={canAsk ? 'Tanya tentang WO, tagihan, material…' : status?.enabled ? 'Batas pertanyaan hari ini sudah tercapai' : 'AI Assistant belum aktif'}
               className="block w-full resize-none bg-transparent px-4 pt-3.5 pb-1 text-sm leading-6 text-slate-800 placeholder:text-slate-400 outline-none disabled:cursor-not-allowed"
             />
             <div className="flex items-center gap-1.5 px-2.5 pb-2.5 pt-1">
@@ -693,6 +696,7 @@ export default function AIAssistant() {
               )}
             </div>
           </form>
+          </div>
         </main>
 
         {insightsCard && (

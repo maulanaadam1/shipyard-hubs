@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { Bot, KeyRound, PlugZap, Save } from 'lucide-react';
 import { getHeaders } from '@/lib/api-client';
 
-// Pengaturan AI (Admin only): which AI provider the AI Asisten uses. Saved in
+// Pengaturan AI (Admin only): which AI provider the AI Assistant uses. Saved in
 // the database; the API key is stored encrypted and never shown again.
 
 type Settings = {
@@ -75,7 +75,7 @@ export default function AISettings() {
       setSaved(data);
       setForm(data);
       setApiKey('');
-      setMessage({ ok: true, text: data.active ? 'Tersimpan. AI Asisten aktif.' : 'Tersimpan. AI Asisten belum aktif.' });
+      setMessage({ ok: true, text: data.active ? 'Tersimpan. AI Assistant aktif.' : 'Tersimpan. AI Assistant belum aktif.' });
     } catch (e: any) {
       setMessage({ ok: false, text: `Gagal menyimpan: ${e?.message || 'koneksi terputus'}` });
     } finally {
@@ -109,7 +109,7 @@ export default function AISettings() {
           <Bot className="text-indigo-500" size={22} /> Pengaturan AI
         </h2>
         <p className="text-xs md:text-sm text-slate-500 mt-1">
-          Provider dan model yang dipakai AI Asisten. Hanya Admin yang bisa membuka halaman ini.
+          Provider dan model yang dipakai AI Assistant. Hanya Admin yang bisa membuka halaman ini.
         </p>
       </header>
 
@@ -118,11 +118,11 @@ export default function AISettings() {
         {form && saved && (
           <>
             <section className={`p-4 rounded-2xl border text-sm ${saved.active ? 'border-emerald-200 bg-emerald-50 text-emerald-900' : 'border-amber-200 bg-amber-50 text-amber-900'}`}>
-              <p className="font-semibold">{saved.active ? 'AI Asisten aktif' : 'AI Asisten belum aktif'}</p>
+              <p className="font-semibold">{saved.active ? 'AI Assistant aktif' : 'AI Assistant belum aktif'}</p>
               <p className="mt-1">
                 {saved.active
                   ? `Pertanyaan pengguna dan data ShipHub yang dibutuhkan untuk menjawab dikirim ke ${provider.label}${saved.base_url ? ` (${saved.base_url})` : ''}.`
-                  : 'Tidak ada data yang dikirim ke luar sampai AI Asisten diaktifkan dan pengaturannya lengkap.'}
+                  : 'Tidak ada data yang dikirim ke luar sampai AI Assistant diaktifkan dan pengaturannya lengkap.'}
               </p>
               {saved.updated_by && <p className="mt-1 text-xs opacity-80">Terakhir diubah oleh {saved.updated_by}, {saved.updated_at}.</p>}
             </section>
@@ -173,7 +173,7 @@ export default function AISettings() {
                 )}
                 {saved.api_key_set && (
                   <button type="button" disabled={saving}
-                    onClick={() => { if (window.confirm('Hapus API key yang tersimpan? AI Asisten akan berhenti.')) save({ clear_api_key: true, api_key: '' }); }}
+                    onClick={() => { if (window.confirm('Hapus API key yang tersimpan? AI Assistant akan berhenti.')) save({ clear_api_key: true, api_key: '' }); }}
                     className="mt-2 inline-flex items-center gap-1.5 text-xs font-semibold text-rose-700 hover:underline disabled:opacity-50">
                     <KeyRound size={13} /> Hapus API key
                   </button>
@@ -199,7 +199,7 @@ export default function AISettings() {
                 <input type="checkbox" className="mt-0.5 h-4 w-4 accent-indigo-600" checked={form.enabled}
                   onChange={e => set('enabled', e.target.checked)} />
                 <span>
-                  <span className="font-semibold">Aktifkan AI Asisten</span>
+                  <span className="font-semibold">Aktifkan AI Assistant</span>
                   <span className="block text-xs text-slate-500">Aktifkan hanya setelah ada persetujuan perusahaan untuk mengirim data ke provider ini.</span>
                 </span>
               </label>

@@ -3,7 +3,7 @@ import { ScrollText, ThumbsUp, ThumbsDown, AlertTriangle, ChevronDown, ChevronRi
 import { getHeaders } from '@/lib/api-client';
 import AIMarkdown from './AIMarkdown';
 
-// Log AI (Admin only): who asked the AI Asisten what, which data it used,
+// Log AI (Admin only): who asked the AI Assistant what, which data it used,
 // failed answers, ratings, and token use per day.
 
 type ToolCall = { name: string; input: Record<string, unknown>; is_error: boolean };
@@ -78,7 +78,7 @@ export default function AILogs() {
         <h2 className="font-display font-bold text-xl md:text-2xl tracking-tight text-slate-800 flex items-center gap-2">
           <ScrollText className="text-indigo-500" size={22} /> Log AI
         </h2>
-        <p className="text-xs md:text-sm text-slate-500 mt-1">Pertanyaan ke AI Asisten, data yang dipakai, jawaban gagal, penilaian pengguna dan pemakaian token.</p>
+        <p className="text-xs md:text-sm text-slate-500 mt-1">Pertanyaan ke AI Assistant, data yang dipakai, jawaban gagal, penilaian pengguna dan pemakaian token.</p>
       </header>
 
       <main className="w-full max-w-6xl mx-auto p-4 md:p-8 flex flex-col gap-4">
