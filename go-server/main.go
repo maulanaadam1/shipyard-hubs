@@ -137,6 +137,11 @@ func main() {
 		r.With(priceView).Get("/api/price-reference", handlers.GetPriceReferences)
 		r.With(priceView).Get("/api/price-reference/detail", handlers.GetPriceReferenceDetail)
 		r.With(handlers.RequirePermission(handlers.ResourcePriceReference, "export")).Get("/api/price-reference/export", handlers.ExportPriceReferences)
+		// Persediaan Material: snapshots of the Master Inventory workbook, sent by its macro.
+		inventoryView := handlers.RequirePermission(handlers.ResourceInventory, "view")
+		r.With(inventoryView).Get("/api/inventory/summary", handlers.GetInventorySummary)
+		r.With(inventoryView).Get("/api/inventory/data/{dataset}", handlers.GetInventory)
+		r.With(handlers.RequirePermission(handlers.ResourceInventory, "import")).Post("/api/inventory/sync/{dataset}", handlers.SyncInventory)
 		// Financial Dashboard: billing transactions from the daily approval ledger.
 		financeView := handlers.RequirePermission(handlers.ResourceFinancialDashboard, "view")
 		r.With(financeView, woCache).Get("/api/finance/summary", handlers.GetFinanceSummary)

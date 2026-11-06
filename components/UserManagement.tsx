@@ -29,7 +29,7 @@ export default function UserManagement() {
 
   const ALL_RESOURCES = [
     'Dashboard', 'Utility', 'Job Order', 'Work Order', 'Item Pekerjaan WO', 'Request', 'Release', 'Return',
-    'Maintenance', 'Inventory', 'Reports', 'Master Equipment',
+    'Maintenance', 'Inventory', 'Persediaan Material', 'Reports', 'Master Equipment',
     'Master Vendor', 'Master Company', 'Master Kapal', 'Master Workflow',
     'Master Configuration', 'User Management', 'Role Management'
   ];

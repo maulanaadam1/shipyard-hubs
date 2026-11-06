@@ -36,6 +36,7 @@ const RESOURCES = [
   { id: 'Return', type: 'menu' },
   { id: 'Maintenance', type: 'menu' },
   { id: 'Inventory', type: 'menu' },
+  { id: 'Persediaan Material', type: 'menu' },
   { id: 'Reports', type: 'menu' },
   { id: 'Master Equipment', type: 'menu' },
   { id: 'Master Vendor', type: 'menu' },

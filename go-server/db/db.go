@@ -63,10 +63,12 @@ func Init() {
 	}
 
 	createTables()
+	createInventoryTables()
 	seedAdmin()
 	MigrateWorkOrderItemsPermission()
 	MigrateItemFindingsPermission()
 	MigratePriceReferencePermission()
+	MigrateInventoryPermission()
 }
 
 // MigrateWorkOrderItemsPermission runs once (called from Init): the Item Pekerjaan WO menu used to
