@@ -15,7 +15,8 @@ import {
   Trash2,
   ShieldAlert,
   Info,
-  Edit2
+  Edit2,
+  Database
 } from 'lucide-react';
 import { useData, RoleMaster, RolePermission } from '@/context/DataContext';
 import { api } from '@/lib/api-client';
@@ -55,6 +56,10 @@ const RESOURCES = [
   { id: 'Master Dock Status', type: 'menu' },
   { id: 'Master Layout', type: 'menu' },
   { id: 'Vessel Layout', type: 'menu' },
+  // Data permissions: no menu; they let the AI Assistant read spreadsheet data.
+  { id: 'Data MasterOperation', type: 'data', note: 'Data spreadsheet MasterOperation untuk AI Assistant: proyek, progres, biaya, manpower, vendor' },
+  { id: 'Data Absensi', type: 'data', note: 'Data absensi untuk AI Assistant: jam kerja dan data karyawan' },
+  { id: 'Data HSE', type: 'data', note: 'Data MasterHSE untuk AI Assistant: izin kerja' },
 ];
 
 const ACTIONS = ['view', 'add', 'edit', 'delete', 'approve', 'import', 'export'];
@@ -303,7 +308,7 @@ export default function RoleManagement() {
                       if (!selectedRole) return;
                       const allPerms: RolePermission[] = [];
                       RESOURCES.forEach(res => {
-                        ACTIONS.forEach(act => {
+                        (res.type === 'data' ? ['view'] : ACTIONS).forEach(act => {
                           allPerms.push({
                             id: '', 
                             role_id: selectedRole.id,
@@ -345,11 +350,17 @@ export default function RoleManagement() {
                       <tr key={res.id} className="hover:bg-slate-50/30 transition-colors">
                         <td className="px-6 py-4">
                           <div className="flex items-center gap-2">
-                            {res.type === 'menu' ? <Layout className="w-4 h-4 text-slate-400" /> : <MousePointer2 className="w-4 h-4 text-slate-400" />}
-                            <span className="text-sm font-medium text-slate-700">{res.id}</span>
+                            {res.type === 'menu' ? <Layout className="w-4 h-4 text-slate-400" /> : res.type === 'data' ? <Database className="w-4 h-4 text-slate-400" /> : <MousePointer2 className="w-4 h-4 text-slate-400" />}
+                            <div className="min-w-0">
+                              <span className="text-sm font-medium text-slate-700">{res.id}</span>
+                              {'note' in res && res.note && <p className="text-[11px] text-slate-500 leading-snug">{res.note}</p>}
+                            </div>
                           </div>
                         </td>
                         {ACTIONS.map(act => {
+                          if (res.type === 'data' && act !== 'view') {
+                            return <td key={act} className="px-4 py-4 text-center text-slate-300" aria-hidden="true">–</td>;
+                          }
                           const perm = localPermissions.find(p => p.resource === res.id && p.action === act);
                           return (
                             <td key={act} className="px-4 py-4 text-center">
