@@ -678,6 +678,12 @@ func createTables() {
 		version INTEGER DEFAULT 0,
 		PRIMARY KEY (jo_id, uniqcode)
 	);`)
+	// Repair list activities split like WO items (itemparse.ParseRepair).
+	for _, col := range []string{"rules TEXT", "action TEXT", "object TEXT", "material TEXT", "size TEXT", "source TEXT",
+		"work_type TEXT", "component TEXT", "recognized BOOLEAN DEFAULT false", "from_group BOOLEAN DEFAULT false", "parser_version TEXT"} {
+		DB.Exec("ALTER TABLE jo_repair_items ADD COLUMN " + col)
+	}
+	DB.Exec("CREATE INDEX IF NOT EXISTS idx_jo_repair_items_work_type ON jo_repair_items(work_type)")
 	DB.Exec("CREATE INDEX IF NOT EXISTS idx_wo_items_wo_activity ON wo_items(wo_id, activity_path)")
 
 	// AI Asisten conversations (history panel); the messages are the
