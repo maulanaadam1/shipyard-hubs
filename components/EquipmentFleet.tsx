@@ -20,7 +20,6 @@ import {
   FileText,
   User
 } from 'lucide-react';
-import * as XLSX from 'xlsx';
 import { useData, Equipment } from '@/context/DataContext';
 import { api } from '@/lib/api-client';
 
@@ -63,7 +62,8 @@ export default function EquipmentFleet() {
     ? filteredData 
     : filteredData.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
 
-  const handleExport = (exportData = data) => {
+  const handleExport = async (exportData = data) => {
+    const XLSX = await import('xlsx');
     const ws = XLSX.utils.json_to_sheet(exportData);
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, "Equipment");
@@ -104,8 +104,9 @@ export default function EquipmentFleet() {
     if (!file) return;
 
     const reader = new FileReader();
-    reader.onload = (evt) => {
+    reader.onload = async (evt) => {
       const bstr = evt.target?.result;
+      const XLSX = await import('xlsx');
       const wb = XLSX.read(bstr, { type: 'binary' });
       const wsname = wb.SheetNames[0];
       const ws = wb.Sheets[wsname];

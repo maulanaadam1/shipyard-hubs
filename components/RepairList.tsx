@@ -1,7 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Link, useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { ClipboardList, Search, Loader2, RefreshCw, Eye, EyeOff, AlertTriangle, ArrowLeft, ChevronRight, ChevronDown, FileSpreadsheet } from 'lucide-react';
-import * as XLSX from 'xlsx';
 import { getHeaders } from '@/lib/api-client';
 import { useData } from '@/context/DataContext';
 
@@ -361,7 +360,7 @@ function RepairListDetail({ joID }: { joID: string }) {
   const toggleGroup = (id: string) => setClosed(prev => { const next = new Set(prev); if (next.has(id)) next.delete(id); else next.add(id); return next; });
   const groupIDs = visible.filter(i => !i.leaf).map(i => i.uniqcode);
 
-  const exportExcel = () => {
+  const exportExcel = async () => {
     if (!detail) return;
     const s = detail.summary;
     const head = ['Path', 'Level', 'Aktivitas', 'Jenis pekerjaan', 'Satuan', 'Qty', ...(showPrice ? ['Harga satuan', 'Total'] : []), 'WO', 'Vendor', ...(showPrice ? ['Biaya vendor'] : [])];
@@ -372,6 +371,7 @@ function RepairListDetail({ joID }: { joID: string }) {
       ...(showPrice ? [it.wos.length ? it.wos.reduce((t, w) => t + (w.cost || 0), 0) : ''] : []),
     ]);
     const title = [`${s.jo_code} ${s.ship}`.trim(), s.customer, multi ? (version > 0 ? (version === 1 ? 'Versi 1 (utama)' : `Tambahan versi ${version}`) : 'Semua versi') : `Versi ${s.version}`];
+    const XLSX = await import('xlsx');
     const ws = XLSX.utils.aoa_to_sheet([title, [], head, ...data]);
     ws['!cols'] = head.map((h, i) => ({ wch: i === 2 ? 60 : i === 3 ? 32 : h === 'Path' ? 14 : 16 }));
     const wb = XLSX.utils.book_new();

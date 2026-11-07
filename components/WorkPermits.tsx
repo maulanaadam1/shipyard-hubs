@@ -1,7 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { FileCheck2, Search, Loader2, FileSpreadsheet, ChevronDown, ChevronRight, ChevronLeft } from 'lucide-react';
-import * as XLSX from 'xlsx';
 import { getHeaders } from '@/lib/api-client';
 
 // Work Permit: the HSE work permits (MasterHSE spreadsheet): who works where,
@@ -98,6 +97,7 @@ export default function WorkPermits() {
       const rows = (body.permits as Permit[]).map(p => [p.no_workpermit, p.status, p.category, p.shipname, p.project_id, p.wo, p.dept, p.vendor, p.manpower, p.area_kerja,
         p.pekerjaan, p.date_start, p.date_finish, `${p.time_start}–${p.time_end}`, p.risks.join(', '), p.hazards.join(', '), p.controls.join(', '), p.tools.join(', '),
         p.ppe.join(', '), p.others.join(', '), p.supervisi, p.project_lead, p.safetyman, p.persons.join(', ')]);
+      const XLSX = await import('xlsx');
       const wb = XLSX.utils.book_new();
       XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([head, ...rows]), 'Work Permit');
       XLSX.writeFile(wb, `WorkPermit_${today()}.xlsx`);
@@ -146,21 +146,21 @@ export default function WorkPermits() {
           </select>
           <select aria-label="Pekerjaan berisiko" value={params.get('risk') || ''} onChange={e => set({ risk: e.target.value })} className={`${inputCls} md:max-w-52`}>
             <option value="">Semua risiko</option>
-            {data?.risks.map(r => <option key={r.name} value={r.name}>{r.name} ({r.count})</option>)}
+            {(data?.risks ?? []).map(r => <option key={r.name} value={r.name}>{r.name} ({r.count})</option>)}
           </select>
           <select aria-label="Vendor" value={params.get('vendor') || ''} onChange={e => set({ vendor: e.target.value })} className={`${inputCls} md:max-w-52`}>
             <option value="">Semua vendor</option>
-            {facets?.vendors.map(v => <option key={v.name} value={v.name}>{v.name}</option>)}
+            {(facets?.vendors ?? []).map(v => <option key={v.name} value={v.name}>{v.name}</option>)}
           </select>
           <select aria-label="Area kerja" value={params.get('area') || ''} onChange={e => set({ area: e.target.value })} className={`${inputCls} md:max-w-52`}>
             <option value="">Semua area</option>
-            {facets?.areas.map(v => <option key={v.name} value={v.name}>{v.name}</option>)}
+            {(facets?.areas ?? []).map(v => <option key={v.name} value={v.name}>{v.name}</option>)}
           </select>
         </div>
 
         {data && (
           <div role="radiogroup" aria-label="Status" className="flex flex-wrap gap-1.5">
-            {[{ name: '', count: data.statuses.reduce((s, x) => s + x.count, 0) }, ...data.statuses].map(s => (
+            {[{ name: '', count: (data.statuses ?? []).reduce((s, x) => s + x.count, 0) }, ...(data.statuses ?? [])].map(s => (
               <button key={s.name || 'all'} type="button" role="radio" aria-checked={(params.get('status') || '') === s.name} onClick={() => set({ status: s.name })}
                 className={`px-3 py-1 rounded-full text-xs border ${(params.get('status') || '') === s.name ? 'bg-slate-900 text-white border-slate-900' : 'bg-white text-slate-600 border-slate-200 hover:border-slate-400'}`}>
                 {s.name || 'Semua status'} <span className="opacity-70">{s.count}</span>
@@ -189,7 +189,7 @@ export default function WorkPermits() {
               <th scope="col" className="px-3 py-2 font-semibold">Status</th>
             </tr></thead>
             <tbody className="divide-y divide-slate-100">
-              {data?.permits.map(p => (
+              {(data?.permits ?? []).map(p => (
                 <React.Fragment key={p.id}>
                   <tr onClick={() => setOpen(open === p.id ? '' : p.id)} className="cursor-pointer hover:bg-slate-50 align-top">
                     <td className="py-2 pl-3">
@@ -241,7 +241,7 @@ export default function WorkPermits() {
                   )}
                 </React.Fragment>
               ))}
-              {data?.permits.length === 0 && <tr><td colSpan={7} className="px-3 py-6 text-center text-slate-500">Tidak ada izin kerja yang cocok.</td></tr>}
+              {data && !data.permits?.length && <tr><td colSpan={7} className="px-3 py-6 text-center text-slate-500">Tidak ada izin kerja yang cocok.</td></tr>}
               {!data && loading && <tr><td colSpan={7} className="px-3 py-6 text-slate-500"><Loader2 size={14} className="inline mr-2 animate-spin" aria-hidden="true" />Memuat…</td></tr>}
             </tbody>
           </table>

@@ -3,7 +3,6 @@ import {
   Bar, BarChart, CartesianGrid, Legend, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis,
 } from 'recharts';
 import { FileSpreadsheet, Table2 } from 'lucide-react';
-import * as XLSX from 'xlsx';
 import { ChartSpec, chartTable, formatShort, formatValue } from '@/lib/ai-chart';
 
 // A chart from an AI Asisten answer (see lib/ai-chart.ts). Categorical hues in
@@ -17,8 +16,9 @@ const GRID = '#e2e8f0'; // slate-200
 
 const toggle = 'inline-flex items-center gap-1 min-h-11 px-1 text-xs font-medium text-slate-600 hover:text-slate-900 rounded focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500';
 
-function downloadChart(spec: ChartSpec) {
+async function downloadChart(spec: ChartSpec) {
   const { header, rows } = chartTable(spec);
+  const XLSX = await import('xlsx');
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([header, ...rows]), 'Data');
   XLSX.writeFile(wb, `ai-asisten-grafik-${new Date().toISOString().slice(0, 10)}.xlsx`);

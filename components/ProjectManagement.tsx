@@ -24,7 +24,6 @@ import { useData, Project } from '@/context/DataContext';
 import { motion, AnimatePresence } from 'motion/react';
 import { api } from '@/lib/api-client';
 import Papa from 'papaparse';
-import * as XLSX from 'xlsx';
 import AskAIButton from './AskAIButton';
 
 export default function ProjectManagement() {
@@ -184,6 +183,7 @@ export default function ProjectManagement() {
         });
       } else if (fileName.endsWith('.xlsx') || fileName.endsWith('.xls')) {
         const data = await file.arrayBuffer();
+        const XLSX = await import('xlsx');
         const workbook = XLSX.read(data);
         const worksheet = workbook.Sheets[workbook.SheetNames[0]];
         rawData = XLSX.utils.sheet_to_json(worksheet);

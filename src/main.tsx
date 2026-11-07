@@ -1,6 +1,6 @@
-import { StrictMode, useState, useEffect } from 'react';
+import { StrictMode, useState, useEffect, lazy, Suspense, type ComponentType } from 'react';
 import { createRoot } from 'react-dom/client';
-import { BrowserRouter, Routes, Route, Navigate, Outlet } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate, Outlet, useLocation } from 'react-router-dom';
 import './globals.css';
 import { DataProvider, useData } from '../context/DataContext';
 
@@ -45,55 +45,78 @@ if (
     registrations.forEach(registration => registration.unregister());
   });
 }
-import Dashboard from '../components/Dashboard';
+// Each menu's code is fetched when first opened, so the login page and the
+// first screen stay small. Once the app is idle the rest is fetched in the
+// background, so later menu switches don't wait (skipped on Data Saver).
+const pageLoaders: Array<() => Promise<unknown>> = [];
+function page<T extends ComponentType<any>>(load: () => Promise<{ default: T }>) {
+  let loaded: { default: T } | undefined;
+  const fetchPage = () => load().then(mod => (loaded = mod));
+  pageLoaders.push(fetchPage);
+  // A promise always settles a tick later, so React would still show the
+  // loading spinner for a preloaded page; a thenable that answers right away
+  // lets it render on the same pass.
+  return lazy(() => (loaded
+    ? { then: (done: (mod: { default: T }) => void) => done(loaded!) }
+    : fetchPage()) as Promise<{ default: T }>);
+}
+function preloadPages() {
+  if ((navigator as Navigator & { connection?: { saveData?: boolean } }).connection?.saveData) return;
+  const run = () => pageLoaders.forEach(load => load().catch(() => {}));
+  if ('requestIdleCallback' in window) window.requestIdleCallback(run, { timeout: 5000 });
+  else setTimeout(run, 2000);
+}
+
+const Dashboard = page(() => import('../components/Dashboard'));
 import { NotFoundPage, ServerStatusGate } from '../components/StatusPages';
 import { installServerWatch } from '../lib/server-status';
 import LandingPage from '../components/LandingPage';
 import Sidebar from '../components/Sidebar';
 import Header from '../components/Header';
-import EquipmentFleet from '../components/EquipmentFleet';
-import EquipmentLoans from '../components/EquipmentLoans';
-import EquipmentDeployment from '../components/EquipmentDeployment';
-import EquipmentMaintenance from '../components/EquipmentMaintenance';
-import EquipmentReturn from '../components/EquipmentReturn';
-import EquipmentRelease from '../components/EquipmentRelease';
-import VendorManagement from '../components/VendorManagement';
-import CompanyManagement from '../components/CompanyManagement';
-import ShipManagement from '../components/ShipManagement';
-import MasterShipType from '../components/MasterShipType';
-import MasterLocation from '../components/MasterLocation';
-import UserManagement from '../components/UserManagement';
-import ProjectManagement from '../components/ProjectManagement';
-import UtilityDashboard from '../components/UtilityDashboard';
-import ApprovalWorkflowManagement from '../components/ApprovalWorkflowManagement';
-import DropdownConfiguration from '../components/DropdownConfiguration';
-import RoleManagement from '../components/RoleManagement';
-import ShipDocking from '../components/ShipDocking';
-import VesselLayout from '../components/VesselLayout';
-import MasterDockStatus from '../components/MasterDockStatus';
-import MasterLayout from '../components/MasterLayout';
-import WorkOrderDashboard from '../components/WorkOrderDashboard';
-import WorkOrderItems from '../components/WorkOrderItems';
-import DataFindings from '../components/DataFindings';
-import PriceReference from '../components/PriceReference';
-import MaterialStock from '../components/MaterialStock';
-import AIAssistant from '../components/AIAssistant';
-import AIShare from '../components/AIShare';
-import AISettings from '../components/AISettings';
-import AILogs from '../components/AILogs';
-import RepairList from '../components/RepairList';
-import RepairItems from '../components/RepairItems';
-import MarketingPriceReference from '../components/MarketingPriceReference';
-import HSEDashboard from '../components/HSEDashboard';
-import Attendance from '../components/Attendance';
-import WorkPermits from '../components/WorkPermits';
-import FinancialDashboard from '../components/FinancialDashboard';
-import ApiSyncManagement from '../components/ApiSyncManagement';
-import IngestSources from '../components/IngestSources';
-import MasterService from '../components/MasterService';
-import MasterEmployee from '../components/MasterEmployee';
-import MasterComponent from '../components/MasterComponent';
-import MaterialRequisition from '../components/MaterialRequisition';
+import RouteErrorBoundary from '../components/RouteErrorBoundary';
+const EquipmentFleet = page(() => import('../components/EquipmentFleet'));
+const EquipmentLoans = page(() => import('../components/EquipmentLoans'));
+const EquipmentDeployment = page(() => import('../components/EquipmentDeployment'));
+const EquipmentMaintenance = page(() => import('../components/EquipmentMaintenance'));
+const EquipmentReturn = page(() => import('../components/EquipmentReturn'));
+const EquipmentRelease = page(() => import('../components/EquipmentRelease'));
+const VendorManagement = page(() => import('../components/VendorManagement'));
+const CompanyManagement = page(() => import('../components/CompanyManagement'));
+const ShipManagement = page(() => import('../components/ShipManagement'));
+const MasterShipType = page(() => import('../components/MasterShipType'));
+const MasterLocation = page(() => import('../components/MasterLocation'));
+const UserManagement = page(() => import('../components/UserManagement'));
+const ProjectManagement = page(() => import('../components/ProjectManagement'));
+const UtilityDashboard = page(() => import('../components/UtilityDashboard'));
+const ApprovalWorkflowManagement = page(() => import('../components/ApprovalWorkflowManagement'));
+const DropdownConfiguration = page(() => import('../components/DropdownConfiguration'));
+const RoleManagement = page(() => import('../components/RoleManagement'));
+const ShipDocking = page(() => import('../components/ShipDocking'));
+const VesselLayout = page(() => import('../components/VesselLayout'));
+const MasterDockStatus = page(() => import('../components/MasterDockStatus'));
+const MasterLayout = page(() => import('../components/MasterLayout'));
+const WorkOrderDashboard = page(() => import('../components/WorkOrderDashboard'));
+const WorkOrderItems = page(() => import('../components/WorkOrderItems'));
+const DataFindings = page(() => import('../components/DataFindings'));
+const PriceReference = page(() => import('../components/PriceReference'));
+const MaterialStock = page(() => import('../components/MaterialStock'));
+const AIAssistant = page(() => import('../components/AIAssistant'));
+const AIShare = page(() => import('../components/AIShare'));
+const AISettings = page(() => import('../components/AISettings'));
+const AILogs = page(() => import('../components/AILogs'));
+const RepairList = page(() => import('../components/RepairList'));
+const RepairItems = page(() => import('../components/RepairItems'));
+const MarketingPriceReference = page(() => import('../components/MarketingPriceReference'));
+const HSEDashboard = page(() => import('../components/HSEDashboard'));
+const Attendance = page(() => import('../components/Attendance'));
+const WorkPermits = page(() => import('../components/WorkPermits'));
+const FinancialDashboard = page(() => import('../components/FinancialDashboard'));
+const ApiSyncManagement = page(() => import('../components/ApiSyncManagement'));
+const IngestSources = page(() => import('../components/IngestSources'));
+const MasterService = page(() => import('../components/MasterService'));
+const MasterEmployee = page(() => import('../components/MasterEmployee'));
+const MasterComponent = page(() => import('../components/MasterComponent'));
+const MaterialRequisition = page(() => import('../components/MaterialRequisition'));
 
 function PlaceholderPage({ title }: { title: string }) {
   return (
@@ -107,7 +130,18 @@ function PlaceholderPage({ title }: { title: string }) {
   );
 }
 
+// Shown while a menu's code arrives the first time it is opened.
+function PageLoading() {
+  return (
+    <div className="p-8 flex justify-center" role="status" aria-label="Memuat halaman">
+      <div className="w-6 h-6 rounded-full border-2 border-slate-200 border-t-slate-500 animate-spin" />
+    </div>
+  );
+}
+
 function AppLayout() {
+  const location = useLocation();
+  useEffect(preloadPages, []);
   const [sidebarOpen, setSidebarOpen] = useState(typeof window !== 'undefined' ? window.innerWidth >= 1024 : false);
 
   useEffect(() => {
@@ -148,7 +182,11 @@ function AppLayout() {
       <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
         <Header onMenuClick={() => setSidebarOpen(!sidebarOpen)} />
         <main className="flex-1 overflow-y-auto">
-          <Outlet />
+          <RouteErrorBoundary resetKey={location.pathname}>
+            <Suspense fallback={<PageLoading />}>
+              <Outlet />
+            </Suspense>
+          </RouteErrorBoundary>
         </main>
       </div>
     </div>
@@ -218,7 +256,7 @@ createRoot(document.getElementById('root')!).render(
       <DataProvider>
         <Routes>
           {/* Public demo page: no ShipHub login, guarded by the share switch in Pengaturan AI */}
-          <Route path="/ai-assistant/share" element={<AIShare />} />
+          <Route path="/ai-assistant/share" element={<Suspense fallback={<PageLoading />}><AIShare /></Suspense>} />
           <Route path="/" element={<AppContent />}>
             <Route index element={<Navigate to="/dashboard" replace />} />
             <Route path="dashboard" element={

@@ -69,6 +69,10 @@ func TestWorkPermits(t *testing.T) {
 	if n := get("/api/hse/work-permits?from=2026-10-05&to=2026-10-31")["total"]; n != float64(1) {
 		t.Errorf("period: %v", n)
 	}
+	// No match must still be a list: the page maps over it.
+	if _, ok := get("/api/hse/work-permits?q=tidak-ada-yang-cocok")["permits"].([]interface{}); !ok {
+		t.Error("no match: permits is not a list")
+	}
 }
 
 func TestHSEDashboard(t *testing.T) {

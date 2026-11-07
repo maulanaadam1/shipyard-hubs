@@ -1,7 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { BadgeDollarSign, Search, Loader2, Eye, EyeOff, FileSpreadsheet, ChevronDown, ChevronRight, ChevronLeft } from 'lucide-react';
-import * as XLSX from 'xlsx';
 import { getHeaders } from '@/lib/api-client';
 
 // Harga Acuan Marketing: reference unit prices offered to customers, from the
@@ -114,6 +113,7 @@ export default function MarketingPriceReference() {
       if (!res.ok) throw new Error(body?.error || `HTTP ${res.status}`);
       const head = ['Jenis pekerjaan', 'Ukuran', 'Satuan', 'Bagian', 'Median', 'P25', 'P75', 'Terendah', 'Tertinggi', 'Jumlah harga', 'Job Order', 'Dari', 'Sampai', 'Harga terakhir', 'JO terakhir'];
       const rows = (body.rows as Ref[]).map(r => [r.work_type, r.size, r.unit, r.component || 'utuh', r.median, r.p25, r.p75, r.min, r.max, r.n, r.job_orders, r.date_from, r.date_to, r.last_price, r.last_job_order]);
+      const XLSX = await import('xlsx');
       const wb = XLSX.utils.book_new();
       XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([head, ...rows]), 'Harga Acuan Marketing');
       XLSX.writeFile(wb, `HargaAcuanMarketing_${new Date().toISOString().slice(0, 10)}.xlsx`);
@@ -168,18 +168,18 @@ export default function MarketingPriceReference() {
           </select>
           <select aria-label="Satuan" value={params.get('unit') || ''} onChange={e => set({ unit: e.target.value })} className={selectCls}>
             <option value="">Semua satuan</option>
-            {data?.units.map(u => <option key={u.unit} value={u.unit}>{u.unit || '(tanpa satuan)'} ({u.count})</option>)}
+            {(data?.units ?? []).map(u => <option key={u.unit} value={u.unit}>{u.unit || '(tanpa satuan)'} ({u.count})</option>)}
           </select>
           <select aria-label="Bagian" value={params.get('component') || ''} onChange={e => set({ component: e.target.value })} className={selectCls}>
             {COMPONENTS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
           </select>
           <select aria-label="Jenis Job Order" value={params.get('service') || ''} onChange={e => set({ service: e.target.value })} className={selectCls}>
             <option value="">Semua jenis JO</option>
-            {facets?.services.map(f => <option key={f.value} value={f.value}>{f.value}</option>)}
+            {(facets?.services ?? []).map(f => <option key={f.value} value={f.value}>{f.value}</option>)}
           </select>
           <select aria-label="Customer" value={params.get('customer') || ''} onChange={e => set({ customer: e.target.value })} className={`${selectCls} md:max-w-56`}>
             <option value="">Semua customer</option>
-            {facets?.customers.map(f => <option key={f.value} value={f.value}>{f.value}</option>)}
+            {(facets?.customers ?? []).map(f => <option key={f.value} value={f.value}>{f.value}</option>)}
           </select>
         </div>
 
@@ -208,7 +208,7 @@ export default function MarketingPriceReference() {
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
-              {data?.rows.map(r => {
+              {(data?.rows ?? []).map(r => {
                 const k = refKey(r);
                 const d = detail[k];
                 return (
@@ -299,7 +299,7 @@ export default function MarketingPriceReference() {
                   </React.Fragment>
                 );
               })}
-              {data?.rows.length === 0 && <tr><td colSpan={9} className="px-3 py-6 text-center text-slate-500">Belum ada harga acuan untuk saringan ini.</td></tr>}
+              {data && !data.rows?.length && <tr><td colSpan={9} className="px-3 py-6 text-center text-slate-500">Belum ada harga acuan untuk saringan ini.</td></tr>}
               {!data && loading && <tr><td colSpan={9} className="px-3 py-6 text-slate-500"><Loader2 size={14} className="inline mr-2 animate-spin" aria-hidden="true" />Memuat…</td></tr>}
             </tbody>
           </table>
