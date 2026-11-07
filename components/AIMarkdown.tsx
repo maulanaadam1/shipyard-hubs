@@ -1,7 +1,6 @@
 import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { BarChart3, FileSpreadsheet } from 'lucide-react';
-import * as XLSX from 'xlsx';
 import AIChart from './AIChart';
 import { ChartSpec, chartTable, formatValue, parseChartSpec, tableToChart } from '@/lib/ai-chart';
 
@@ -142,7 +141,8 @@ function cellValue(s: string): string | number {
 type TableBlock = Extract<Block, { kind: 'table' }>;
 
 // downloadTables saves tables as one Excel file, one sheet per table.
-function downloadTables(tables: TableBlock[]) {
+async function downloadTables(tables: TableBlock[]) {
+  const XLSX = await import('xlsx');
   const wb = XLSX.utils.book_new();
   tables.forEach((t, i) => {
     const data = [t.header.map(plain), ...t.rows.map(r => r.map(cellValue))];

@@ -158,7 +158,7 @@ func GetMarketingPriceReference(w http.ResponseWriter, r *http.Request) {
 	words := strings.Fields(strings.ToLower(q.Get("search")))
 	unit := marketingUnit(q.Get("unit"))
 	minN, _ := strconv.Atoi(q.Get("min_n"))
-	var refs []marketingReference
+	refs := []marketingReference{}
 	for _, list := range groups {
 		ref := summarizeMarketing(list)
 		text := strings.ToLower(ref.WorkType + " " + ref.Size)

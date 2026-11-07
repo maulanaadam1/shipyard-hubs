@@ -1,7 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { Fingerprint, Search, Loader2, FileSpreadsheet } from 'lucide-react';
-import * as XLSX from 'xlsx';
 import { getHeaders } from '@/lib/api-client';
 
 // Absensi: fingerprint punches turned into work days (check-in, check-out,
@@ -75,8 +74,9 @@ export default function Attendance() {
     return { workers, manDays: data?.days.length || 0, minutes, incomplete };
   }, [data]);
 
-  const exportExcel = () => {
+  const exportExcel = async () => {
     if (!data) return;
+    const XLSX = await import('xlsx');
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([
       ['Vendor', 'Pekerja', 'Hari kerja', 'Belum lengkap', 'Jam kerja', 'Jam lembur'],

@@ -175,7 +175,7 @@ func GetWorkPermits(w http.ResponseWriter, r *http.Request) {
 	}
 	from, to := q.Get("from"), q.Get("to")
 	statuses, categories, risks := map[string]int{}, map[string]int{}, map[string]int{}
-	var list []workPermit
+	list := []workPermit{}
 	manpower := 0
 	for _, p := range permits {
 		if len(words) > 0 {

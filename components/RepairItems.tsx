@@ -1,7 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { ListChecks, Search, Loader2, Eye, EyeOff, FileSpreadsheet, ChevronLeft, ChevronRight } from 'lucide-react';
-import * as XLSX from 'xlsx';
 import { getHeaders } from '@/lib/api-client';
 
 // Item Repair List: every activity of every Job Order's repair list, split
@@ -143,6 +142,7 @@ export default function RepairItems() {
           ...(view === 'work_type_size' ? [r.quantity] : []), ...(showPrice ? [r.total_price] : []),
           ...(showPrice && view === 'work_type_size' ? [r.unit_price_median ?? '', r.unit_price_min ?? '', r.unit_price_max ?? ''] : [])]);
       }
+      const XLSX = await import('xlsx');
       const ws = XLSX.utils.aoa_to_sheet([head, ...rows]);
       const wb = XLSX.utils.book_new();
       XLSX.utils.book_append_sheet(wb, ws, 'Item Repair List');

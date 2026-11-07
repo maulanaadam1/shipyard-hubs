@@ -21,7 +21,6 @@ import { useData, Company } from '@/context/DataContext';
 import { motion, AnimatePresence } from 'motion/react';
 import { api } from '@/lib/api-client';
 import Papa from 'papaparse';
-import * as XLSX from 'xlsx';
 
 export default function CompanyManagement() {
   const { companies, setCompanies, dropdownConfigs, fetchData, canAccess } = useData();
@@ -131,6 +130,7 @@ export default function CompanyManagement() {
         });
       } else if (fileName.endsWith('.xlsx') || fileName.endsWith('.xls')) {
         const data = await file.arrayBuffer();
+        const XLSX = await import('xlsx');
         const workbook = XLSX.read(data);
         const worksheet = workbook.Sheets[workbook.SheetNames[0]];
         rawData = XLSX.utils.sheet_to_json(worksheet);
