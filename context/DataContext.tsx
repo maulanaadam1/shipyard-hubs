@@ -431,6 +431,53 @@ export function DataProvider({ children }: { children: ReactNode }) {
   // in-flight load instead of each downloading every master table again.
   const inFlightFetchRef = React.useRef<Promise<void> | null>(null);
 
+  // Master tables load on first use instead of all at sign-in: a page that
+  // reads `fleet` from useData() asks for the equipment table then. Once asked
+  // for, a table is refreshed by every fetchData() like before.
+  const masterTables = {
+    fleet: [() => api.from('equipment').select('*').order('created_at', { ascending: false }), setFleet],
+    loans: [() => api.from('loan_requests').select('*').order('date_created', { ascending: false }), setLoans],
+    deployments: [() => api.from('deployment_records').select('*').order('create_date', { ascending: false }), setDeployments],
+    users: [() => api.from('profiles').select('*'), setUsers],
+    vendors: [() => api.from('vendors').select('*').order('vendor', { ascending: true }), setVendors],
+    companies: [() => api.from('companies').select('*').order('company_name', { ascending: true }), setCompanies],
+    locations: [() => api.from('master_locations').select('*'), setLocations],
+    ships: [() => api.from('ships').select('*').order('shipname', { ascending: true }), setShips],
+    projects: [() => api.from('projects').select('*').order('id_siaga', { ascending: false }), setProjects],
+    dropdownConfigs: [() => api.from('dropdown_configs').select('*'), setDropdownConfigs],
+    releases: [() => api.from('equipment_release').select('*').order('date_released', { ascending: false }), setReleases],
+    workflows: [() => api.from('approval_workflow').select('*').order('step_order', { ascending: true }), setWorkflows],
+    dockStatuses: [() => api.from('master_status_dock').select('*').order('name', { ascending: true }), setDockStatuses],
+    services: [() => api.from('master_services').select('*'), setServices],
+    employees: [() => api.from('master_employees').select('*'), setEmployees],
+  } as const;
+  type MasterTable = keyof typeof masterTables;
+  const requestedTablesRef = React.useRef(new Set<MasterTable>());
+
+  const loadTable = async (label: string, query: () => PromiseLike<any>, set: (rows: any) => void) => {
+    try {
+      const { data, error } = await query();
+      if (error) {
+        console.error(`Error fetching ${label}:`, error.message);
+        return;
+      }
+      if (data) set(data);
+    } catch (err) {
+      console.error(`Error fetching ${label}:`, err);
+    }
+  };
+  const loadMasterTable = (name: MasterTable) => {
+    const [query, set] = masterTables[name];
+    return loadTable(name, query, set as (rows: any) => void);
+  };
+
+  // Called while a page renders, so the request starts after the render.
+  const requestTable = (name: MasterTable) => {
+    if (requestedTablesRef.current.has(name)) return;
+    requestedTablesRef.current.add(name);
+    if (currentUserIdRef.current) queueMicrotask(() => { loadMasterTable(name); });
+  };
+
   // --- Fetch Initial Data ---
   const fetchData = useCallback((isInitial = false): Promise<void> => {
     if (inFlightFetchRef.current) return inFlightFetchRef.current;
@@ -485,55 +532,16 @@ export function DataProvider({ children }: { children: ReactNode }) {
         setIsLoading(false);
       }
 
-      // Priority 2: Everything else
-      const results = await Promise.allSettled([
-        api.from('equipment').select('*').order('created_at', { ascending: false }),
-        api.from('loan_requests').select('*').order('date_created', { ascending: false }),
-        api.from('deployment_records').select('*').order('create_date', { ascending: false }),
-        api.from('profiles').select('*'),
-        api.from('vendors').select('*').order('vendor', { ascending: true }),
-        api.from('companies').select('*').order('company_name', { ascending: true }),
-        api.from('master_locations').select('*'),
-        api.from('ships').select('*').order('shipname', { ascending: true }),
-        api.from('projects').select('*').order('id_siaga', { ascending: false }),
-        api.from('dropdown_configs').select('*'),
-        api.from('equipment_release').select('*').order('date_released', { ascending: false }),
-        api.from('approval_workflow').select('*').order('step_order', { ascending: true }),
-        api.from('master_status_dock').select('*').order('name', { ascending: true }),
-        api.from('master_services').select('*'),
-        api.from('master_employees').select('*'),
-        currentUserIdRef.current 
-          ? api.from('notifications').select('*').eq('user_id', currentUserIdRef.current).order('created_at', { ascending: false })
-          : Promise.resolve({ data: [], error: null })
+      // Priority 2: the header's notifications, and again every master table
+      // a page has already asked for (a refresh after a save). Tables no page
+      // has read yet stay unloaded until one does (see tableGetters below).
+      const userId = currentUserIdRef.current;
+      await Promise.all([
+        userId
+          ? loadTable('notifications', () => api.from('notifications').select('*').eq('user_id', userId).order('created_at', { ascending: false }), setNotifications)
+          : Promise.resolve(),
+        ...[...requestedTablesRef.current].map(name => loadMasterTable(name)),
       ]);
-
-      results.forEach((result, index) => {
-        if (result.status === 'fulfilled') {
-          const { data, error } = result.value as any;
-          if (error) {
-            console.error(`Error fetching table ${index}:`, error.message);
-            return;
-          }
-          if (data) {
-            if (index === 0) setFleet(data as Equipment[]);
-            if (index === 1) setLoans(data as LoanRequest[]);
-            if (index === 2) setDeployments(data as DeploymentRecord[]);
-            if (index === 3) setUsers(data as User[]);
-            if (index === 4) setVendors(data as Vendor[]);
-            if (index === 5) setCompanies(data as Company[]);
-            if (index === 6) setLocations(data as LocationMaster[]);
-            if (index === 7) setShips(data as Ship[]);
-            if (index === 8) setProjects(data as Project[]);
-            if (index === 9) setDropdownConfigs(data as DropdownConfig[]);
-            if (index === 10) setReleases(data as ReleaseRecord[]);
-            if (index === 11) setWorkflows(data as ApprovalWorkflow[]);
-            if (index === 12) setDockStatuses(data as DockStatusMaster[]);
-            if (index === 13) setServices(data as ServiceMaster[]);
-            if (index === 14) setEmployees(data as EmployeeMaster[]);
-            if (index === 15) setNotifications(data as Notification[]);
-          }
-        }
-      });
     } catch (error) {
       console.error('Unexpected error during fetchData:', error);
     } finally {
@@ -669,28 +677,29 @@ export function DataProvider({ children }: { children: ReactNode }) {
   }
 
   return (
-    <DataContext.Provider value={{ 
-      fleet, setFleet, 
-      loans, setLoans, 
-      deployments, setDeployments,
-      users, setUsers,
-      vendors, setVendors,
-      companies, setCompanies,
-      locations, setLocations,
-      ships, setShips,
-      projects, setProjects,
-      dropdownConfigs, setDropdownConfigs,
+    <DataContext.Provider value={{
+      // Reading one of these asks for its table (see requestTable).
+      get fleet() { requestTable('fleet'); return fleet; }, setFleet,
+      get loans() { requestTable('loans'); return loans; }, setLoans,
+      get deployments() { requestTable('deployments'); return deployments; }, setDeployments,
+      get users() { requestTable('users'); return users; }, setUsers,
+      get vendors() { requestTable('vendors'); return vendors; }, setVendors,
+      get companies() { requestTable('companies'); return companies; }, setCompanies,
+      get locations() { requestTable('locations'); return locations; }, setLocations,
+      get ships() { requestTable('ships'); return ships; }, setShips,
+      get projects() { requestTable('projects'); return projects; }, setProjects,
+      get dropdownConfigs() { requestTable('dropdownConfigs'); return dropdownConfigs; }, setDropdownConfigs,
       rolesMaster, setRolesMaster,
       rolePermissions, setRolePermissions,
-      releases, setReleases,
-      workflows, setWorkflows,
-      services, setServices,
-      employees, setEmployees,
+      get releases() { requestTable('releases'); return releases; }, setReleases,
+      get workflows() { requestTable('workflows'); return workflows; }, setWorkflows,
+      get services() { requestTable('services'); return services; }, setServices,
+      get employees() { requestTable('employees'); return employees; }, setEmployees,
       syncCache, setSyncCache,
       syncDates, setSyncDates,
       notifications, markNotificationRead, createNotification,
       currentUser, setCurrentUser,
-      dockStatuses, setDockStatuses,
+      get dockStatuses() { requestTable('dockStatuses'); return dockStatuses; }, setDockStatuses,
       isLoading, fetchData,
       isAuthLoading,
       canAccess: (resource: string, action: string = 'view') => {
