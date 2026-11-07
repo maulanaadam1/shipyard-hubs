@@ -24,7 +24,10 @@ func attendanceHoursTool() aiTool {
 	return aiTool{
 		Name: "attendance_hours",
 		Description: "Attendance and work hours from the fingerprint machines (ZKTeco, synced from the attendance spreadsheet): " +
-			"subcontractor workers (grouped by PT) and the yard's own employees (grouped as Internal - <department>). " +
+			"subcontractor workers (grouped by PT) and the yard's own employees (grouped as Internal - <department>). A worker is a " +
+			"vendor worker only when listed in MasterOperation's vendor member list (vendor_detail); everyone else is internal. " +
+			"When the user asks about vendors, use vendor \"vendor\" (all vendor workers) or a PT name: internal employees are then " +
+			"left out; they only appear with vendor \"Internal\" or when the user asks about employees / internal. " +
 			"Call this when the user asks how many hours or man-days a vendor / PT or department worked, who worked or did overtime, " +
 			"how many workers came on a day, what time someone checked in or out, attendance with a missing check-in or check-out, " +
 			"or productivity of a vendor (WO value per hour worked). group_by worker_day lists each worker's days with check-in, " +
@@ -36,7 +39,7 @@ func attendanceHoursTool() aiTool {
 		Schema: aiSchema(map[string]interface{}{
 			"date_from": aiString("First shift day, YYYY-MM-DD."),
 			"date_to":   aiString("Last shift day, YYYY-MM-DD (at most 366 days after date_from, so a whole year fits)."),
-			"vendor":    aiString("Vendor / PT name in any spelling (PT ABC, ABC PT, ABC, PT. Abc), \"Internal - <department>\" (e.g. Internal - QHSE), \"Internal\" for all yard employees, or \"Tanpa PT\" for workers in neither list."),
+			"vendor":    aiString("Vendor / PT name in any spelling (PT ABC, ABC PT, ABC, PT. Abc), \"vendor\" for all vendor workers, \"Internal - <department>\" (e.g. Internal - QHSE), \"Internal\" for all yard employees, or \"Tanpa PT\" for vendor workers without a PT."),
 			"worker":    aiString("Worker name, emp_code (fingerprint id) or department; words must all match."),
 			"group_by":  aiString("vendor (default: PT or internal department), worker, day, or worker_day (one row per worker per day with check-in / check-out times).", "vendor", "worker", "day", "worker_day"),
 			"sort":      aiString("hours = most hours first (default), overtime = most overtime first, incomplete = most days with a missing punch first.", "hours", "overtime", "incomplete"),
@@ -62,7 +65,9 @@ func hours(minutes int) float64 { return math.Round(float64(minutes)/6) / 10 }
 // groupLabel: PT, "Internal - <department>" or "Tanpa PT".
 func groupLabel(d attendanceDay) string { return attendanceGroupLabel(d, noPTLabel) }
 
-func isInternalLabel(label string) bool { return strings.HasPrefix(label, "Internal - ") }
+func isInternalLabel(label string) bool {
+	return label == "Internal" || strings.HasPrefix(label, "Internal - ")
+}
 
 // attendancePeriod: the requested days, or the last 7 days of attendance.
 func attendancePeriod(in attendanceHoursInput) (time.Time, time.Time, error) {
@@ -156,6 +161,10 @@ func runAttendanceHours(r *http.Request, input json.RawMessage) (interface{}, er
 				}
 			case strings.EqualFold(strings.TrimSpace(in.Vendor), "internal"):
 				if !isInternalLabel(label) {
+					continue
+				}
+			case strings.EqualFold(strings.TrimSpace(in.Vendor), "vendor"):
+				if isInternalLabel(label) {
 					continue
 				}
 			case normalizeVendorName(label) != vendorKey:
