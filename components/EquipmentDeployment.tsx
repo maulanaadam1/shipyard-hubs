@@ -344,11 +344,9 @@ export default function EquipmentDeployment() {
                                     <table className="w-full text-left border-collapse">
                                       <thead>
                                         <tr className="bg-slate-50/80 text-slate-400 uppercase text-[9px] font-bold tracking-widest">
-                                          <th className="px-4 py-3 border-b border-slate-100">Asset ID</th>
-                                          <th className="px-4 py-3 border-b border-slate-100">Item Type</th>
+                                          <th className="px-4 py-3 border-b border-slate-100">Asset</th>
                                           <th className="px-4 py-3 border-b border-slate-100">Usage Status</th>
                                           <th className="px-4 py-3 border-b border-slate-100">Release Date</th>
-                                          <th className="px-4 py-3 border-b border-slate-100 text-right">Actions</th>
                                         </tr>
                                       </thead>
                                       <tbody className="divide-y divide-slate-100">
@@ -390,13 +388,6 @@ export default function EquipmentDeployment() {
                                               </td>
                                               <td className="px-4 py-3">
                                                 <span className="text-[11px] text-slate-500">{record.start_date}</span>
-                                              </td>
-                                              <td className="px-4 py-3 text-right">
-                                                {canAccess('Utility', 'delete') && (
-                                                  <button aria-label="Delete deployment" className="p-1 text-slate-400 hover:text-red-600 transition-colors">
-                                                    <Trash2 className="w-3.5 h-3.5" />
-                                                  </button>
-                                                )}
                                               </td>
                                             </tr>
                                           );

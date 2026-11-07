@@ -5,7 +5,6 @@ import { motion, AnimatePresence } from 'motion/react';
 import { useSearchParams } from 'react-router-dom';
 import { 
   Search, 
-  Filter, 
   Plus, 
   X, 
   Eye, 
@@ -673,9 +672,6 @@ export default function EquipmentLoans() {
                 <option value="all">All</option>
               </select>
             </div>
-            <button aria-label="Filter" className="p-2 bg-white border border-slate-200 rounded-lg text-slate-500 hover:text-[#FDB913] hover:border-[#FDB913]/30 transition-colors">
-              <Filter className="w-4 h-4" />
-            </button>
           </div>
         </div>
 

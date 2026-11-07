@@ -4,7 +4,6 @@ import React, { useState, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
   Search, 
-  Filter, 
   Download, 
   Upload, 
   MoreHorizontal, 
@@ -558,9 +557,6 @@ export default function EquipmentFleet() {
               title="Paste CSV Data"
             >
               <FileText className="w-4 h-4" />
-            </button>
-            <button aria-label="Filter" className="p-2 bg-white border border-slate-200 rounded-lg text-slate-500 hover:text-[#FDB913] hover:border-[#FDB913]/30 transition-colors">
-              <Filter className="w-4 h-4" />
             </button>
           </div>
         </div>
