@@ -100,6 +100,18 @@ Di komponen, pakai `bg-brand`, `hover:bg-brand-hover`, dan `text-brand-ink`. Hex
 - **Tidak ada tombol tanpa aksi.** Fitur yang belum ada tidak ditampilkan di menu.
 - **Setiap tampilan data punya tiga keadaan:** memuat, kosong, dan gagal. Pesan gagal tidak boleh terlihat seperti data kosong.
 
-## Belum diputuskan
+## Bahasa
 
-- **Bahasa antarmuka.** Sekarang ada halaman berbahasa Indonesia dan ada yang berbahasa Inggris. Pemilik produk belum memilih salah satunya. Sampai ada keputusan, setiap halaman mengikuti bahasa yang sudah dipakai di halaman itu.
+- **Bahasa antarmuka: Bahasa Indonesia** (keputusan pemilik, 7 Nov 2026). Aturan ini berlaku untuk:
+  - judul halaman dan judul bagian;
+  - label form dan placeholder;
+  - teks tombol dan `aria-label`;
+  - pesan kosong, gagal, dan sukses;
+  - judul kolom tabel.
+- **Satu halaman, satu bahasa.** Saat sebuah halaman disentuh, seluruh teksnya diterjemahkan sekalian, bukan sebagian.
+- **Nama menu dan istilah kerja yang sudah ada** (misalnya Job Order, Work Order, Repair List, Docking) tidak diterjemahkan tanpa persetujuan pemilik.
+- **Data dari sistem lain** (nama kapal, kode WO, status dari API) ditampilkan apa adanya.
+- **Halaman yang masih dominan berbahasa Inggris** per 7 Nov 2026 akan dipindahkan bertahap:
+  - **Equipment:** Equipment Loans, Equipment Release, Equipment Inventory.
+  - **Master:** Vendor, Company, Kapal, Ship Type, Location, Dock Status, Configuration, Project, User Management.
+  - **Halaman lain:** Ship Docking, Request Material, Work Order Dashboard, Item Pekerjaan WO.
