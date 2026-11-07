@@ -34,16 +34,22 @@ func attendanceHoursTool() aiTool {
 			"check-out, every punch time and status; use it with worker or vendor and dates when the user asks what time people came or left. group_by vendor (default) returns per vendor: workers, man-days, measured hours, hours including " +
 			"estimates for days with one punch, overtime, wo_vendor (plus wo_vendors when the PT is also billed under its kepala vendor name) = the exact WO vendor names for search_work_orders / " +
 			"billing_summary, and (when the user may see billing) WO value approved in the period and value per hour. group_by " +
-			"worker or day gives the same per worker (with kepala subkon and skill) or per date. Without dates it covers the " +
+			"worker or day gives the same per worker (with kepala subkon and skill) or per date. group_by ship (needs Data HSE) " +
+			"crosses attendance with the HSE work permits to say on which ship and job the hours and overtime were: a day is matched " +
+			"by the worker's name on a permit active that day, else by the worker's vendor (kepala subkon / PT) having permits that " +
+			"day; rows give hours, overtime, jobs (pekerjaan) and how many days matched each way. Use it with overtime_only for " +
+			"\"lembur di kapal mana\". worker_day rows also carry the matched work when the user may see Data HSE. Always say how the " +
+			"ship was found (nama di izin kerja = pasti, izin kerja vendor = perkiraan). Without dates it covers the " +
 			"last 7 days of attendance.",
 		Schema: aiSchema(map[string]interface{}{
-			"date_from": aiString("First shift day, YYYY-MM-DD."),
-			"date_to":   aiString("Last shift day, YYYY-MM-DD (at most 366 days after date_from, so a whole year fits)."),
-			"vendor":    aiString("Vendor / PT name in any spelling (PT ABC, ABC PT, ABC, PT. Abc), \"vendor\" for all vendor workers, \"Internal - <department>\" (e.g. Internal - QHSE), \"Internal\" for all yard employees, or \"Tanpa PT\" for vendor workers without a PT."),
-			"worker":    aiString("Worker name, emp_code (fingerprint id) or department; words must all match."),
-			"group_by":  aiString("vendor (default: PT or internal department), worker, day, or worker_day (one row per worker per day with check-in / check-out times).", "vendor", "worker", "day", "worker_day"),
-			"sort":      aiString("hours = most hours first (default), overtime = most overtime first, incomplete = most days with a missing punch first.", "hours", "overtime", "incomplete"),
-			"limit":     aiInteger("Rows to return (default 20).", 1, 100),
+			"date_from":     aiString("First shift day, YYYY-MM-DD."),
+			"date_to":       aiString("Last shift day, YYYY-MM-DD (at most 366 days after date_from, so a whole year fits)."),
+			"vendor":        aiString("Vendor / PT name in any spelling (PT ABC, ABC PT, ABC, PT. Abc), \"vendor\" for all vendor workers, \"Internal - <department>\" (e.g. Internal - QHSE), \"Internal\" for all yard employees, or \"Tanpa PT\" for vendor workers without a PT."),
+			"worker":        aiString("Worker name, emp_code (fingerprint id) or department; words must all match."),
+			"group_by":      aiString("vendor (default: PT or internal department), worker, day, worker_day (one row per worker per day with check-in / check-out times), or ship (hours and overtime per ship through the work permits).", "vendor", "worker", "day", "worker_day", "ship"),
+			"overtime_only": map[string]interface{}{"type": "boolean", "description": "Only days with overtime (lembur)."},
+			"sort":          aiString("hours = most hours first (default), overtime = most overtime first, incomplete = most days with a missing punch first.", "hours", "overtime", "incomplete"),
+			"limit":         aiInteger("Rows to return (default 20).", 1, 100),
 		}),
 		Resource: ResourceDataAttendance,
 		Run:      runAttendanceHours,
@@ -56,6 +62,7 @@ type attendanceHoursInput struct {
 	Vendor   string `json:"vendor"`
 	Worker   string `json:"worker"`
 	GroupBy  string `json:"group_by"`
+	Overtime bool   `json:"overtime_only"`
 	Sort     string `json:"sort"`
 	Limit    int    `json:"limit"`
 }
@@ -132,7 +139,7 @@ func runAttendanceHours(r *http.Request, input json.RawMessage) (interface{}, er
 	if err := decodeAIInput(input, &in); err != nil {
 		return nil, err
 	}
-	if err := oneOf("group_by", in.GroupBy, "vendor", "worker", "day", "worker_day"); err != nil {
+	if err := oneOf("group_by", in.GroupBy, "vendor", "worker", "day", "worker_day", "ship"); err != nil {
 		return nil, err
 	}
 	if err := oneOf("sort", in.Sort, "hours", "overtime", "incomplete"); err != nil {
@@ -171,6 +178,9 @@ func runAttendanceHours(r *http.Request, input json.RawMessage) (interface{}, er
 				continue
 			}
 		}
+		if in.Overtime && d.OvertimeMinutes == 0 {
+			continue
+		}
 		if len(words) > 0 {
 			text := strings.ToLower(d.EmpCode + " " + d.Name + " " + d.Department)
 			ok := true
@@ -184,8 +194,44 @@ func runAttendanceHours(r *http.Request, input json.RawMessage) (interface{}, er
 		days = append(days, d)
 	}
 
+	// Work permits: the ship and job of each day (Data HSE only).
+	var permits *permitIndex
+	if HasResourcePermission(r, ResourceDataHSE, "view") {
+		if list, err := loadWorkPermits(); err == nil {
+			idx := newPermitIndex(list, from.Format("2006-01-02"), to.Format("2006-01-02"))
+			permits = &idx
+		}
+	}
+	if in.GroupBy == "ship" {
+		if permits == nil {
+			return nil, inputErrorf("kapal per hari kerja butuh izin Data HSE (izin kerja); tanyakan tanpa kapal atau minta Admin menambah izinnya")
+		}
+		rows, matched := attendanceByShip(days, *permits, in.Sort, limitOr(in.Limit, 20, 100))
+		return map[string]interface{}{
+			"period":   map[string]string{"from": from.Format("2006-01-02"), "to": to.Format("2006-01-02")},
+			"group_by": "ship", "rows": rows,
+			"days": map[string]int{"total": len(days), "by_name": matched[matchByName], "by_vendor_permit": matched[matchByVendor], "unknown": matched["tidak_diketahui"]},
+			"notes": []string{"Kapal dan pekerjaan dari izin kerja HSE yang aktif pada hari absen: by_name = nama pekerja tercantum di izin kerja itu (pasti); " +
+				"by_vendor_permit = nama tidak tercantum, tetapi vendor/kepala subkonnya punya izin kerja hari itu (perkiraan; bila beberapa kapal, jam dibagi rata). " +
+				"unknown = tidak ada izin kerja yang cocok. Sebutkan cara pencocokan ini di jawaban."},
+		}, nil
+	}
 	if in.GroupBy == "worker_day" {
-		return attendanceWorkerDays(in, from, to, days), nil
+		out := attendanceWorkerDays(in, from, to, days)
+		if permits != nil {
+			for _, row := range out["rows"].([]map[string]interface{}) {
+				for _, d := range days {
+					if d.EmpCode == row["emp_code"] && d.Date == row["date"] {
+						if w := permits.workFor(d); len(w) > 0 {
+							row["work"] = w
+						}
+						break
+					}
+				}
+			}
+			out["notes"] = append(out["notes"].([]string), "work = kapal dan pekerjaan dari izin kerja HSE yang aktif hari itu: match \"nama di izin kerja\" = pasti, \"izin kerja vendor\" = perkiraan dari izin kerja vendornya.")
+		}
+		return out, nil
 	}
 
 	type agg struct {

@@ -621,7 +621,9 @@ func fillFromMembers(days []attendanceDay, members map[string]vendorMember) {
 		}
 		d := &days[i]
 		d.VendorWorker = true
-		if d.Name == "" {
+		// The member list's full name: the machine often has a short one
+		// ("Andi"), and work permits list people by full name.
+		if m.Name != "" {
 			d.Name = m.Name
 		}
 		// The member list is the reference for a vendor worker's vendor.

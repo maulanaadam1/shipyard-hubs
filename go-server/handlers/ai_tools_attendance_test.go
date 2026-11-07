@@ -452,3 +452,76 @@ func TestQueryAppDataWorkPermits(t *testing.T) {
 		t.Error("a user without the resource read work permits")
 	}
 }
+
+// Attendance crossed with work permits: ship and job per day, by the
+// worker's name on a permit or by the vendor's permits that day.
+func TestAttendanceCrossWorkPermits(t *testing.T) {
+	seedAttendanceWorld(t)
+	db.Exec("DELETE FROM external_records WHERE data LIKE '%\"_sheet\":\"workpermit\"%'")
+	t.Cleanup(func() { db.Exec("DELETE FROM external_records WHERE source_id = 'att-wp'") })
+	for i, row := range []map[string]interface{}{
+		{"no_workpermit": "WP-A", "status": "Approved", "shipname": "KM ALPHA", "vendor": "Pak Las", "pekerjaan": "Replating bottom",
+			"date_start": "11/1/2026", "date_finish": "2026-11-05", "person_list": "ANDI UJI,BUDI"},
+		{"no_workpermit": "WP-B", "status": "Approved", "shipname": "KM BETA", "vendor": "Pak Budi", "pekerjaan": "Sandblasting",
+			"date_start": "2026-11-02", "date_finish": "2026-11-02"},
+		{"no_workpermit": "WP-C", "status": "Approved", "shipname": "KM GAMMA", "vendor": "Pak Budi", "pekerjaan": "Pengecatan",
+			"date_start": "2026-12-01", "date_finish": "2026-12-05"}, // outside the period
+	} {
+		row["_sheet"], row["_key"] = "workpermit", "workpermit:"+row["no_workpermit"].(string)
+		raw, _ := json.Marshal(row)
+		db.Exec(`INSERT INTO external_records (source_id, record_key, data, updated_at) VALUES ('att-wp', ?, ?, '2026-11-05')`, i, string(raw))
+	}
+	week := `"date_from": "2026-11-02", "date_to": "2026-11-08"`
+
+	out, err := runAttendanceTool(t, "att-admin", `{`+week+`, "group_by": "ship"}`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	byShip := map[string]map[string]interface{}{}
+	for _, r := range out["rows"].([]interface{}) {
+		byShip[r.(map[string]interface{})["ship"].(string)] = r.(map[string]interface{})
+	}
+	// E1 (Andi Uji, punched as "Andi") is named on WP-A; E9 is not named
+	// anywhere, but its kepala subkon Pak Budi has WP-B that day.
+	if a := byShip["KM ALPHA"]; a == nil || a["overtime_hours"] != float64(2) || a["days_by_name"] != float64(1) || toStrings(a["pekerjaan"])[0] != "Replating bottom" {
+		t.Errorf("KM ALPHA: %v", a)
+	}
+	if b := byShip["KM BETA"]; b == nil || b["days_by_vendor_permit"] != float64(1) || b["hours_incl_estimates"] != float64(8) {
+		t.Errorf("KM BETA: %v", b)
+	}
+	if byShip["KM GAMMA"] != nil {
+		t.Error("a permit outside the period matched")
+	}
+	if u := byShip["Tidak diketahui"]; u == nil || u["workers"] != float64(3) { // the internal employees
+		t.Errorf("unknown: %v", u)
+	}
+	if d := out["days"].(map[string]interface{}); d["by_name"] != float64(1) || d["by_vendor_permit"] != float64(1) || d["unknown"] != float64(3) {
+		t.Errorf("days matched: %v", d)
+	}
+
+	// Overtime only: E1's day on KM ALPHA; E9's 8 hours on KM BETA had none.
+	ot, _ := runAttendanceTool(t, "att-admin", `{`+week+`, "group_by": "ship", "overtime_only": true}`)
+	otShips := map[string]bool{}
+	for _, r := range ot["rows"].([]interface{}) {
+		otShips[r.(map[string]interface{})["ship"].(string)] = true
+	}
+	if !otShips["KM ALPHA"] || otShips["KM BETA"] {
+		t.Errorf("overtime by ship: %v", ot["rows"])
+	}
+
+	// Per worker per day: the matched work.
+	wd, _ := runAttendanceTool(t, "att-admin", `{`+week+`, "group_by": "worker_day", "worker": "andi"}`)
+	row := wd["rows"].([]interface{})[0].(map[string]interface{})
+	work, _ := row["work"].([]interface{})
+	if len(work) != 1 || work[0].(map[string]interface{})["ship"] != "KM ALPHA" || work[0].(map[string]interface{})["match"] != matchByName {
+		t.Errorf("worker_day work: %v", row)
+	}
+
+	// Without Data HSE: no ships.
+	if _, err := runAttendanceTool(t, "att-viewer", `{`+week+`, "group_by": "ship"}`); err == nil {
+		t.Error("ships without Data HSE")
+	}
+	if wd, _ := runAttendanceTool(t, "att-viewer", `{`+week+`, "group_by": "worker_day", "worker": "andi"}`); wd["rows"].([]interface{})[0].(map[string]interface{})["work"] != nil {
+		t.Error("work shown without Data HSE")
+	}
+}
