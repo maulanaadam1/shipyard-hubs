@@ -129,6 +129,11 @@ func GetSession(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, 200, map[string]any{"session": nil})
 		return
 	}
+	if kind, _ := claims["kind"].(string); kind != "" {
+		// AI share guests are not ShipHub users.
+		writeJSON(w, 200, map[string]any{"session": nil})
+		return
+	}
 
 	// Supabase stores email in claims["email"] or claims["user_metadata"]["email"]
 	email, _ := claims["email"].(string)

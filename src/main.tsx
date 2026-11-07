@@ -76,6 +76,7 @@ import DataFindings from '../components/DataFindings';
 import PriceReference from '../components/PriceReference';
 import MaterialStock from '../components/MaterialStock';
 import AIAssistant from '../components/AIAssistant';
+import AIShare from '../components/AIShare';
 import AISettings from '../components/AISettings';
 import AILogs from '../components/AILogs';
 import RepairList from '../components/RepairList';
@@ -210,6 +211,8 @@ createRoot(document.getElementById('root')!).render(
     <BrowserRouter>
       <DataProvider>
         <Routes>
+          {/* Public demo page: no ShipHub login, guarded by the share switch in Pengaturan AI */}
+          <Route path="/ai-assistant/share" element={<AIShare />} />
           <Route path="/" element={<AppContent />}>
             <Route index element={<Navigate to="/dashboard" replace />} />
             <Route path="dashboard" element={

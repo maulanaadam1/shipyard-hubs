@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Bot, KeyRound, PlugZap, Save } from 'lucide-react';
 import { getHeaders } from '@/lib/api-client';
+import AIShareSettings from './AIShareSettings';
 
 // Pengaturan AI (Role Management permission): which AI provider the AI Assistant uses. Saved in
 // the database; the API key is stored encrypted and never shown again.
@@ -226,6 +227,8 @@ export default function AISettings() {
                   : <p className="break-words"><span className="font-semibold">Gagal terhubung.</span> {test.error}</p>}
               </section>
             )}
+
+            <AIShareSettings canEdit />
           </>
         )}
       </main>
