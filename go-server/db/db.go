@@ -715,6 +715,28 @@ func createTables() {
 		updated_at TEXT
 	);`)
 
+	// Public AI Asisten share page (/ai-assistant/share): one settings row and
+	// one row per guest (name typed on the page, device, optional location).
+	DB.Exec(`CREATE TABLE IF NOT EXISTS ai_share_settings (
+		id TEXT PRIMARY KEY,
+		enabled BOOLEAN DEFAULT false,
+		role TEXT,
+		daily_limit INTEGER DEFAULT 100,
+		updated_by TEXT,
+		updated_at TEXT
+	);`)
+	DB.Exec(`CREATE TABLE IF NOT EXISTS ai_share_guests (
+		id TEXT PRIMARY KEY,
+		name TEXT,
+		device TEXT,
+		user_agent TEXT,
+		latitude NUMERIC,
+		longitude NUMERIC,
+		location_accuracy NUMERIC,
+		created_at TEXT,
+		last_seen TEXT
+	);`)
+
 	// Reference unit costs per work type, size and unit (from wo_item_parsed),
 	// rebuilt by the findings job from approved items.
 	DB.Exec(`CREATE TABLE IF NOT EXISTS wo_item_reference (

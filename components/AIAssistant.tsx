@@ -163,7 +163,14 @@ function PillMenu({ label, icon, value, options, onChange }: {
   );
 }
 
-export default function AIAssistant() {
+// A visitor of the public share page (/ai-assistant/share): calls go to the
+// /api/ai/share routes with the guest token instead of the user session.
+export type AIGuest = { token: string; name: string; onInvalid: () => void };
+
+export default function AIAssistant({ guest }: { guest?: AIGuest } = {}) {
+  const base = guest ? '/api/ai/share' : '/api/ai';
+  const authHeaders = async (): Promise<Record<string, string>> =>
+    guest ? { 'Content-Type': 'application/json', Authorization: `Bearer ${guest.token}` } : getHeaders();
   const [status, setStatus] = useState<Status | null>(null);
   const [statusError, setStatusError] = useState('');
   const [messages, setMessages] = useState<Message[]>([]);
@@ -187,21 +194,28 @@ export default function AIAssistant() {
 
   const loadStatus = async () => {
     try {
-      const res = await fetch('/api/ai/status', { headers: await getHeaders() });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const res = await fetch(`${base}/status`, { headers: await authHeaders() });
+      if (guest && res.status === 401) { guest.onInvalid(); return; }
+      if (!res.ok) {
+        const body = await res.json().catch(() => null);
+        throw new Error(body?.error || `HTTP ${res.status}`);
+      }
       setStatus(await res.json());
       setStatusError('');
     } catch (e: any) {
-      setStatusError(`Gagal memuat status AI Assistant: ${e?.message || 'koneksi terputus'}`);
+      setStatusError(guest && e?.message && !e.message.startsWith('HTTP')
+        ? e.message
+        : `Gagal memuat status AI Assistant: ${e?.message || 'koneksi terputus'}`);
     }
   };
   const loadConversations = async () => {
     try {
-      const res = await fetch('/api/ai/conversations', { headers: await getHeaders() });
+      const res = await fetch(`${base}/conversations`, { headers: await authHeaders() });
       if (res.ok) setConversations((await res.json()).conversations || []);
     } catch { /* the history panel stays as it was */ }
   };
   const loadInsights = async () => {
+    if (guest) return; // the "needs attention" card is for ShipHub users only
     try {
       const res = await fetch('/api/ai/insights', { headers: await getHeaders() });
       if (!res.ok) return;
@@ -212,7 +226,7 @@ export default function AIAssistant() {
   };
   const loadScopes = async () => {
     try {
-      const res = await fetch('/api/ai/scopes', { headers: await getHeaders() });
+      const res = await fetch(`${base}/scopes`, { headers: await authHeaders() });
       if (!res.ok) return;
       const body = await res.json();
       setScopes(body.scopes || []);
@@ -254,7 +268,7 @@ export default function AIAssistant() {
     setHistoryOpen(false);
     setLoadingConversation(true);
     try {
-      const res = await fetch(`/api/ai/conversations/${id}`, { headers: await getHeaders() });
+      const res = await fetch(`${base}/conversations/${id}`, { headers: await authHeaders() });
       const body = await res.json();
       if (!res.ok) throw new Error(body?.error || `HTTP ${res.status}`);
       const list: Message[] = [];
@@ -276,7 +290,7 @@ export default function AIAssistant() {
   const deleteConversation = async (c: Conversation) => {
     if (!window.confirm(`Hapus percakapan "${c.title}" dari riwayat?`)) return;
     try {
-      const res = await fetch(`/api/ai/conversations/${c.id}`, { method: 'DELETE', headers: await getHeaders() });
+      const res = await fetch(`${base}/conversations/${c.id}`, { method: 'DELETE', headers: await authHeaders() });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       setConversations(prev => prev.filter(x => x.id !== c.id));
       if (c.id === conversationId) newConversation();
@@ -304,10 +318,10 @@ export default function AIAssistant() {
     const controller = new AbortController();
     abortRef.current = controller;
     try {
-      const res = await fetch('/api/ai/chat', {
+      const res = await fetch(`${base}/chat`, {
         method: 'POST',
         signal: controller.signal,
-        headers: { ...(await getHeaders()), Accept: 'text/event-stream' },
+        headers: { ...(await authHeaders()), Accept: 'text/event-stream' },
         body: JSON.stringify({
           conversation_id: conversationId || undefined,
           scope: scopes.some(s => s.key === scope) ? scope : undefined,
@@ -368,7 +382,7 @@ export default function AIAssistant() {
     const next = m.feedback === rating ? '' : rating;
     setMessages(prev => prev.map((x, i) => (i === index ? { ...x, feedback: next } : x)));
     try {
-      await fetch('/api/ai/feedback', { method: 'POST', headers: await getHeaders(), body: JSON.stringify({ id: m.id, rating: next }) });
+      await fetch(`${base}/feedback`, { method: 'POST', headers: await authHeaders(), body: JSON.stringify({ id: m.id, rating: next }) });
     } catch { /* the rating is a hint; a failed save is not shown */ }
   };
 
@@ -472,9 +486,12 @@ export default function AIAssistant() {
             </span>
           )}
         </div>
-        {status?.enabled && !unlimited && (
-          <p className="text-xs text-slate-600 tabular-nums">{remaining} dari {status.daily_limit} pertanyaan tersisa hari ini</p>
-        )}
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
+          {guest && <p className="text-xs text-slate-600">Demo sebagai <span className="font-semibold text-slate-800">{guest.name}</span></p>}
+          {status?.enabled && !unlimited && (
+            <p className="text-xs text-slate-600 tabular-nums">{remaining} dari {status.daily_limit} pertanyaan tersisa hari ini</p>
+          )}
+        </div>
       </header>
 
       <div className="flex-1 flex min-h-0">

@@ -147,6 +147,9 @@ func isAdminRequest(r *http.Request) bool {
 	if !ok {
 		return false
 	}
+	if claims.Kind != "" {
+		return false
+	}
 	var role string
 	if err := db.QueryRow("SELECT role FROM profiles WHERE id = ? OR email = ?", claims.ID, claims.Email).Scan(&role); err != nil {
 		role = claims.Role
@@ -189,6 +192,15 @@ func HasResourcePermission(r *http.Request, resource string, action string) bool
 		return false
 	}
 
+	// A guest of the AI share page has no profile: only the share role (set
+	// by the share middleware from the current settings) applies, never Admin.
+	if claims.Kind == middleware.KindAIShareGuest {
+		if resource == "" || strings.EqualFold(claims.Role, "Admin") {
+			return false
+		}
+		return rolesAllow(claims.Role, resource, action)
+	}
+
 	// Re-read the role from the DB: the JWT's copy can be up to 7 days old.
 	var dbRole, dbRoles, dbExtraRoles sql.NullString
 	if err := db.QueryRow(
@@ -212,7 +224,13 @@ func HasResourcePermission(r *http.Request, resource string, action string) bool
 		}
 	}
 
-	for _, roleName := range strings.Split(dbRoles.String, ",") {
+	return rolesAllow(dbRoles.String, resource, action)
+}
+
+// rolesAllow: whether any role in the comma-separated list grants action on
+// resource in Role Management.
+func rolesAllow(roles, resource, action string) bool {
+	for _, roleName := range strings.Split(roles, ",") {
 		roleName = strings.TrimSpace(roleName)
 		if roleName == "" {
 			continue
@@ -238,7 +256,6 @@ func HasResourcePermission(r *http.Request, resource string, action string) bool
 			return true
 		}
 	}
-
 	return false
 }
 

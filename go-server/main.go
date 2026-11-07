@@ -79,6 +79,20 @@ func main() {
 	// (managed in Sumber Data Eksternal), no user session.
 	r.Post("/api/ingest/{source}", handlers.PostIngest)
 
+	// Public AI Asisten share page: a guest types a name and gets a guest
+	// token, which opens only these routes, while an Admin keeps sharing on.
+	r.Post("/api/ai/share/session", handlers.PostAIShareSession)
+	r.Group(func(r chi.Router) {
+		r.Use(handlers.RequireAIShareGuest)
+		r.Get("/api/ai/share/status", handlers.GetAIStatus)
+		r.With(handlers.AIShareQuota).Post("/api/ai/share/chat", handlers.PostAIChat)
+		r.Post("/api/ai/share/feedback", handlers.PostAIFeedback)
+		r.Get("/api/ai/share/scopes", handlers.GetAIScopes)
+		r.Get("/api/ai/share/conversations", handlers.GetAIConversations)
+		r.Get("/api/ai/share/conversations/{id}", handlers.GetAIConversation)
+		r.Delete("/api/ai/share/conversations/{id}", handlers.DeleteAIConversation)
+	})
+
 	// Protected routes (require valid JWT)
 	r.Group(func(r chi.Router) {
 		r.Use(appMiddleware.RequireAuth)
@@ -156,6 +170,9 @@ func main() {
 		r.With(handlers.RequirePermission(handlers.ResourceAISettings, "view")).Get("/api/ai/settings", handlers.GetAISettings)
 		r.With(handlers.RequirePermission(handlers.ResourceAISettings, "edit")).Put("/api/ai/settings", handlers.PutAISettings)
 		r.With(handlers.RequirePermission(handlers.ResourceAISettings, "edit")).Post("/api/ai/settings/test", handlers.TestAISettings)
+		r.With(handlers.RequirePermission(handlers.ResourceAISettings, "view")).Get("/api/ai/share-settings", handlers.GetAIShareSettings)
+		r.With(handlers.RequirePermission(handlers.ResourceAISettings, "edit")).Put("/api/ai/share-settings", handlers.PutAIShareSettings)
+		r.With(handlers.RequirePermission(handlers.ResourceAISettings, "view")).Get("/api/ai/share-guests", handlers.GetAIShareGuests)
 		// Harga Acuan: reference unit costs per work type, size and unit.
 		// Harga penawaran (repair list) vs vendor cost per Job Order.
 		marginView := handlers.RequirePermission(handlers.ResourceRepairPrices, "view")

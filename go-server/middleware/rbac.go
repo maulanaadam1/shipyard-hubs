@@ -28,45 +28,58 @@ type UserClaims struct {
 	Email string
 	Name  string
 	Role  string
+	// Kind is empty for a signed-in user. KindAIShareGuest marks a visitor of
+	// the public AI Assistant share page, who is not a ShipHub user.
+	Kind string
 }
 
-// RequireAuth is middleware that validates JWT and injects user claims into context
+const KindAIShareGuest = "ai_share"
+
+// ParseBearer validates the request's Bearer JWT and returns its claims.
+func ParseBearer(r *http.Request) (UserClaims, bool) {
+	authHeader := r.Header.Get("Authorization")
+	if len(authHeader) <= 7 || authHeader[:7] != "Bearer " {
+		return UserClaims{}, false
+	}
+	token, err := jwt.Parse(authHeader[7:], func(t *jwt.Token) (any, error) {
+		if _, ok := t.Method.(*jwt.SigningMethodHMAC); !ok {
+			return nil, fmt.Errorf("unexpected signing method: %v", t.Header["alg"])
+		}
+		return JWTSecret(), nil
+	})
+	if err != nil || !token.Valid {
+		return UserClaims{}, false
+	}
+	claims, ok := token.Claims.(jwt.MapClaims)
+	if !ok {
+		return UserClaims{}, false
+	}
+	kind, _ := claims["kind"].(string)
+	return UserClaims{
+		ID:    fmt.Sprintf("%v", claims["id"]),
+		Email: fmt.Sprintf("%v", claims["email"]),
+		Name:  fmt.Sprintf("%v", claims["name"]),
+		Role:  fmt.Sprintf("%v", claims["role"]),
+		Kind:  kind,
+	}, true
+}
+
+// WithClaims stores claims in the request context.
+func WithClaims(r *http.Request, c UserClaims) *http.Request {
+	return r.WithContext(context.WithValue(r.Context(), UserClaimsKey, c))
+}
+
+// RequireAuth is middleware that validates JWT and injects user claims into
+// context. Guest tokens of the AI share page are refused: they only open the
+// share routes.
 func RequireAuth(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		authHeader := r.Header.Get("Authorization")
-		if authHeader == "" || len(authHeader) <= 7 || authHeader[:7] != "Bearer " {
-			http.Error(w, `{"error":"Unauthorized: missing token"}`, http.StatusUnauthorized)
-			return
-		}
-
-		tokenStr := authHeader[7:]
-		token, err := jwt.Parse(tokenStr, func(t *jwt.Token) (any, error) {
-			if _, ok := t.Method.(*jwt.SigningMethodHMAC); !ok {
-				return nil, fmt.Errorf("unexpected signing method: %v", t.Header["alg"])
-			}
-			return JWTSecret(), nil
-		})
-
-		if err != nil || !token.Valid {
+		userClaims, ok := ParseBearer(r)
+		if !ok || userClaims.Kind != "" {
 			http.Error(w, `{"error":"Unauthorized: invalid token"}`, http.StatusUnauthorized)
 			return
 		}
-
-		claims, ok := token.Claims.(jwt.MapClaims)
-		if !ok {
-			http.Error(w, `{"error":"Unauthorized: invalid claims"}`, http.StatusUnauthorized)
-			return
-		}
-
-		userClaims := UserClaims{
-			ID:    fmt.Sprintf("%v", claims["id"]),
-			Email: fmt.Sprintf("%v", claims["email"]),
-			Name:  fmt.Sprintf("%v", claims["name"]),
-			Role:  fmt.Sprintf("%v", claims["role"]),
-		}
-
-		ctx := context.WithValue(r.Context(), UserClaimsKey, userClaims)
-		next.ServeHTTP(w, r.WithContext(ctx))
+		next.ServeHTTP(w, WithClaims(r, userClaims))
 	})
 }
 
