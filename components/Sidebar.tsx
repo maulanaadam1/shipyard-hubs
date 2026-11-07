@@ -95,7 +95,6 @@ export default function Sidebar({ onTabChange }: { onTabChange: () => void }) {
       items: [
         { icon: ClipboardList, label: 'Request Material', path: '/request-material', resource: 'Request' },
         { icon: Boxes, label: 'Persediaan Material', path: '/material-stock', resource: 'Persediaan Material' },
-        { icon: BarChart3, label: 'Reports', path: '/reports', resource: 'Reports' },
       ]
     },
     {
