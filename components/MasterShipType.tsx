@@ -16,6 +16,7 @@ import {
 } from 'lucide-react';
 import { useData, DropdownConfig } from '@/context/DataContext';
 import { api } from '@/lib/api-client';
+import { useDialogKeyboard } from '@/hooks/use-dialog-keyboard';
 
 export default function MasterShipType() {
   const { dropdownConfigs, fetchData, currentUser, canAccess } = useData();
@@ -30,6 +31,7 @@ export default function MasterShipType() {
     category: 'ship_types',
     is_active: true
   });
+  const typeDialogRef = useDialogKeyboard(isModalOpen, () => setIsModalOpen(false));
 
   const filteredConfigs = dropdownConfigs
     .filter(c => c.category === 'ship_types')
@@ -253,6 +255,7 @@ export default function MasterShipType() {
             <button 
               onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
               disabled={currentPage === 1}
+              aria-label="Halaman sebelumnya"
               className="p-1.5 border border-slate-200 rounded-lg text-slate-400 hover:text-[#FDB913] hover:border-[#FDB913]/30 disabled:opacity-50 transition-colors"
             >
               <ChevronLeft className="w-4 h-4" />
@@ -265,6 +268,7 @@ export default function MasterShipType() {
             <button 
               onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
               disabled={currentPage === totalPages || totalPages === 0}
+              aria-label="Halaman berikutnya"
               className="p-1.5 border border-slate-200 rounded-lg text-slate-400 hover:text-[#FDB913] hover:border-[#FDB913]/30 disabled:opacity-50 transition-colors"
             >
               <ChevronRight className="w-4 h-4" />
@@ -288,6 +292,10 @@ export default function MasterShipType() {
               initial={{ scale: 0.95, opacity: 0, y: 20 }}
               animate={{ scale: 1, opacity: 1, y: 0 }}
               exit={{ scale: 0.95, opacity: 0, y: 20 }}
+              ref={typeDialogRef}
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="ship-type-dialog-title"
               className="relative w-full max-w-md bg-white rounded-3xl shadow-2xl overflow-hidden"
             >
               <form onSubmit={handleSubmit}>
@@ -296,9 +304,9 @@ export default function MasterShipType() {
                     <div className="w-10 h-10 bg-[#FDB913]/20 rounded-xl flex items-center justify-center text-[#FDB913]">
                       <Ship className="w-5 h-5" />
                     </div>
-                    <h3 className="font-display font-bold text-xl text-slate-800">{editingConfig ? 'Edit Type' : 'Add New Type'}</h3>
+                    <h3 id="ship-type-dialog-title" className="font-display font-bold text-xl text-slate-800">{editingConfig ? 'Edit Type' : 'Add New Type'}</h3>
                   </div>
-                  <button type="button" onClick={() => setIsModalOpen(false)} className="p-2 hover:bg-slate-200 rounded-full">
+                  <button type="button" onClick={() => setIsModalOpen(false)} aria-label="Close" className="p-2 hover:bg-slate-200 rounded-full">
                     <X className="w-5 h-5 text-slate-500" />
                   </button>
                 </div>

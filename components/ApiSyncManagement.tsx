@@ -25,52 +25,8 @@ import {
 } from 'lucide-react';
 import { api, getHeaders } from '@/lib/api-client';
 import { useData } from '@/context/DataContext';
+import { useDialogKeyboard } from '@/hooks/use-dialog-keyboard';
 import { extractCurlUrls, parseCurlHeaders, configHosts, mergeHeaders, pickHeaderDonor } from '@/lib/curl-headers';
-
-const FOCUSABLE = 'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
-
-// Modal keyboard behaviour: focus moves into the dialog on open, Tab stays
-// inside it, Escape closes it, and focus returns to the opener on close.
-function useDialogKeyboard(open: boolean, onClose: () => void) {
-  const ref = useRef<HTMLDivElement>(null);
-  const onCloseRef = useRef(onClose);
-  onCloseRef.current = onClose;
-
-  useEffect(() => {
-    if (!open) return;
-    const opener = document.activeElement as HTMLElement | null;
-    const focusables = () => Array.from(ref.current?.querySelectorAll<HTMLElement>(FOCUSABLE) || []);
-    const first = ref.current?.querySelector<HTMLElement>('textarea, input, select') || focusables()[0];
-    first?.focus();
-
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        e.preventDefault();
-        onCloseRef.current();
-        return;
-      }
-      if (e.key !== 'Tab') return;
-      const items = focusables();
-      if (items.length === 0) return;
-      const start = items[0];
-      const end = items[items.length - 1];
-      if (e.shiftKey && document.activeElement === start) {
-        e.preventDefault();
-        end.focus();
-      } else if (!e.shiftKey && document.activeElement === end) {
-        e.preventDefault();
-        start.focus();
-      }
-    };
-    document.addEventListener('keydown', onKey);
-    return () => {
-      document.removeEventListener('keydown', onKey);
-      opener?.focus();
-    };
-  }, [open]);
-
-  return ref;
-}
 
 export default function ApiSyncManagement() {
   const { fetchData } = useData();
@@ -624,6 +580,7 @@ export default function ApiSyncManagement() {
             <button 
               onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
               disabled={currentPage === 1}
+              aria-label="Halaman sebelumnya"
               className="p-1.5 border border-slate-200 rounded-lg text-slate-400 hover:text-[#FDB913] hover:border-[#FDB913]/30 disabled:opacity-50 transition-colors"
             >
               <ChevronLeft className="w-4 h-4" />
@@ -636,6 +593,7 @@ export default function ApiSyncManagement() {
             <button 
               onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
               disabled={currentPage === totalPages || totalPages === 0}
+              aria-label="Halaman berikutnya"
               className="p-1.5 border border-slate-200 rounded-lg text-slate-400 hover:text-[#FDB913] hover:border-[#FDB913]/30 disabled:opacity-50 transition-colors"
             >
               <ChevronRight className="w-4 h-4" />
@@ -851,6 +809,7 @@ export default function ApiSyncManagement() {
                             />
                             <button
                               onClick={() => handleRemoveParam(p.id)}
+                              aria-label="Hapus parameter"
                               className="p-1.5 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors"
                             >
                               <X className="w-4 h-4" />

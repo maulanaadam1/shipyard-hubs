@@ -20,6 +20,7 @@ import {
 } from 'lucide-react';
 import { useData, RoleMaster, RolePermission } from '@/context/DataContext';
 import { api } from '@/lib/api-client';
+import { useDialogKeyboard } from '@/hooks/use-dialog-keyboard';
 
 const RESOURCES = [
   { id: 'Dashboard', type: 'menu' },
@@ -79,6 +80,7 @@ export default function RoleManagement() {
   const [isEditingRole, setIsEditingRole] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [localPermissions, setLocalPermissions] = useState<RolePermission[]>([]);
+  const roleDialogRef = useDialogKeyboard(isModalOpen, () => setIsModalOpen(false));
 
   const [formData, setFormData] = useState({
     name: '',
@@ -374,6 +376,7 @@ export default function RoleManagement() {
                             <td key={act} className="px-4 py-4 text-center">
                               <button
                                 onClick={() => togglePermission(res.id, act)}
+                                aria-label={`${res.id}: ${act}`}
                                 className={`w-6 h-6 rounded-md flex items-center justify-center transition-all mx-auto ${
                                   perm?.is_allowed 
                                     ? 'bg-green-100 text-green-600' 
@@ -419,6 +422,10 @@ export default function RoleManagement() {
               animate={{ scale: 1, opacity: 1, y: 0 }}
               exit={{ scale: 0.95, opacity: 0, y: 20 }}
               className="relative w-full max-w-md bg-white rounded-3xl shadow-2xl overflow-hidden"
+              ref={roleDialogRef}
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="role-dialog-title"
             >
               <form onSubmit={handleSubmitRole}>
                 <div className="p-6 border-b border-slate-100 bg-slate-50/50 flex items-center justify-between">
@@ -426,11 +433,11 @@ export default function RoleManagement() {
                     <div className="w-10 h-10 bg-[#FDB913]/20 rounded-xl flex items-center justify-center text-[#FDB913]">
                       <Shield className="w-5 h-5" />
                     </div>
-                    <h3 className="font-display font-bold text-xl text-slate-800">
+                    <h3 id="role-dialog-title" className="font-display font-bold text-xl text-slate-800">
                       {isEditingRole ? 'Edit Role' : 'Create New Role'}
                     </h3>
                   </div>
-                  <button type="button" onClick={() => setIsModalOpen(false)} className="p-2 hover:bg-slate-200 rounded-full">
+                  <button type="button" onClick={() => setIsModalOpen(false)} aria-label="Close" className="p-2 hover:bg-slate-200 rounded-full">
                     <X className="w-5 h-5 text-slate-500" />
                   </button>
                 </div>

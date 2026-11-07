@@ -9,6 +9,7 @@ import {
 } from 'lucide-react';
 import { useData } from '@/context/DataContext';
 import { api } from '@/lib/api-client';
+import { useDialogKeyboard } from '@/hooks/use-dialog-keyboard';
 
 // Removed hardcoded STATUS_DOCK_OPTIONS, using dockStatuses from context instead
 
@@ -97,6 +98,7 @@ export default function ShipDocking() {
     end_time: ''
   });
   const [addingLog, setAddingLog] = useState(false);
+  const dockingDialogRef = useDialogKeyboard(Boolean(editingProject), () => setEditingProject(null));
 
   const filtered = useMemo(() => {
     return projects
@@ -516,6 +518,7 @@ export default function ShipDocking() {
                                               {canAccess('Ship Docking', 'delete') && (
                                                 <button
                                                   onClick={() => handleDeleteLog(log.id)}
+                                                  aria-label={`Hapus log ${log.activity_name}`}
                                                   className="p-1.5 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-lg transition-all"
                                                 >
                                                   <Trash2 className="w-3.5 h-3.5" />
@@ -551,6 +554,7 @@ export default function ShipDocking() {
               <button
                 onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
                 disabled={currentPage === 1}
+                aria-label="Halaman sebelumnya"
                 className="p-2 rounded-lg hover:bg-white hover:shadow-sm transition-all text-slate-400 hover:text-slate-700 disabled:opacity-30 disabled:cursor-not-allowed"
               >
                 <ChevronLeft className="w-4 h-4" />
@@ -582,6 +586,7 @@ export default function ShipDocking() {
               <button
                 onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
                 disabled={currentPage === totalPages}
+                aria-label="Halaman berikutnya"
                 className="p-2 rounded-lg hover:bg-white hover:shadow-sm transition-all text-slate-400 hover:text-slate-700 disabled:opacity-30 disabled:cursor-not-allowed"
               >
                 <ChevronRight className="w-4 h-4" />
@@ -606,6 +611,10 @@ export default function ShipDocking() {
               initial={{ scale: 0.95, opacity: 0, y: 20 }}
               animate={{ scale: 1, opacity: 1, y: 0 }}
               exit={{ scale: 0.95, opacity: 0, y: 20 }}
+              ref={dockingDialogRef}
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="docking-dialog-title"
               className="relative w-full max-w-2xl bg-white rounded-3xl shadow-2xl overflow-hidden"
             >
               <form onSubmit={handleSave}>
@@ -616,11 +625,11 @@ export default function ShipDocking() {
                       <Anchor className="w-5 h-5" />
                     </div>
                     <div>
-                      <h3 className="font-display font-bold text-xl text-slate-800">Update Docking</h3>
+                      <h3 id="docking-dialog-title" className="font-display font-bold text-xl text-slate-800">Update Docking</h3>
                       <p className="text-slate-500 text-xs">{editingProject.shipname} · {editingProject.idproject}</p>
                     </div>
                   </div>
-                  <button type="button" onClick={() => setEditingProject(null)}
+                  <button type="button" onClick={() => setEditingProject(null)} aria-label="Tutup"
                     className="p-2 hover:bg-slate-200 rounded-full transition-colors">
                     <X className="w-5 h-5 text-slate-500" />
                   </button>

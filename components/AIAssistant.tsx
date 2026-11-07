@@ -6,6 +6,7 @@ import {
 import { Link, useSearchParams } from 'react-router-dom';
 import { getHeaders } from '@/lib/api-client';
 import AIMarkdown, { tablesIn, downloadAnswerTables } from './AIMarkdown';
+import { useDialogKeyboard } from '@/hooks/use-dialog-keyboard';
 
 // AI Assistant: questions about ShipHub data, answered by the AI provider set in
 // Pengaturan AI with the read-only tools of the backend (/api/ai/chat,
@@ -180,6 +181,7 @@ export default function AIAssistant({ guest }: { guest?: AIGuest } = {}) {
   const [conversationId, setConversationId] = useState('');
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [historyOpen, setHistoryOpen] = useState(false);
+  const historyDialogRef = useDialogKeyboard(historyOpen, () => setHistoryOpen(false));
   const [loadingConversation, setLoadingConversation] = useState(false);
   const [draft, setDraft] = useState('');
   const [sending, setSending] = useState(false);
@@ -504,8 +506,8 @@ export default function AIAssistant({ guest }: { guest?: AIGuest } = {}) {
         </aside>
 
         {historyOpen && (
-          <div className="lg:hidden fixed inset-0 z-50 flex" role="dialog" aria-modal="true" aria-label="Riwayat percakapan">
-            <div className="w-72 max-w-[85%] h-full bg-white overflow-y-auto shadow-xl">
+          <div className="lg:hidden fixed inset-0 z-50 flex">
+            <div ref={historyDialogRef} role="dialog" aria-modal="true" aria-label="Riwayat percakapan" className="w-72 max-w-[85%] h-full bg-white overflow-y-auto shadow-xl">
               <div className="flex items-center justify-between px-3 pt-3">
                 <p className="text-sm font-semibold text-slate-700">Riwayat</p>
                 <button type="button" onClick={() => setHistoryOpen(false)} aria-label="Tutup riwayat" className="p-1.5 rounded-lg text-slate-600 hover:bg-slate-100">

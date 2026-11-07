@@ -36,6 +36,7 @@ import { SearchableSelect } from './SearchableSelect';
 import { totalServiceCost } from '@/lib/work-order-cost';
 import WorkOrderItemHistory from './WorkOrderItemHistory';
 import AskAIButton from './AskAIButton';
+import { useDialogKeyboard } from '@/hooks/use-dialog-keyboard';
 
 const MOCK_DATA: any[] = [];
 
@@ -120,6 +121,7 @@ export default function WorkOrderDashboard() {
 
   // Selected Detail Row State (Drawer)
   const [selectedRow, setSelectedRow] = useState<any>(null);
+  const detailDialogRef = useDialogKeyboard(Boolean(selectedRow), () => setSelectedRow(null));
   const [detailedRowData, setDetailedRowData] = useState<any>(null);
   const [isFetchingDetail, setIsFetchingDetail] = useState(false);
   const [isSyncingDetail, setIsSyncingDetail] = useState(false);
@@ -2580,6 +2582,7 @@ export default function WorkOrderDashboard() {
               <button
                 onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
                 disabled={currentPage === 1}
+                aria-label="Halaman sebelumnya"
                 className="p-1.5 rounded-lg border dark:border-slate-800 hover:bg-slate-100 dark:hover:bg-slate-800 disabled:opacity-50 transition"
               >
                 <ChevronLeft size={16} />
@@ -2590,6 +2593,7 @@ export default function WorkOrderDashboard() {
               <button
                 onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
                 disabled={currentPage === totalPages}
+                aria-label="Halaman berikutnya"
                 className="p-1.5 rounded-lg border dark:border-slate-800 hover:bg-slate-100 dark:hover:bg-slate-800 disabled:opacity-50 transition"
               >
                 <ChevronRight size={16} />
@@ -2609,12 +2613,17 @@ export default function WorkOrderDashboard() {
             onClick={() => setSelectedRow(null)}
           ></div>
 
-          <div className="relative z-[121] w-full max-w-6xl max-h-[95vh] flex flex-col shadow-2xl rounded-2xl overflow-hidden bg-white border border-slate-200 text-slate-800">
-            
+          <div
+            ref={detailDialogRef}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="wo-detail-title"
+            className="relative z-[121] w-full max-w-6xl max-h-[95vh] flex flex-col shadow-2xl rounded-2xl overflow-hidden bg-white border border-slate-200 text-slate-800">
+
             <div className="p-5 sm:p-6 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
               <div className="space-y-1">
                 <span className="text-xs uppercase font-bold tracking-wider text-slate-400 px-2 py-0.5 rounded bg-slate-500/10">Detail Work Order</span>
-                <h3 className="text-xl sm:text-2xl font-bold font-mono text-[#FDB913] mt-1 flex items-center gap-2">
+                <h3 id="wo-detail-title" className="text-xl sm:text-2xl font-bold font-mono text-[#FDB913] mt-1 flex items-center gap-2">
                   {selectedRow.woCode}
                   <a 
                     href={`https://shipyard-siaga.samudera.id/v2/work-orders/progress/${selectedRow.id}`}
@@ -2629,6 +2638,7 @@ export default function WorkOrderDashboard() {
               </div>
               <button 
                 onClick={() => setSelectedRow(null)}
+                aria-label="Tutup"
                 className="p-2 rounded-full hover:bg-slate-200 text-slate-400 hover:text-rose-500 transition"
               >
                 <X size={24} />

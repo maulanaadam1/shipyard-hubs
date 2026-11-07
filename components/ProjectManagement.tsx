@@ -25,6 +25,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import { api } from '@/lib/api-client';
 import Papa from 'papaparse';
 import AskAIButton from './AskAIButton';
+import { useDialogKeyboard } from '@/hooks/use-dialog-keyboard';
 
 export default function ProjectManagement() {
   const { projects, setProjects, dropdownConfigs, locations, ships, fetchData, canAccess, employees, services } = useData();
@@ -39,6 +40,8 @@ export default function ProjectManagement() {
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState<number | 'all'>(10);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const projectDialogRef = useDialogKeyboard(isModalOpen, () => setIsModalOpen(false));
+  const successDialogRef = useDialogKeyboard(showSuccessModal, () => setShowSuccessModal(false));
 
   const [formData, setFormData] = useState({
     idproject: '',
@@ -461,6 +464,7 @@ export default function ProjectManagement() {
         <div className="flex flex-wrap items-center gap-3">
           <button 
             onClick={downloadTemplate}
+            aria-label="Download Template"
             className="flex items-center justify-center gap-2 px-6 py-2.5 bg-white border border-slate-200 text-slate-600 rounded-xl text-sm font-bold hover:bg-slate-50 transition-all shadow-sm"
           >
             <Download className="w-4 h-4 text-slate-500" />
@@ -573,7 +577,7 @@ export default function ProjectManagement() {
               </select>
             </div>
             <div className="h-4 w-px bg-slate-200 mx-1"></div>
-            <button className="p-2 hover:bg-slate-100 rounded-lg transition-colors text-slate-400">
+            <button aria-label="Filter" className="p-2 hover:bg-slate-100 rounded-lg transition-colors text-slate-400">
               <Filter className="w-4 h-4" />
             </button>
           </div>
@@ -690,6 +694,7 @@ export default function ProjectManagement() {
                       {canAccess('Job Order', 'edit') && (
                         <button 
                           onClick={() => handleOpenModal(project)}
+                          aria-label="Edit project"
                           className="p-2 hover:bg-white hover:shadow-sm rounded-lg transition-all text-slate-400 hover:text-[#FDB913]"
                         >
                           <Edit2 className="w-4 h-4" />
@@ -698,6 +703,7 @@ export default function ProjectManagement() {
                       {canAccess('Job Order', 'delete') && (
                         <button 
                           onClick={() => handleDelete(project.id)}
+                          aria-label="Delete project"
                           className="p-2 hover:bg-white hover:shadow-sm rounded-lg transition-all text-slate-400 hover:text-red-600"
                         >
                           <Trash2 className="w-4 h-4" />
@@ -733,6 +739,7 @@ export default function ProjectManagement() {
               <button 
                 onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
                 disabled={currentPage === 1}
+                aria-label="Previous page"
                 className="p-1.5 border border-slate-200 rounded-lg text-slate-400 hover:text-[#FDB913] hover:border-[#FDB913]/30 disabled:opacity-50 transition-colors"
               >
                 <ChevronLeft className="w-4 h-4" />
@@ -745,6 +752,7 @@ export default function ProjectManagement() {
               <button 
                 onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
                 disabled={currentPage === totalPages}
+                aria-label="Next page"
                 className="p-1.5 border border-slate-200 rounded-lg text-slate-400 hover:text-[#FDB913] hover:border-[#FDB913]/30 disabled:opacity-50 transition-colors"
               >
                 <ChevronRight className="w-4 h-4" />
@@ -770,12 +778,16 @@ export default function ProjectManagement() {
               animate={{ scale: 1, opacity: 1, y: 0 }}
               exit={{ scale: 0.95, opacity: 0, y: 20 }}
               className="relative w-full max-w-5xl bg-white rounded-3xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]"
+              ref={projectDialogRef}
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="project-dialog-title"
             >
               <div className="p-6 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
-                <h3 className="font-display font-bold text-xl text-slate-800">
+                <h3 id="project-dialog-title" className="font-display font-bold text-xl text-slate-800">
                   {editingProject ? 'Edit Project' : 'Add New Project'}
                 </h3>
-                <button onClick={() => setIsModalOpen(false)} className="p-2 hover:bg-slate-200 rounded-full transition-colors">
+                <button onClick={() => setIsModalOpen(false)} aria-label="Close" className="p-2 hover:bg-slate-200 rounded-full transition-colors">
                   <X className="w-5 h-5 text-slate-500" />
                 </button>
               </div>
@@ -1019,11 +1031,15 @@ export default function ProjectManagement() {
               animate={{ scale: 1, opacity: 1, y: 0 }}
               exit={{ scale: 0.9, opacity: 0, y: 20 }}
               className="relative w-full max-w-sm bg-white rounded-3xl shadow-2xl p-8 text-center"
+              ref={successDialogRef}
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="project-success-title"
             >
               <div className="w-20 h-20 bg-[#FDB913]/10 rounded-full flex items-center justify-center mx-auto mb-6">
                 <Check className="w-10 h-10 text-[#FDB913]" />
               </div>
-              <h3 className="font-display font-bold text-2xl text-slate-900 mb-2">Project Added!</h3>
+              <h3 id="project-success-title" className="font-display font-bold text-2xl text-slate-900 mb-2">Project Added!</h3>
               <p className="text-slate-500 mb-8">
                 The new project has been successfully added to the master database.
               </p>

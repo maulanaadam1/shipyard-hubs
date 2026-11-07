@@ -18,6 +18,7 @@ import {
   MapPin
 } from 'lucide-react';
 import { api } from '@/lib/api-client';
+import { useDialogKeyboard } from '@/hooks/use-dialog-keyboard';
 
 interface VesselLayout {
   id: string;
@@ -51,6 +52,8 @@ export default function MasterLayout() {
   const [editingLayoutId, setEditingLayoutId] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const uploadDialogRef = useDialogKeyboard(isModalOpen, () => setIsModalOpen(false));
+  const previewDialogRef = useDialogKeyboard(isPreviewOpen && Boolean(selectedLayout), () => setIsPreviewOpen(false));
 
   useEffect(() => {
     fetchLayouts();
@@ -324,6 +327,10 @@ export default function MasterLayout() {
               initial={{ scale: 0.95, opacity: 0, y: 20 }}
               animate={{ scale: 1, opacity: 1, y: 0 }}
               exit={{ scale: 0.95, opacity: 0, y: 20 }}
+              ref={uploadDialogRef}
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="layout-upload-dialog-title"
               className="relative w-full max-w-xl bg-white rounded-[40px] shadow-2xl overflow-hidden flex flex-col border border-slate-200"
             >
               <form onSubmit={handleSubmit}>
@@ -333,11 +340,11 @@ export default function MasterLayout() {
                       <FileUp className="w-6 h-6" />
                     </div>
                     <div>
-                      <h3 className="font-bold text-2xl text-slate-800 tracking-tight">{editingLayoutId ? 'Edit SVG Layout' : 'Upload SVG Layout'}</h3>
+                      <h3 id="layout-upload-dialog-title" className="font-bold text-2xl text-slate-800 tracking-tight">{editingLayoutId ? 'Edit SVG Layout' : 'Upload SVG Layout'}</h3>
                       <p className="text-xs text-slate-500">{editingLayoutId ? 'Modify layout properties and visual settings.' : 'Add a new floor plan for vessel positioning.'}</p>
                     </div>
                   </div>
-                  <button type="button" onClick={() => setIsModalOpen(false)} className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-full transition-all">
+                  <button type="button" onClick={() => setIsModalOpen(false)} aria-label="Close" className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-full transition-all">
                     <X className="w-6 h-6" />
                   </button>
                 </div>
@@ -492,14 +499,18 @@ export default function MasterLayout() {
               initial={{ scale: 0.9, opacity: 0 }}
               animate={{ scale: 1, opacity: 1 }}
               exit={{ scale: 0.9, opacity: 0 }}
+              ref={previewDialogRef}
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="layout-preview-dialog-title"
               className="relative w-full h-full bg-white rounded-[40px] shadow-2xl overflow-hidden flex flex-col"
             >
               <div className="p-6 border-b border-slate-100 flex items-center justify-between">
                  <div className="flex items-center gap-3">
                     <MapIcon className="w-5 h-5 text-[#FDB913]" />
-                    <h3 className="font-bold text-xl text-slate-800">{selectedLayout.name}</h3>
+                    <h3 id="layout-preview-dialog-title" className="font-bold text-xl text-slate-800">{selectedLayout.name}</h3>
                  </div>
-                 <button onClick={() => setIsPreviewOpen(false)} className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-full transition-all">
+                 <button onClick={() => setIsPreviewOpen(false)} aria-label="Close" className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-full transition-all">
                     <X className="w-6 h-6" />
                  </button>
               </div>

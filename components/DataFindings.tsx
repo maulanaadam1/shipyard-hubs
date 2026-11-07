@@ -4,6 +4,7 @@ import { getHeaders } from '@/lib/api-client';
 import { useData } from '@/context/DataContext';
 import UnrecognizedActivities from './UnrecognizedActivities';
 import AskAIButton from './AskAIButton';
+import { useDialogKeyboard } from '@/hooks/use-dialog-keyboard';
 
 // Work items the server flags for a check against reference unit costs
 // (wo_item_findings). ShipHub only points at them: fixes happen in SIAGA, and
@@ -60,6 +61,7 @@ export default function DataFindings() {
   const [error, setError] = useState('');
   const [reload, setReload] = useState(0);
   const [ignoreTarget, setIgnoreTarget] = useState<any>(null);
+  const ignoreDialogRef = useDialogKeyboard(Boolean(ignoreTarget), () => setIgnoreTarget(null));
   const [ignoreNote, setIgnoreNote] = useState('');
   const [actionError, setActionError] = useState('');
   const [saving, setSaving] = useState(false);
@@ -425,9 +427,9 @@ export default function DataFindings() {
       </main>
 
       {ignoreTarget && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" role="dialog" aria-modal="true" aria-labelledby="df-ignore-title">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
           <div className="absolute inset-0 bg-slate-950/50" onClick={() => !saving && setIgnoreTarget(null)} />
-          <div className="relative w-full max-w-md rounded-2xl bg-white border border-slate-200 shadow-xl p-5 space-y-3">
+          <div ref={ignoreDialogRef} role="dialog" aria-modal="true" aria-labelledby="df-ignore-title" className="relative w-full max-w-md rounded-2xl bg-white border border-slate-200 shadow-xl p-5 space-y-3">
             <div className="flex items-start justify-between gap-3">
               <h3 id="df-ignore-title" className="text-base font-bold text-slate-800">Abaikan temuan ini?</h3>
               <button onClick={() => setIgnoreTarget(null)} aria-label="Tutup" className="p-1 rounded-lg text-slate-500 hover:bg-slate-100"><X size={16} /></button>

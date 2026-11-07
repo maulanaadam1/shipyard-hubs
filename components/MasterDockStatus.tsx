@@ -15,6 +15,7 @@ import {
 import { useData, DockStatusMaster } from '@/context/DataContext';
 import { motion, AnimatePresence } from 'motion/react';
 import { api } from '@/lib/api-client';
+import { useDialogKeyboard } from '@/hooks/use-dialog-keyboard';
 
 export default function MasterDockStatus() {
   const { dockStatuses, setDockStatuses, fetchData, canAccess } = useData();
@@ -26,6 +27,7 @@ export default function MasterDockStatus() {
   // Pagination States
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 10;
+  const statusDialogRef = useDialogKeyboard(isModalOpen, () => setIsModalOpen(false));
 
   const [formData, setFormData] = useState({
     name: '',
@@ -218,6 +220,7 @@ export default function MasterDockStatus() {
                       {canAccess('Master Dock Status', 'edit') && (
                         <button 
                           onClick={() => handleOpenModal(status)}
+                          aria-label={`Edit ${status.name}`}
                           className="p-2 hover:bg-white hover:shadow-sm rounded-lg transition-all text-slate-400 hover:text-[#FDB913]"
                         >
                           <Edit2 className="w-4 h-4" />
@@ -226,6 +229,7 @@ export default function MasterDockStatus() {
                       {canAccess('Master Dock Status', 'delete') && (
                         <button 
                           onClick={() => handleDelete(status.id)}
+                          aria-label={`Delete ${status.name}`}
                           className="p-2 hover:bg-white hover:shadow-sm rounded-lg transition-all text-slate-400 hover:text-red-600"
                         >
                           <Trash2 className="w-4 h-4" />
@@ -249,6 +253,7 @@ export default function MasterDockStatus() {
             <button 
               onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
               disabled={currentPage === 1}
+              aria-label="Previous page"
               className="p-1.5 border border-slate-200 rounded-lg text-slate-400 hover:text-[#FDB913] hover:border-[#FDB913]/30 disabled:opacity-50 transition-colors"
             >
               <ChevronLeft className="w-4 h-4" />
@@ -261,6 +266,7 @@ export default function MasterDockStatus() {
             <button 
               onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
               disabled={currentPage === totalPages || totalPages === 0}
+              aria-label="Next page"
               className="p-1.5 border border-slate-200 rounded-lg text-slate-400 hover:text-[#FDB913] hover:border-[#FDB913]/30 disabled:opacity-50 transition-colors"
             >
               <ChevronRight className="w-4 h-4" />
@@ -284,6 +290,10 @@ export default function MasterDockStatus() {
               initial={{ scale: 0.95, opacity: 0, y: 20 }}
               animate={{ scale: 1, opacity: 1, y: 0 }}
               exit={{ scale: 0.95, opacity: 0, y: 20 }}
+              ref={statusDialogRef}
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="dock-status-dialog-title"
               className="relative w-full max-w-md bg-white rounded-3xl shadow-2xl overflow-hidden"
             >
               <div className="p-6 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
@@ -291,11 +301,11 @@ export default function MasterDockStatus() {
                   <div className="w-10 h-10 bg-[#FDB913]/20 rounded-xl flex items-center justify-center text-[#FDB913]">
                     <Settings className="w-5 h-5" />
                   </div>
-                  <h3 className="font-display font-bold text-xl text-slate-800">
+                  <h3 id="dock-status-dialog-title" className="font-display font-bold text-xl text-slate-800">
                     {editingStatus ? 'Edit Status' : 'Add New Status'}
                   </h3>
                 </div>
-                <button onClick={() => setIsModalOpen(false)} className="p-2 hover:bg-slate-200 rounded-full transition-colors">
+                <button onClick={() => setIsModalOpen(false)} aria-label="Close" className="p-2 hover:bg-slate-200 rounded-full transition-colors">
                   <X className="w-5 h-5 text-slate-500" />
                 </button>
               </div>

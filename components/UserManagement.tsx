@@ -17,6 +17,7 @@ import {
 } from 'lucide-react';
 import { useData, User } from '@/context/DataContext';
 import { api } from '@/lib/api-client';
+import { useDialogKeyboard } from '@/hooks/use-dialog-keyboard';
 
 export default function UserManagement() {
   const { users, setUsers, currentUser, dropdownConfigs, rolesMaster, fetchData, canAccess } = useData();
@@ -26,6 +27,8 @@ export default function UserManagement() {
   const [searchTerm, setSearchTerm] = useState('');
   const [tagInput, setTagInput] = useState('');
   const [isInputFocused, setIsInputFocused] = useState(false);
+  const userDialogRef = useDialogKeyboard(isModalOpen, () => setIsModalOpen(false));
+  const successDialogRef = useDialogKeyboard(showSuccessModal, () => setShowSuccessModal(false));
 
   const ALL_RESOURCES = [
     'Dashboard', 'Utility', 'Job Order', 'Work Order', 'Item Pekerjaan WO', 'Request', 'Release', 'Return',
@@ -267,6 +270,7 @@ export default function UserManagement() {
                       {canAccess('User Management', 'edit') && (
                         <button
                           onClick={() => openModal(user)}
+                          aria-label="Edit user"
                           className="p-2 text-slate-400 hover:text-[#FDB913] hover:bg-[#FDB913]/10 rounded-lg transition-all"
                         >
                           <Edit2 className="w-4 h-4" />
@@ -275,6 +279,7 @@ export default function UserManagement() {
                       {canAccess('User Management', 'delete') && (
                         <button
                           onClick={() => handleDelete(user.id, user.email, user.name)}
+                          aria-label="Delete user"
                           className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-all"
                         >
                           <Trash2 className="w-4 h-4" />
@@ -305,6 +310,10 @@ export default function UserManagement() {
               animate={{ scale: 1, opacity: 1, y: 0 }}
               exit={{ scale: 0.95, opacity: 0, y: 20 }}
               className="relative w-full max-w-3xl bg-white rounded-3xl shadow-2xl overflow-y-auto max-h-[90vh]"
+              ref={userDialogRef}
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="user-dialog-title"
             >
               <form onSubmit={handleSubmit}>
                 <div className="sticky top-0 z-20 p-6 border-b border-slate-100 flex items-center justify-between bg-white/80 backdrop-blur-md">
@@ -313,13 +322,13 @@ export default function UserManagement() {
                       <Users className="w-5 h-5" />
                     </div>
                     <div>
-                      <h3 className="font-display font-bold text-xl text-slate-800">
+                      <h3 id="user-dialog-title" className="font-display font-bold text-xl text-slate-800">
                         {editingUser ? 'Edit User Profile' : 'Create New User'}
                       </h3>
                       <p className="text-xs text-slate-500">Configure access levels and permissions</p>
                     </div>
                   </div>
-                  <button type="button" onClick={() => setIsModalOpen(false)} className="p-2 hover:bg-slate-100 rounded-xl transition-colors">
+                  <button type="button" onClick={() => setIsModalOpen(false)} aria-label="Close" className="p-2 hover:bg-slate-100 rounded-xl transition-colors">
                     <X className="w-5 h-5 text-slate-400" />
                   </button>
                 </div>
@@ -501,6 +510,7 @@ export default function UserManagement() {
                                   setFormData({ ...formData, extra_roles: newTags });
                                 }}
                                 className="hover:text-red-600 transition-colors"
+                                aria-label={`Remove ${tag}`}
                               >
                                 <X className="w-3 h-3" />
                               </button>
@@ -594,11 +604,15 @@ export default function UserManagement() {
               animate={{ scale: 1, opacity: 1, y: 0 }}
               exit={{ scale: 0.9, opacity: 0, y: 20 }}
               className="relative w-full max-w-sm bg-white rounded-3xl shadow-2xl p-8 text-center"
+              ref={successDialogRef}
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="user-success-title"
             >
               <div className="w-20 h-20 bg-[#FDB913]/10 rounded-full flex items-center justify-center mx-auto mb-6">
                 <Check className="w-10 h-10 text-[#FDB913]" />
               </div>
-              <h3 className="font-display font-bold text-2xl text-slate-900 mb-2">User Created!</h3>
+              <h3 id="user-success-title" className="font-display font-bold text-2xl text-slate-900 mb-2">User Created!</h3>
               <p className="text-slate-500 mb-8">
                 The new user account has been successfully registered. You can now share the credentials with them.
               </p>

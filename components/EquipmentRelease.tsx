@@ -23,6 +23,7 @@ import {
 } from 'lucide-react';
 import { useData, LoanRequest, Equipment, ReleaseRecord, ReleaseItem } from '@/context/DataContext';
 import { api } from '@/lib/api-client';
+import { useDialogKeyboard } from '@/hooks/use-dialog-keyboard';
 import { motion, AnimatePresence } from 'framer-motion';
 
 export default function EquipmentRelease() {
@@ -515,6 +516,8 @@ export default function EquipmentRelease() {
   );
 
   const [selectedHistory, setSelectedHistory] = useState<ReleaseRecord | null>(null);
+  const releaseDialogRef = useDialogKeyboard(isModalOpen && Boolean(selectedLoan), () => setIsModalOpen(false));
+  const historyDialogRef = useDialogKeyboard(selectedHistory !== null, () => setSelectedHistory(null));
 
   const filteredHistory = (releases || []).filter(r => {
     const searchLower = searchTerm.toLowerCase();
@@ -702,6 +705,7 @@ export default function EquipmentRelease() {
                   <button 
                     onClick={() => setCurrentPagePending(prev => Math.max(1, prev - 1))}
                     disabled={currentPagePending === 1}
+                    aria-label="Previous page"
                     className="p-1.5 border border-slate-200 rounded-lg text-slate-400 hover:text-[#FDB913] hover:border-[#FDB913]/30 disabled:opacity-50 transition-colors"
                   >
                     <ChevronLeft className="w-4 h-4" />
@@ -714,6 +718,7 @@ export default function EquipmentRelease() {
                   <button 
                     onClick={() => setCurrentPagePending(prev => Math.min(totalPagesPending, prev + 1))}
                     disabled={currentPagePending === totalPagesPending || totalPagesPending === 0}
+                    aria-label="Next page"
                     className="p-1.5 border border-slate-200 rounded-lg text-slate-400 hover:text-[#FDB913] hover:border-[#FDB913]/30 disabled:opacity-50 transition-colors"
                   >
                     <ChevronRight className="w-4 h-4" />
@@ -784,6 +789,7 @@ export default function EquipmentRelease() {
                           <div className="flex items-center justify-center gap-2">
                             <button 
                               onClick={(e) => { e.stopPropagation(); setSelectedHistory(release); }}
+                              aria-label="View release details"
                               className="p-2 text-slate-400 hover:text-[#e5a611] hover:bg-[#FDB913]/10 rounded-lg transition-all"
                             >
                               <FileText className="w-4 h-4" />
@@ -812,6 +818,7 @@ export default function EquipmentRelease() {
                   <button 
                     onClick={() => setCurrentPageHistory(prev => Math.max(1, prev - 1))}
                     disabled={currentPageHistory === 1}
+                    aria-label="Previous page"
                     className="p-1.5 border border-slate-200 rounded-lg text-slate-400 hover:text-[#FDB913] hover:border-[#FDB913]/30 disabled:opacity-50 transition-colors"
                   >
                     <ChevronLeft className="w-4 h-4" />
@@ -824,6 +831,7 @@ export default function EquipmentRelease() {
                   <button 
                     onClick={() => setCurrentPageHistory(prev => Math.min(totalPagesHistory, prev + 1))}
                     disabled={currentPageHistory === totalPagesHistory || totalPagesHistory === 0}
+                    aria-label="Next page"
                     className="p-1.5 border border-slate-200 rounded-lg text-slate-400 hover:text-[#FDB913] hover:border-[#FDB913]/30 disabled:opacity-50 transition-colors"
                   >
                     <ChevronRight className="w-4 h-4" />
@@ -842,6 +850,10 @@ export default function EquipmentRelease() {
               initial={{ opacity: 0, scale: 0.9, y: 20 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.9, y: 20 }}
+              ref={releaseDialogRef}
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="process-release-title"
               className="bg-white rounded-[40px] w-full max-w-3xl overflow-hidden shadow-2xl border border-slate-200"
             >
               {/* Header */}
@@ -852,11 +864,11 @@ export default function EquipmentRelease() {
                       <ShieldCheck className="w-6 h-6" />
                     </div>
                     <div>
-                      <h3 className="text-xl font-bold text-slate-800">Process Release</h3>
+                      <h3 id="process-release-title" className="text-xl font-bold text-slate-800">Process Release</h3>
                       <p className="text-sm text-slate-500">Assign physical equipment units for deployment</p>
                     </div>
                   </div>
-                  <button onClick={() => setIsModalOpen(false)} className="p-2 hover:bg-slate-50 rounded-xl transition-colors">
+                  <button onClick={() => setIsModalOpen(false)} aria-label="Close" className="p-2 hover:bg-slate-50 rounded-xl transition-colors">
                     <X className="w-5 h-5 text-slate-400" />
                   </button>
                 </div>
@@ -991,6 +1003,7 @@ export default function EquipmentRelease() {
                               </select>
                               <button 
                                 onClick={() => removeReleaseUnit(unit.originalIdx)}
+                                aria-label="Remove unit"
                                 className="p-2.5 text-slate-400 hover:text-red-500 hover:bg-white rounded-xl border border-transparent hover:border-red-100 transition-all"
                               >
                                 <Trash2 className="w-4 h-4" />
@@ -1044,6 +1057,10 @@ export default function EquipmentRelease() {
               initial={{ opacity: 0, scale: 0.9, y: 20 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.9, y: 20 }}
+              ref={historyDialogRef}
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="release-history-title"
               className="bg-white rounded-[40px] w-full max-w-2xl overflow-hidden shadow-2xl border border-slate-200"
             >
               <div className="p-8 border-b border-slate-100 bg-slate-50/50">
@@ -1052,7 +1069,7 @@ export default function EquipmentRelease() {
                     <div className="flex items-center gap-2 mb-2">
                       <span className="px-2 py-0.5 bg-[#FDB913]/10 text-[#e5a611] text-[10px] font-bold rounded-md uppercase tracking-wider">Release Documentation</span>
                     </div>
-                    <h3 className="text-2xl font-display font-bold text-slate-800">{selectedHistory.release_no}</h3>
+                    <h3 id="release-history-title" className="text-2xl font-display font-bold text-slate-800">{selectedHistory.release_no}</h3>
                     <p className="text-sm text-slate-500 mt-1">Full audit trail for this equipment deployment.</p>
                   </div>
                   <button 

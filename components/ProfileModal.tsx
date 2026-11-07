@@ -3,12 +3,14 @@ import { motion, AnimatePresence } from 'motion/react';
 import { X, User, Mail, Shield, KeyRound, AlertCircle, CheckCircle2 } from 'lucide-react';
 import { useData } from '@/context/DataContext';
 import { api } from '@/lib/api-client';
+import { useDialogKeyboard } from '@/hooks/use-dialog-keyboard';
 
 export default function ProfileModal({ isOpen, onClose }: { isOpen: boolean; onClose: () => void }) {
   const { currentUser } = useData();
   const [isResetting, setIsResetting] = useState(false);
   const [resetStatus, setResetStatus] = useState<'idle' | 'success' | 'error'>('idle');
   const [errorMessage, setErrorMessage] = useState('');
+  const profileDialogRef = useDialogKeyboard(isOpen && Boolean(currentUser), onClose);
 
   if (!isOpen || !currentUser) return null;
 
@@ -41,18 +43,22 @@ export default function ProfileModal({ isOpen, onClose }: { isOpen: boolean; onC
             onClick={onClose}
             className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm"
           />
-          <motion.div 
+          <motion.div
+            ref={profileDialogRef}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="profile-dialog-title"
             initial={{ scale: 0.95, opacity: 0, y: 20 }}
             animate={{ scale: 1, opacity: 1, y: 0 }}
             exit={{ scale: 0.95, opacity: 0, y: 20 }}
             className="relative w-full max-w-md bg-white rounded-3xl shadow-2xl overflow-hidden text-slate-800"
           >
             <div className="p-6 border-b border-slate-100 flex items-center justify-between bg-slate-50">
-              <h3 className="font-display font-bold text-xl text-slate-800 flex items-center gap-2">
+              <h3 id="profile-dialog-title" className="font-display font-bold text-xl text-slate-800 flex items-center gap-2">
                 <User className="w-5 h-5 text-[#FDB913]" />
                 User Profile
               </h3>
-              <button onClick={onClose} className="p-2 hover:bg-slate-200 rounded-full transition-colors">
+              <button onClick={onClose} aria-label="Close" className="p-2 hover:bg-slate-200 rounded-full transition-colors">
                 <X className="w-5 h-5 text-slate-500" />
               </button>
             </div>

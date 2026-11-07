@@ -222,7 +222,7 @@ export default function UtilityDashboard() {
               </motion.div>
             )}
 
-            <button className="p-2 bg-white border border-slate-200 rounded-xl text-slate-500 hover:text-[#FDB913] transition-all shadow-sm">
+            <button aria-label="Download" className="p-2 bg-white border border-slate-200 rounded-xl text-slate-500 hover:text-[#FDB913] transition-all shadow-sm">
               <Download className="w-4 h-4" />
             </button>
           </div>
