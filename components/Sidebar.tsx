@@ -4,6 +4,9 @@ import React from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { 
   LayoutDashboard, 
+  ShieldCheck,
+  Fingerprint,
+  FileCheck2,
   BadgeDollarSign,
   Ship, 
   Wrench, 
@@ -99,6 +102,14 @@ export default function Sidebar({ onTabChange }: { onTabChange: () => void }) {
       title: 'Finance',
       items: [
         { icon: BarChart3, label: 'Financial Dashboard', path: '/financial-dashboard', resource: 'Financial Dashboard' },
+      ]
+    },
+    {
+      title: 'HSE',
+      items: [
+        { icon: ShieldCheck, label: 'Dashboard HSE', path: '/hse', resource: 'Dashboard HSE' },
+        { icon: Fingerprint, label: 'Absensi', path: '/hse/attendance', resource: 'Data Absensi' },
+        { icon: FileCheck2, label: 'Work Permit', path: '/hse/work-permits', resource: 'Data HSE' },
       ]
     },
     {

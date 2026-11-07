@@ -81,6 +81,9 @@ import AILogs from '../components/AILogs';
 import RepairList from '../components/RepairList';
 import RepairItems from '../components/RepairItems';
 import MarketingPriceReference from '../components/MarketingPriceReference';
+import HSEDashboard from '../components/HSEDashboard';
+import Attendance from '../components/Attendance';
+import WorkPermits from '../components/WorkPermits';
 import FinancialDashboard from '../components/FinancialDashboard';
 import ApiSyncManagement from '../components/ApiSyncManagement';
 import IngestSources from '../components/IngestSources';
@@ -222,6 +225,21 @@ createRoot(document.getElementById('root')!).render(
             <Route path="repair-list" element={
               <ProtectedRoute resource="Repair List">
                 <RepairList />
+              </ProtectedRoute>
+            } />
+            <Route path="hse" element={
+              <ProtectedRoute resource="Dashboard HSE">
+                <HSEDashboard />
+              </ProtectedRoute>
+            } />
+            <Route path="hse/attendance" element={
+              <ProtectedRoute resource="Data Absensi">
+                <Attendance />
+              </ProtectedRoute>
+            } />
+            <Route path="hse/work-permits" element={
+              <ProtectedRoute resource="Data HSE">
+                <WorkPermits />
               </ProtectedRoute>
             } />
             <Route path="marketing-price-reference" element={
