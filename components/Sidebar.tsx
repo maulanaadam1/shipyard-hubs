@@ -168,6 +168,13 @@ export default function Sidebar({ onTabChange }: { onTabChange: () => void }) {
     }
   ];
 
+  // The highlighted menu: the one whose path matches the page best, so
+  // /hse/work-permits lights Work Permit, not Dashboard HSE (/hse), while
+  // /repair-list/1200 still lights Repair List.
+  const activePath = navGroups.flatMap(g => g.items.map(i => i.path))
+    .filter(path => location.pathname === path || location.pathname.startsWith(`${path}/`))
+    .sort((a, b) => b.length - a.length)[0];
+
   const filteredGroups = navGroups.map(group => ({
     ...group,
     items: group.items.filter((item: { resource: string; adminOnly?: boolean }) =>
@@ -200,7 +207,7 @@ export default function Sidebar({ onTabChange }: { onTabChange: () => void }) {
                   onTabChange();
                 }}
                 className={`w-full flex items-center justify-between p-3 rounded-xl transition-colors ${
-                  (location.pathname === item.path || location.pathname.startsWith(`${item.path}/`)) 
+                  item.path === activePath 
                     ? 'bg-[#FDB913]/10 text-[#e5a611] font-medium' 
                     : 'text-slate-500 hover:bg-slate-50 hover:text-slate-900'
                 }`}
@@ -209,7 +216,7 @@ export default function Sidebar({ onTabChange }: { onTabChange: () => void }) {
                   <item.icon className="w-5 h-5 shrink-0" />
                   <span className="text-sm text-left leading-tight break-words pr-2">{item.label}</span>
                 </div>
-                {(location.pathname === item.path || location.pathname.startsWith(`${item.path}/`)) && <ChevronRight className="w-4 h-4 shrink-0" />}
+                {item.path === activePath && <ChevronRight className="w-4 h-4 shrink-0" />}
               </motion.button>
             ))}
           </div>
