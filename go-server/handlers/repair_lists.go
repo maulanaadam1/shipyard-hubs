@@ -15,6 +15,7 @@ import (
 	"github.com/go-chi/chi/v5"
 
 	"shipyard/db"
+	"shipyard/itemparse"
 	"shipyard/workers"
 )
 
@@ -259,7 +260,8 @@ func storeRepairList(joID string, version int, items []repairItem) error {
 			return nil
 		}
 		_, err := tx.Exec(db.FormatQuery(`INSERT INTO jo_repair_items (jo_id, uniqcode, parent_uniqcode, seq, depth, path, description, full_name,
-			unit, quantity, unit_price, total_price, is_leaf, version) VALUES `+strings.Join(rows, ", ")+` ON CONFLICT(jo_id, uniqcode) DO NOTHING`), args...)
+			unit, quantity, unit_price, total_price, is_leaf, version, rules, action, object, material, size, source, work_type, component,
+			recognized, from_group, parser_version) VALUES `+strings.Join(rows, ", ")+` ON CONFLICT(jo_id, uniqcode) DO NOTHING`), args...)
 		rows, args = rows[:0], args[:0]
 		return err
 	}
@@ -267,9 +269,15 @@ func storeRepairList(joID string, version int, items []repairItem) error {
 		if it.Leaf {
 			total += it.TotalPrice
 		}
-		rows = append(rows, "(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")
+		var p itemparse.RepairResult
+		version := ""
+		if it.Leaf {
+			p, version = parseRepairItem(it.Description, it.FullName, it.Unit, it.Quantity), itemparse.RepairVersion
+		}
+		rows = append(rows, "(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")
 		args = append(args, joID, it.Uniq, it.Parent, it.Seq, it.Depth, it.Path, it.Description, it.FullName, it.Unit,
-			it.Quantity, it.UnitPrice, it.TotalPrice, it.Leaf, it.Version)
+			it.Quantity, it.UnitPrice, it.TotalPrice, it.Leaf, it.Version, p.Rules, p.Action, p.Object, p.Material, p.Size, p.Source,
+			p.WorkType, p.Component, p.Recognized, p.FromActivity, version)
 		if len(rows) >= batch {
 			if err := flush(); err != nil {
 				return err
@@ -431,6 +439,21 @@ func syncRepairLists() (int, error) {
 // every REPAIR_LIST_HOURS (6).
 func StartRepairListWorker() {
 	every := time.Duration(envInt("REPAIR_LIST_HOURS", 6)) * time.Hour
+	go func() {
+		retry := time.Duration(envInt("WO_PARSE_RETRY_MINUTES", 5)) * time.Minute
+		total := 0
+		retryUntilDone(func() error {
+			n, err := backfillRepairParsed()
+			total += n
+			if err != nil {
+				log.Printf("[REPAIR PARSE] paused after %d activities: %v (retrying in %s)", total, err, retry)
+			}
+			return err
+		}, retry, time.Sleep)
+		if total > 0 {
+			log.Printf("[REPAIR PARSE] parsed %d repair list activities (rules %s)", total, itemparse.RepairVersion)
+		}
+	}()
 	go func() {
 		time.Sleep(time.Duration(envInt("REPAIR_LIST_START_MINUTES", 10)) * time.Minute)
 		for {

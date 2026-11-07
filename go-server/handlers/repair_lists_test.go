@@ -10,6 +10,7 @@ import (
 	"github.com/go-chi/chi/v5"
 
 	"shipyard/db"
+	"shipyard/itemparse"
 )
 
 // A two-page repair list for Job Order 77: act-1 and act-2 have WOs (see
@@ -126,6 +127,27 @@ func TestRepairLists(t *testing.T) {
 	if failure99 != "tidak ada repair list di SIAGA" {
 		t.Errorf("Job Order 99: %q", failure99)
 	}
+	// Activities are split like WO items as they are stored; groups give the work.
+	var work, parsedWith string
+	db.QueryRow(`SELECT COALESCE(work_type, ''), COALESCE(parser_version, '') FROM jo_repair_items WHERE jo_id = '77' AND uniqcode = 'act-3'`).Scan(&work, &parsedWith)
+	if work != "Ganti baru pipa" || parsedWith != itemparse.RepairVersion {
+		t.Errorf("act-3 parsed as %q with %q", work, parsedWith)
+	}
+	// Older rules: parsed again in the background, groups untouched.
+	db.Exec(`UPDATE jo_repair_items SET work_type = '', parser_version = 'old' WHERE jo_id = '77'`)
+	if n, err := backfillRepairParsed(); err != nil || n != 4 {
+		t.Errorf("backfill: %d, %v", n, err)
+	}
+	db.QueryRow(`SELECT COALESCE(work_type, '') FROM jo_repair_items WHERE jo_id = '77' AND uniqcode = 'act-3'`).Scan(&work)
+	var groupsParsed int
+	db.QueryRow(`SELECT COUNT(*) FROM jo_repair_items WHERE jo_id = '77' AND NOT is_leaf AND COALESCE(parser_version, '') = ?`, itemparse.RepairVersion).Scan(&groupsParsed)
+	if work != "Ganti baru pipa" || groupsParsed != 0 {
+		t.Errorf("after backfill: %q, %d groups parsed", work, groupsParsed)
+	}
+	if n, _ := backfillRepairParsed(); n != 0 {
+		t.Errorf("second backfill parsed %d", n)
+	}
+
 	// Up to date: nothing fetched again.
 	if n, _ := syncRepairLists(); n != 0 {
 		t.Errorf("second sync fetched %d", n)
