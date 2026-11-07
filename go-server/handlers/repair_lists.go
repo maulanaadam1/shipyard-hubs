@@ -589,18 +589,19 @@ func GetRepairList(w http.ResponseWriter, r *http.Request) {
 	var total, inWO float64
 	leaves, leavesInWO := 0, 0
 	rows, err := db.Query(`SELECT uniqcode, COALESCE(parent_uniqcode, ''), depth, COALESCE(path, ''), COALESCE(description, ''),
-			COALESCE(unit, ''), COALESCE(quantity, 0), COALESCE(unit_price, 0), COALESCE(total_price, 0), is_leaf
+			COALESCE(unit, ''), COALESCE(quantity, 0), COALESCE(unit_price, 0), COALESCE(total_price, 0), is_leaf,
+			COALESCE(work_type, ''), COALESCE(size, ''), COALESCE(component, '')
 		FROM jo_repair_items WHERE jo_id = ? ORDER BY seq`, joID)
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
 	}
 	for rows.Next() {
-		var uniq, parent, path, desc, unit string
+		var uniq, parent, path, desc, unit, work, size, component string
 		var depth int
 		var qty, unitPrice, totalPrice float64
 		var leaf bool
-		if rows.Scan(&uniq, &parent, &depth, &path, &desc, &unit, &qty, &unitPrice, &totalPrice, &leaf) != nil {
+		if rows.Scan(&uniq, &parent, &depth, &path, &desc, &unit, &qty, &unitPrice, &totalPrice, &leaf, &work, &size, &component) != nil {
 			continue
 		}
 		wos := uses[uniq]
@@ -608,7 +609,7 @@ func GetRepairList(w http.ResponseWriter, r *http.Request) {
 			wos = []woUse{}
 		}
 		item := map[string]interface{}{"uniqcode": uniq, "parent": parent, "depth": depth, "path": path, "description": desc,
-			"unit": unit, "quantity": qty, "leaf": leaf, "wos": wos}
+			"unit": unit, "quantity": qty, "leaf": leaf, "wos": wos, "work_type": work, "size": size, "component": component}
 		if showPrice {
 			item["unit_price"], item["total_price"] = unitPrice, totalPrice
 		}

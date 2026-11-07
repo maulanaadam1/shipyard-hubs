@@ -9,7 +9,7 @@ import (
 // RepairVersion identifies the repair list rules on top of the WO rules;
 // stored with every parsed repair list activity. Change it whenever
 // ParseRepair's output can change.
-const RepairVersion = Version + "+rl.1"
+const RepairVersion = Version + "+rl.2"
 
 // Component of a repair list line that is one part of a job priced in parts:
 // SIAGA repair lists often split a job into "jasa" and "material" lines under
@@ -57,7 +57,7 @@ func ParseRepair(desc, unit string, qty float64, groups []string) RepairResult {
 	if u := strings.TrimSpace(unit); u != "" {
 		label += ", " + strconv.FormatFloat(qty, 'f', -1, 64) + " " + u
 	}
-	out := RepairResult{Result: Parse(label)}
+	out := RepairResult{Result: parseRepairText(label)}
 	// "Pembangunan 1 unit kapal baru ..." reads as general ship work; on a
 	// repair list it is the whole new building contract.
 	if (!out.Recognized || out.Object == "Kapal (layanan umum)") && rePackage.MatchString(low) {
@@ -128,6 +128,23 @@ func ParseRepair(desc, unit string, qty float64, groups []string) RepairResult {
 	return out
 }
 
+var rePaintWork = regexp.MustCompile(`pengecatan|\bdicat\b|\bcat \d|painting|\blayer\b|\bcoat`)
+
+// parseRepairText is Parse, except that "pembersihan dan pengecatan 2 layer"
+// is painting: repair lists name the cleaning before the paint job it
+// prepares, and the line is priced as painting.
+func parseRepairText(text string) Result {
+	r := Parse(text)
+	if r.Action == "Pembersihan" && rePaintWork.MatchString(strings.ToLower(Clean(text))) {
+		r.Action = "Pengecatan"
+		r.WorkType = joinWords(r.Action, strings.ToLower(r.Object))
+		if r.Object == "" {
+			r.WorkType = r.Action
+		}
+	}
+	return r
+}
+
 // groupWork is the work named by the groups: the nearest action and the
 // nearest thing worked on, which can sit in different groups ("Pengecatan" >
 // "Lambung"), else the nearest group naming work at all. A group that is a
@@ -135,7 +152,7 @@ func ParseRepair(desc, unit string, qty float64, groups []string) RepairResult {
 func groupWork(groups []string) (Result, bool) {
 	var act, obj, whole *Result
 	for i := len(groups) - 1; i >= 0; i-- {
-		g := Parse(groups[i])
+		g := parseRepairText(groups[i])
 		if g.Rules == RulesCost || g.Object == "Kapal (layanan umum)" || g.Object == labourObject {
 			continue
 		}
@@ -169,7 +186,7 @@ func groupWork(groups []string) (Result, bool) {
 // groupObject is the thing worked on named by the nearest group that names one.
 func groupObject(groups []string) string {
 	for i := len(groups) - 1; i >= 0; i-- {
-		if g := Parse(groups[i]); g.Object != "" && g.Object != "Kapal (layanan umum)" && g.Object != labourObject && g.Rules != RulesCost {
+		if g := parseRepairText(groups[i]); g.Object != "" && g.Object != "Kapal (layanan umum)" && g.Object != labourObject && g.Rules != RulesCost {
 			return g.Object
 		}
 	}
