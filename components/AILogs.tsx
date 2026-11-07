@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { ScrollText, ThumbsUp, ThumbsDown, AlertTriangle, ChevronDown, ChevronRight } from 'lucide-react';
+import { ScrollText, ThumbsUp, ThumbsDown, AlertTriangle, ChevronDown, ChevronRight, ChevronLeft } from 'lucide-react';
 import { getHeaders } from '@/lib/api-client';
 import AIMarkdown from './AIMarkdown';
 
@@ -8,7 +8,7 @@ import AIMarkdown from './AIMarkdown';
 
 type ToolCall = { name: string; input: Record<string, unknown>; is_error: boolean };
 type Entry = {
-  id: string; created_at: string; user_email: string; question: string; answer: string; tools: ToolCall[];
+  id: string; created_at: string; user_email: string; user_name: string; guest: boolean; question: string; answer: string; tools: ToolCall[];
   model: string; error: string; input_tokens: number; output_tokens: number; cache_read_tokens: number;
   duration_ms: number; feedback: string;
 };
@@ -16,16 +16,26 @@ type Logs = {
   days: number; since: string;
   summary: { questions: number; users: number; errors: number; up: number; down: number; input_tokens: number; output_tokens: number; cache_read_tokens: number; avg_duration_ms: number };
   per_day: { date: string; questions: number; errors: number; tokens: number }[];
-  per_user: { email: string; questions: number; tokens: number; down: number; last: string }[];
+  per_user: { email: string; name: string; guest: boolean; questions: number; tokens: number; down: number; last: string }[];
   tool_use: Record<string, number>;
   entries: Entry[];
+  total: number; page: number; limit: number;
 };
 
 const TOOL_LABELS: Record<string, string> = {
   search_work_orders: 'Pencarian WO', get_work_order: 'Detail WO', billing_summary: 'Tagihan',
   search_work_items: 'Item Pekerjaan WO', price_reference: 'Harga Acuan', data_findings: 'Data Perlu Dicek',
-  unrecognized_activities: 'Item belum dikenali', query_app_data: 'Data aplikasi',
+  unrecognized_activities: 'Item belum dikenali', query_app_data: 'Data aplikasi', attendance_hours: 'Absensi',
+  job_order_margin: 'Harga Penawaran', repair_list: 'Repair List', marketing_price_reference: 'Harga Acuan Marketing',
 };
+
+// Who asked: a demo page guest by the name they typed, a ShipHub user by name.
+const askedBy = (u: { guest: boolean; name?: string; user_name?: string; email?: string; user_email?: string }) => {
+  const name = u.name ?? u.user_name ?? '';
+  const email = u.email ?? u.user_email ?? '';
+  return u.guest ? `Tamu: ${name || 'tanpa nama'}` : name || email || '(tanpa email)';
+};
+const PAGE = 50;
 
 const fmt = (n: number) => new Intl.NumberFormat('id-ID').format(n || 0);
 const secs = (ms: number) => (ms ? `${(ms / 1000).toFixed(1)} dtk` : '–');
@@ -34,7 +44,9 @@ const field = 'px-3 py-2 rounded-lg border border-slate-300 bg-white text-sm tex
 export default function AILogs() {
   const [days, setDays] = useState(30);
   const [filter, setFilter] = useState('all');
+  const [who, setWho] = useState('');
   const [user, setUser] = useState('');
+  const [page, setPage] = useState(1);
   const [query, setQuery] = useState('');
   const [search, setSearch] = useState('');
   const [data, setData] = useState<Logs | null>(null);
@@ -47,13 +59,17 @@ export default function AILogs() {
     return () => clearTimeout(t);
   }, [query]);
 
+  // A new filter starts again at page 1.
+  useEffect(() => { setPage(1); setOpen(null); }, [days, filter, who, user, search]);
+
   useEffect(() => {
     let cancelled = false;
     (async () => {
       setLoading(true);
       try {
-        const params = new URLSearchParams({ days: String(days), filter, limit: '200' });
+        const params = new URLSearchParams({ days: String(days), filter, page: String(page), limit: String(PAGE) });
         if (user) params.set('user', user);
+        if (who) params.set('who', who);
         if (search.trim()) params.set('q', search.trim());
         const res = await fetch(`/api/ai/logs?${params}`, { headers: await getHeaders() });
         const body = await res.json();
@@ -66,7 +82,7 @@ export default function AILogs() {
       }
     })();
     return () => { cancelled = true; };
-  }, [days, filter, user, search]);
+  }, [days, filter, who, user, search, page]);
 
   const s = data?.summary;
   const maxDay = Math.max(1, ...(data?.per_day || []).map(d => d.questions));
@@ -102,10 +118,18 @@ export default function AILogs() {
             </select>
           </div>
           <div>
+            <label htmlFor="log-who" className="block text-xs font-semibold text-slate-600 mb-1">Penanya</label>
+            <select id="log-who" className={field} value={who} onChange={e => { setWho(e.target.value); setUser(''); }}>
+              <option value="">Semua</option>
+              <option value="staff">Pengguna ShipHub</option>
+              <option value="guest">Tamu halaman demo</option>
+            </select>
+          </div>
+          <div>
             <label htmlFor="log-user" className="block text-xs font-semibold text-slate-600 mb-1">Pengguna</label>
             <select id="log-user" className={`${field} max-w-[16rem]`} value={user} onChange={e => setUser(e.target.value)}>
               <option value="">Semua pengguna</option>
-              {(data?.per_user || []).map(u => <option key={u.email} value={u.email}>{u.email || '(tanpa email)'}</option>)}
+              {(data?.per_user || []).map(u => <option key={u.email} value={u.email}>{askedBy(u)}</option>)}
             </select>
           </div>
           <div className="flex-1 min-w-[12rem]">
@@ -157,7 +181,7 @@ export default function AILogs() {
               <ul className="mt-3 flex flex-col divide-y divide-slate-100 text-xs">
                 {data.per_user.slice(0, 10).map(u => (
                   <li key={u.email} className="py-1.5 flex justify-between gap-2">
-                    <span className="truncate text-slate-700" title={u.email}>{u.email || '(tanpa email)'}</span>
+                    <button type="button" onClick={() => setUser(u.email)} className="truncate text-left text-slate-700 hover:text-indigo-700" title={u.email}>{askedBy(u)}</button>
                     <span className="text-slate-500 tabular-nums whitespace-nowrap">{u.questions} tanya{u.down ? ` · ${u.down} 👎` : ''}</span>
                   </li>
                 ))}
@@ -180,7 +204,8 @@ export default function AILogs() {
         {data && (
           <section className="rounded-2xl border border-slate-200 bg-white overflow-hidden">
             <h3 className="px-4 pt-4 text-sm font-semibold text-slate-700">
-              Pertanyaan {loading && <span className="font-normal text-slate-500">(memuat…)</span>}
+              Pertanyaan <span className="font-normal text-slate-500 tabular-nums">{data.total ? `${fmt((page - 1) * PAGE + 1)}–${fmt(Math.min(page * PAGE, data.total))} dari ${fmt(data.total)}` : ''}</span>
+              {loading && <span className="font-normal text-slate-500"> (memuat…)</span>}
             </h3>
             {data.entries.length === 0 ? <p className="p-4 text-sm text-slate-500">Tidak ada pertanyaan yang cocok dengan filter ini.</p> : (
               <ul className="mt-2 divide-y divide-slate-100">
@@ -195,7 +220,10 @@ export default function AILogs() {
                           <span className="block text-sm text-slate-800 break-words">{e.question}</span>
                           <span className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-slate-500">
                             <span className="tabular-nums">{e.created_at}</span>
-                            <span className="truncate max-w-[14rem]">{e.user_email}</span>
+                            <span className="truncate max-w-[14rem]" title={e.user_email}>
+                              {e.guest && <span className="mr-1 rounded bg-amber-50 px-1 py-px font-semibold text-amber-900">demo</span>}
+                              {askedBy(e)}
+                            </span>
                             <span className="tabular-nums">{secs(e.duration_ms)}</span>
                             <span className="tabular-nums">{fmt(e.input_tokens + e.output_tokens)} token</span>
                             {e.error && <span className="inline-flex items-center gap-1 text-rose-700"><AlertTriangle size={12} aria-hidden="true" /> gagal</span>}
@@ -228,6 +256,15 @@ export default function AILogs() {
                   );
                 })}
               </ul>
+            )}
+            {data.total > PAGE && (
+              <nav aria-label="Halaman log" className="px-4 py-3 border-t border-slate-100 flex items-center justify-end gap-2 text-xs text-slate-600">
+                <button type="button" disabled={page <= 1 || loading} onClick={() => setPage(page - 1)} aria-label="Halaman sebelumnya"
+                  className="p-1.5 rounded-lg border border-slate-200 bg-white disabled:opacity-40 hover:bg-slate-50"><ChevronLeft size={14} aria-hidden="true" /></button>
+                <span className="tabular-nums">Halaman {page} dari {fmt(Math.ceil(data.total / PAGE))}</span>
+                <button type="button" disabled={page * PAGE >= data.total || loading} onClick={() => setPage(page + 1)} aria-label="Halaman berikutnya"
+                  className="p-1.5 rounded-lg border border-slate-200 bg-white disabled:opacity-40 hover:bg-slate-50"><ChevronRight size={14} aria-hidden="true" /></button>
+              </nav>
             )}
           </section>
         )}

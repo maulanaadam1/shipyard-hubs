@@ -42,6 +42,8 @@ type aiLogEntry struct {
 	ID              string          `json:"id"`
 	CreatedAt       string          `json:"created_at"`
 	UserEmail       string          `json:"user_email"`
+	UserName        string          `json:"user_name"` // profile name, or the name a demo guest typed
+	Guest           bool            `json:"guest"`     // asked from the public demo page
 	Question        string          `json:"question"`
 	Answer          string          `json:"answer"`
 	Tools           json.RawMessage `json:"tools"`
@@ -56,7 +58,8 @@ type aiLogEntry struct {
 
 // GetAILogs (Admin) summarises AI Asisten use over the last days: totals,
 // per day, per user, per tool, and the questions themselves.
-// Query: days (default 30), user (email), filter (all|errors|down|up), q, limit.
+// Query: days (default 30), user (email), who (all|staff|guest: demo page
+// visitors), filter (all|errors|down|up), q, page, limit (default 50).
 func GetAILogs(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
 	days, _ := strconv.Atoi(q.Get("days"))
@@ -69,6 +72,14 @@ func GetAILogs(w http.ResponseWriter, r *http.Request) {
 	if u := strings.TrimSpace(q.Get("user")); u != "" {
 		where = append(where, "user_email = ?")
 		args = append(args, u)
+	}
+	switch q.Get("who") {
+	case "guest":
+		where = append(where, "user_id LIKE ?")
+		args = append(args, aiShareGuestPrefix+"%")
+	case "staff":
+		where = append(where, "user_id NOT LIKE ?")
+		args = append(args, aiShareGuestPrefix+"%")
 	}
 	// The summary covers the period (and user); the list is also filtered.
 	baseWhere, baseArgs := strings.Join(where, " AND "), append([]interface{}{}, args...)
@@ -86,9 +97,14 @@ func GetAILogs(w http.ResponseWriter, r *http.Request) {
 		args = append(args, like, like)
 	}
 	limit, _ := strconv.Atoi(q.Get("limit"))
-	if limit <= 0 || limit > 500 {
-		limit = 100
+	if limit <= 0 || limit > 200 {
+		limit = 50
 	}
+	page, _ := strconv.Atoi(q.Get("page"))
+	if page < 1 {
+		page = 1
+	}
+	names := aiLogNames()
 
 	summary := map[string]interface{}{}
 	var questions, users, errorsN, up, down, inTok, outTok, cacheTok, avgMs int64
@@ -119,29 +135,48 @@ func GetAILogs(w http.ResponseWriter, r *http.Request) {
 	}
 
 	perUser := []map[string]interface{}{}
-	if rows, err := db.Query(`SELECT COALESCE(user_email, ''), COUNT(*), COALESCE(SUM(input_tokens + output_tokens), 0),
+	if rows, err := db.Query(`SELECT COALESCE(user_email, ''), COALESCE(MAX(user_id), ''), COUNT(*), COALESCE(SUM(input_tokens + output_tokens), 0),
 			COALESCE(SUM(CASE WHEN feedback = 'down' THEN 1 ELSE 0 END), 0), MAX(created_at)
 		FROM ai_chat_log WHERE `+baseWhere+` GROUP BY COALESCE(user_email, '') ORDER BY COUNT(*) DESC`, baseArgs...); err == nil {
 		for rows.Next() {
-			var email, last string
+			var email, userID, last string
 			var n, t, d int64
-			if rows.Scan(&email, &n, &t, &d, &last) == nil {
-				perUser = append(perUser, map[string]interface{}{"email": email, "questions": n, "tokens": t, "down": d, "last": last})
+			if rows.Scan(&email, &userID, &n, &t, &d, &last) == nil {
+				perUser = append(perUser, map[string]interface{}{"email": email, "name": names[userID], "guest": strings.HasPrefix(userID, aiShareGuestPrefix),
+					"questions": n, "tokens": t, "down": d, "last": last})
 			}
 		}
 		rows.Close()
 	}
 
-	entries := []aiLogEntry{}
+	// Data the AI used over the period (and user), not only on this page.
 	toolUse := map[string]int{}
-	if rows, err := db.Query(`SELECT id, COALESCE(created_at, ''), COALESCE(user_email, ''), COALESCE(question, ''), COALESCE(answer, ''),
+	if rows, err := db.Query(`SELECT COALESCE(tools, '[]') FROM ai_chat_log WHERE `+baseWhere, baseArgs...); err == nil {
+		for rows.Next() {
+			var tools string
+			var calls []aiToolCall
+			if rows.Scan(&tools) == nil && json.Unmarshal([]byte(tools), &calls) == nil {
+				for _, c := range calls {
+					toolUse[c.Name]++
+				}
+			}
+		}
+		rows.Close()
+	}
+
+	var total int
+	db.QueryRow(`SELECT COUNT(*) FROM ai_chat_log WHERE `+strings.Join(where, " AND "), args...).Scan(&total)
+
+	entries := []aiLogEntry{}
+	if rows, err := db.Query(`SELECT id, COALESCE(created_at, ''), COALESCE(user_id, ''), COALESCE(user_email, ''), COALESCE(question, ''), COALESCE(answer, ''),
 			COALESCE(tools, '[]'), COALESCE(model, ''), COALESCE(error, ''), COALESCE(input_tokens, 0), COALESCE(output_tokens, 0),
 			COALESCE(cache_read_tokens, 0), COALESCE(duration_ms, 0), COALESCE(feedback, '')
-		FROM ai_chat_log WHERE `+strings.Join(where, " AND ")+` ORDER BY created_at DESC LIMIT `+strconv.Itoa(limit), args...); err == nil {
+		FROM ai_chat_log WHERE `+strings.Join(where, " AND ")+` ORDER BY created_at DESC LIMIT `+strconv.Itoa(limit)+
+		` OFFSET `+strconv.Itoa((page-1)*limit), args...); err == nil {
 		for rows.Next() {
 			var e aiLogEntry
-			var tools string
-			if rows.Scan(&e.ID, &e.CreatedAt, &e.UserEmail, &e.Question, &e.Answer, &tools, &e.Model, &e.Error,
+			var tools, userID string
+			if rows.Scan(&e.ID, &e.CreatedAt, &userID, &e.UserEmail, &e.Question, &e.Answer, &tools, &e.Model, &e.Error,
 				&e.InputTokens, &e.OutputTokens, &e.CacheReadTokens, &e.DurationMs, &e.Feedback) != nil {
 				continue
 			}
@@ -149,11 +184,7 @@ func GetAILogs(w http.ResponseWriter, r *http.Request) {
 				tools = "[]"
 			}
 			e.Tools = json.RawMessage(tools)
-			var calls []aiToolCall
-			json.Unmarshal(e.Tools, &calls)
-			for _, c := range calls {
-				toolUse[c.Name]++
-			}
+			e.UserName, e.Guest = names[userID], strings.HasPrefix(userID, aiShareGuestPrefix)
 			entries = append(entries, e)
 		}
 		rows.Close()
@@ -162,6 +193,26 @@ func GetAILogs(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]interface{}{
 		"days": days, "since": since, "summary": summary, "per_day": perDay, "per_user": perUser,
-		"tool_use": toolUse, "entries": entries,
+		"tool_use": toolUse, "entries": entries, "total": total, "page": page, "limit": limit,
 	})
+}
+
+// aiLogNames maps who asked to a name: ShipHub users from their profile,
+// demo page guests from the name they typed.
+func aiLogNames() map[string]string {
+	names := map[string]string{}
+	for _, q := range []string{`SELECT id, COALESCE(name, '') FROM profiles`, `SELECT id, COALESCE(name, '') FROM ai_share_guests`} {
+		rows, err := db.Query(q)
+		if err != nil {
+			continue
+		}
+		for rows.Next() {
+			var id, name string
+			if rows.Scan(&id, &name) == nil && strings.TrimSpace(name) != "" {
+				names[id] = strings.TrimSpace(name)
+			}
+		}
+		rows.Close()
+	}
+	return names
 }
