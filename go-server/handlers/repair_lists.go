@@ -248,6 +248,20 @@ func storeRepairList(joID string, version int, items []repairItem) error {
 		return err
 	}
 	defer tx.Rollback()
+	// changed_at / change_kind: when the Job Order first got a repair list
+	// ("baru") or a newer version ("tambahan"); a refetch of the same version
+	// keeps them (AI Assistant's "Terbaru hari ini").
+	var oldVersion int
+	var changedAt, changeKind string
+	tx.QueryRow(db.FormatQuery(`SELECT COALESCE(version, 0), COALESCE(changed_at, ''), COALESCE(change_kind, '') FROM jo_repair_lists WHERE jo_id = ?`), joID).
+		Scan(&oldVersion, &changedAt, &changeKind)
+	now := time.Now().Format("2006-01-02 15:04:05")
+	switch {
+	case oldVersion == 0:
+		changedAt, changeKind = now, "baru"
+	case version > oldVersion:
+		changedAt, changeKind = now, "tambahan"
+	}
 	if _, err := tx.Exec(db.FormatQuery("DELETE FROM jo_repair_items WHERE jo_id = ?"), joID); err != nil {
 		return err
 	}
@@ -290,8 +304,9 @@ func storeRepairList(joID string, version int, items []repairItem) error {
 	if _, err := tx.Exec(db.FormatQuery("DELETE FROM jo_repair_lists WHERE jo_id = ?"), joID); err != nil {
 		return err
 	}
-	if _, err := tx.Exec(db.FormatQuery(`INSERT INTO jo_repair_lists (jo_id, version, items, total_price, fetched_at, error, format) VALUES (?, ?, ?, ?, ?, '', ?)`),
-		joID, version, len(items), total, time.Now().Format("2006-01-02 15:04:05"), repairListFormat); err != nil {
+	if _, err := tx.Exec(db.FormatQuery(`INSERT INTO jo_repair_lists (jo_id, version, items, total_price, fetched_at, error, format, changed_at, change_kind)
+		VALUES (?, ?, ?, ?, ?, '', ?, ?, ?)`),
+		joID, version, len(items), total, now, repairListFormat, changedAt, changeKind); err != nil {
 		return err
 	}
 	return tx.Commit()

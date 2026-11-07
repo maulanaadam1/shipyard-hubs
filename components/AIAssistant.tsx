@@ -21,7 +21,10 @@ type Message = {
 };
 type Status = { enabled: boolean; provider: string; model: string; daily_limit: number; used_today: number; tools: string[]; is_admin: boolean; can_configure?: boolean };
 type Conversation = { id: string; title: string; updated_at: string; questions: number };
-type Insight = { key: string; label: string; count: number; value?: number; tone: 'danger' | 'warning' | 'neutral'; question: string; link?: string };
+type Insight = {
+  key: string; label: string; count: number; value?: number; tone: 'danger' | 'warning' | 'neutral'; question: string; link?: string;
+  display?: string; detail?: string; // badge text ("128 jam") and the line under the label
+};
 
 // 1250000000 -> "Rp 1,25 M"; amounts in the attention card stay short.
 const shortRupiah = (v: number) => {
@@ -408,10 +411,11 @@ export default function AIAssistant({ guest }: { guest?: AIGuest } = {}) {
         className="w-full flex items-center justify-between gap-3 py-2 text-left text-sm text-slate-700 hover:text-slate-900 disabled:opacity-50">
         <span className="min-w-0">
           {i.label}
-          {i.value ? <span className="block text-xs text-slate-500">{i.count} WO</span> : null}
+          {i.detail ? <span className="block text-xs text-slate-500">{i.detail}</span>
+            : i.value ? <span className="block text-xs text-slate-500">{i.count} WO</span> : null}
         </span>
         <span className={`shrink-0 min-w-[2rem] text-center text-xs font-semibold px-2 py-0.5 rounded-full tabular-nums ${TONE[i.tone] || TONE.neutral}`}>
-          {i.value ? shortRupiah(i.value) : i.count.toLocaleString('id-ID')}
+          {i.display || (i.value ? shortRupiah(i.value) : i.count.toLocaleString('id-ID'))}
         </span>
       </button>
     </li>

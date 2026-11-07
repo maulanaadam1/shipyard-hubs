@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"strings"
 	"time"
@@ -106,6 +107,10 @@ type aiInsight struct {
 	Tone     string  `json:"tone"`            // danger, warning, neutral
 	Question string  `json:"question"`
 	Link     string  `json:"link"`
+	// Display replaces the badge (count or rupiah), e.g. "128 jam"; Detail is
+	// the line under the label, e.g. "minggu lalu Rp 1,2 M".
+	Display string `json:"display,omitempty"`
+	Detail  string `json:"detail,omitempty"`
 }
 
 // GetAIInsights counts what needs attention today, straight from the
@@ -116,7 +121,6 @@ func GetAIInsights(w http.ResponseWriter, r *http.Request) {
 		now = now.In(loc)
 	}
 	today := now.Format("2006-01-02")
-	tomorrow := now.AddDate(0, 0, 1).Format("2006-01-02")
 	insights := []aiInsight{}
 	add := func(i aiInsight) {
 		if i.Count > 0 {
@@ -124,40 +128,82 @@ func GetAIInsights(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	if HasResourcePermission(r, ResourceItemFindings, "view") {
-		var n int
-		db.QueryRow(`SELECT COUNT(*) FROM wo_item_findings WHERE status = 'open'`).Scan(&n)
-		add(aiInsight{Key: "findings", Label: "Item harga di atas acuan", Count: n, Tone: "danger",
-			Question: "Item pekerjaan apa saja yang harganya jauh di atas harga acuan dan belum dicek? Urutkan dari kelebihan terbesar.", Link: "/data-findings"})
+	// This week: Monday to today; last week: the Monday to Sunday before.
+	weekStart := now.AddDate(0, 0, -((int(now.Weekday()) + 6) % 7))
+	weekFrom := weekStart.Format("2006-01-02")
+	lastFrom, lastTo := weekStart.AddDate(0, 0, -7).Format("2006-01-02"), weekStart.AddDate(0, 0, -1).Format("2006-01-02")
+	jasaThis, jasaLast, jasaWOs := 0.0, 0.0, 0
+	seeJasa := HasResourcePermission(r, ResourceFinancialDashboard, "view")
+	if seeJasa {
+		db.QueryRow(`SELECT COUNT(DISTINCT wo_id), COALESCE(SUM(approved_cost), 0) FROM work_order_daily_costs WHERE SUBSTR(cost_date, 1, 10) BETWEEN ? AND ?`,
+			weekFrom, today).Scan(&jasaWOs, &jasaThis)
+		db.QueryRow(`SELECT COALESCE(SUM(approved_cost), 0) FROM work_order_daily_costs WHERE SUBSTR(cost_date, 1, 10) BETWEEN ? AND ?`,
+			lastFrom, lastTo).Scan(&jasaLast)
 	}
-	if HasResourcePermission(r, ResourceInventory, "view") {
-		var n int
-		db.QueryRow(`SELECT COUNT(*) FROM inv_stock WHERE status IN ('PESAN ULANG', 'STOK NEGATIF')`).Scan(&n)
-		add(aiInsight{Key: "stock", Label: "Material perlu dipesan ulang", Count: n, Tone: "warning",
-			Question: "Material apa saja yang statusnya PESAN ULANG atau STOK NEGATIF? Tampilkan per gudang.", Link: "/material-stock"})
+
+	// Jasa (WO costs approved) and material (stock used) on projects this week.
+	seeMaterial := HasResourcePermission(r, ResourceInventory, "view")
+	if seeJasa || seeMaterial {
+		material, materialProjects := 0.0, 0
+		if seeMaterial {
+			db.QueryRow(`SELECT COALESCE(SUM(biaya_fifo), 0), COUNT(DISTINCT proyek) FROM inv_usages WHERE SUBSTR(CAST(tanggal AS TEXT), 1, 10) BETWEEN ? AND ?`,
+				weekFrom, today).Scan(&material, &materialProjects)
+		}
+		var parts []string
+		if seeJasa {
+			parts = append(parts, "jasa "+shortRupiah(jasaThis))
+		}
+		if seeMaterial {
+			parts = append(parts, fmt.Sprintf("material %s (%d proyek)", shortRupiah(material), materialProjects))
+		}
+		total := material + jasaThis
+		add(aiInsight{Key: "usage_week", Label: "Pemakaian jasa & material proyek minggu ini", Count: boolCount(total > 0), Value: total,
+			Display: shortRupiah(total), Detail: strings.Join(parts, " · "), Tone: "neutral",
+			Question: "Berapa pemakaian jasa (biaya WO yang di-approve) dan material di proyek minggu ini? Rinci per proyek, urutkan dari yang terbesar."})
 	}
-	if HasResourcePermission(r, ResourceDataHSE, "view") {
-		n := 0
-		if rows, err := loadExternalSheet("workpermit"); err == nil {
-			for _, row := range rows {
-				finish := strings.TrimSpace(aiDataText(row["date_finish"]))
-				if len(finish) >= 10 {
-					finish = finish[:10]
+
+	if seeJasa {
+		detail := "minggu lalu " + shortRupiah(jasaLast)
+		if jasaLast > 0 {
+			detail += fmt.Sprintf(" (%+.0f%%)", (jasaThis-jasaLast)/jasaLast*100)
+		}
+		add(aiInsight{Key: "jasa_week", Label: "Cost jasa di-approve minggu ini", Count: boolCount(jasaThis > 0 || jasaLast > 0), Value: jasaThis,
+			Display: shortRupiah(jasaThis), Detail: fmt.Sprintf("%d WO · %s", jasaWOs, detail), Tone: "neutral", Link: "/financial-dashboard",
+			Question: "Berapa cost jasa (WO) yang di-approve minggu ini dibanding minggu lalu? Rinci per vendor dan proyek."})
+	}
+
+	if HasResourcePermission(r, ResourceDataAttendance, "view") {
+		if days, err := loadAttendanceDays(shiftDay(weekStart), shiftDay(now), map[string]string{}, attendanceRules{WeekdayHours: 8, SaturdayHours: 4}); err == nil {
+			workers, overtimeWorkers, todayWorkers := map[string]bool{}, map[string]bool{}, map[string]bool{}
+			perDay := map[string]int{}
+			overtime := 0
+			for _, d := range days {
+				workers[d.EmpCode] = true
+				perDay[d.Date]++
+				if d.Date == today {
+					todayWorkers[d.EmpCode] = true
 				}
-				if finish == today || finish == tomorrow {
-					n++
+				// Measured overtime only: a day without its check-out is an estimate.
+				if d.WorkedMinutes != nil && d.OvertimeMinutes > 0 {
+					overtime += d.OvertimeMinutes
+					overtimeWorkers[d.EmpCode] = true
 				}
 			}
+			add(aiInsight{Key: "overtime_week", Label: "Overtime minggu ini", Count: boolCount(overtime > 0), Display: formatHours(overtime) + " jam",
+				Detail: fmt.Sprintf("%d orang lembur, dari absen lengkap", len(overtimeWorkers)), Tone: "warning", Link: "/hse/attendance?tab=vendors",
+				Question: "Berapa jam overtime pekerja minggu ini? Rinci per vendor dan sebutkan pekerja dengan lembur terbanyak."})
+			avg := 0
+			if len(perDay) > 0 {
+				sum := 0
+				for _, n := range perDay {
+					sum += n
+				}
+				avg = sum / len(perDay)
+			}
+			add(aiInsight{Key: "workers_week", Label: "Jumlah pekerja minggu ini", Count: len(workers), Display: fmt.Sprintf("%d orang", len(workers)),
+				Detail: fmt.Sprintf("hari ini %d · rata-rata %d orang per hari", len(todayWorkers), avg), Tone: "neutral", Link: "/hse/attendance?tab=dates",
+				Question: "Berapa jumlah pekerja yang hadir minggu ini per hari dan per vendor? Bandingkan dengan minggu lalu."})
 		}
-		add(aiInsight{Key: "permits", Label: "Izin kerja berakhir hari ini atau besok", Count: n, Tone: "warning",
-			Question: "Izin kerja (work permit) mana saja yang berakhir hari ini atau besok? Sebutkan vendor, kapal, area dan pekerjaannya."})
-	}
-	if HasResourcePermission(r, "Work Order", "view") {
-		var n int
-		db.QueryRow(`SELECT COUNT(*) FROM work_order_summary WHERE derived_status = 'Waiting' AND COALESCE(created_source_at, '') <> '' AND created_source_at < ?`,
-			now.AddDate(0, 0, -30).Format("2006-01-02")).Scan(&n)
-		add(aiInsight{Key: "waiting", Label: "WO Waiting lebih dari 30 hari", Count: n, Tone: "neutral",
-			Question: "WO mana saja yang masih Waiting lebih dari 30 hari? Tampilkan nilai dan vendornya, urutkan dari yang terlama.", Link: "/work-order"})
 	}
 
 	latest := aiLatestToday(r, now)
@@ -228,18 +274,99 @@ func aiLatestToday(r *http.Request, now time.Time) []aiInsight {
 				(SELECT COUNT(*) FROM inv_usages WHERE SUBSTR(CAST(tanggal AS TEXT), 1, 10) = ?)`, today, today),
 			Question: "Material apa saja yang dibeli dan dipakai hari ini, untuk proyek apa?"})
 	}
+	if HasResourcePermission(r, ResourceDataAttendance, "view") {
+		if days, err := loadAttendanceDays(shiftDay(now), shiftDay(now), map[string]string{}, attendanceRules{WeekdayHours: 8, SaturdayHours: 4}); err == nil {
+			perVendor := map[string]int{}
+			for _, d := range days {
+				perVendor[attendanceGroupLabel(d, noPTLabel)]++
+			}
+			var top []string
+			for _, c := range topCounts(perVendor, 3) {
+				top = append(top, fmt.Sprintf("%s %d", c.Name, c.Count))
+			}
+			add(aiInsight{Key: "present_today", Label: "Pekerja hadir hari ini", Count: len(days), Detail: strings.Join(top, " · "), Tone: "neutral",
+				Link: "/hse/attendance", Question: "Berapa pekerja yang hadir hari ini per vendor? Siapa saja yang belum absen pulang?"})
+		}
+	}
 	if HasResourcePermission(r, ResourceDataHSE, "view") {
-		n := 0
-		if rows, err := loadExternalSheet("workpermit"); err == nil {
-			for _, row := range rows {
-				start := strings.TrimSpace(aiDataText(row["date_start"]))
-				if len(start) >= 10 && start[:10] == today {
-					n++
+		// Sheet dates in either format ("2026-11-07", "11/7/2026") via loadWorkPermits.
+		if permits, err := loadWorkPermits(); err == nil {
+			started, active, approved, manpower := 0, 0, 0, 0
+			for _, p := range permits {
+				if p.DateStart == today {
+					started++
+				}
+				if p.activeOn(today) {
+					active++
+					if p.Status == "Approved" {
+						approved++
+						manpower += p.Manpower
+					}
 				}
 			}
+			detail := fmt.Sprintf("%d manpower di izin approved", manpower)
+			if active > approved {
+				detail += fmt.Sprintf(" · %d belum approved", active-approved)
+			}
+			add(aiInsight{Key: "permits_active", Label: "Izin kerja aktif hari ini", Count: active, Detail: detail, Tone: "neutral", Link: "/hse/work-permits?active=" + today,
+				Question: "Izin kerja apa saja yang berlaku hari ini? Sebutkan vendor, kapal, area, jenis pekerjaan berisiko dan statusnya."})
+			add(aiInsight{Key: "permits_today", Label: "Izin kerja mulai hari ini", Count: started, Tone: "neutral",
+				Question: "Izin kerja apa saja yang mulai hari ini? Sebutkan vendor, kapal, area dan jenis pekerjaannya."})
 		}
-		add(aiInsight{Key: "permits_today", Label: "Izin kerja mulai hari ini", Count: n, Tone: "neutral",
-			Question: "Izin kerja apa saja yang mulai hari ini? Sebutkan vendor, kapal, area dan jenis pekerjaannya."})
+	}
+	if HasResourcePermission(r, ResourceRepairList, "view") {
+		var fresh, extra int
+		db.QueryRow(`SELECT COALESCE(SUM(CASE WHEN change_kind = 'baru' THEN 1 ELSE 0 END), 0), COALESCE(SUM(CASE WHEN change_kind = 'tambahan' THEN 1 ELSE 0 END), 0)
+			FROM jo_repair_lists WHERE SUBSTR(COALESCE(changed_at, ''), 1, 10) = ? AND COALESCE(error, '') = ''`, today).Scan(&fresh, &extra)
+		add(aiInsight{Key: "repair_lists_today", Label: "Repair list baru / tambahan", Count: fresh + extra,
+			Detail: fmt.Sprintf("%d Job Order baru · %d dapat versi tambahan", fresh, extra), Tone: "neutral", Link: "/repair-list",
+			Question: "Job Order mana saja yang hari ini mendapat repair list baru atau repair list tambahan? Sebutkan kapal, versi dan nilainya."})
+	}
+	if HasResourcePermission(r, "Work Order", "view") {
+		var items, wos int
+		db.QueryRow(`SELECT COUNT(*), COUNT(DISTINCT i.wo_id) FROM wo_items i JOIN work_order_summary s ON s.wo_id = i.wo_id
+			WHERE SUBSTR(COALESCE(s.created_source_at, ''), 1, 10) = ?`, today).Scan(&items, &wos)
+		add(aiInsight{Key: "wo_items_today", Label: "Item WO baru", Count: items, Detail: fmt.Sprintf("dari %d WO baru", wos), Tone: "neutral", Link: "/work-order-items",
+			Question: "Item pekerjaan apa saja yang masuk hari ini dari WO baru? Kelompokkan per jenis pekerjaan dan vendor."})
 	}
 	return latest
+}
+
+// shiftDay is the calendar day of t as loadAttendanceDays takes it (midnight,
+// wall clock): passing the current time would leave out the morning's punches.
+func shiftDay(t time.Time) time.Time {
+	return time.Date(t.Year(), t.Month(), t.Day(), 0, 0, 0, 0, time.UTC)
+}
+
+// boolCount turns "has something to show" into the count add() checks.
+func boolCount(ok bool) int {
+	if ok {
+		return 1
+	}
+	return 0
+}
+
+// formatHours: minutes as hours with one decimal, Indonesian style ("12,5").
+func formatHours(minutes int) string {
+	return strings.Replace(fmt.Sprintf("%.1f", float64(minutes)/60), ".", ",", 1)
+}
+
+// shortRupiah: "Rp 1,2 M", "Rp 350 jt", "Rp 12 rb".
+func shortRupiah(v float64) string {
+	abs := v
+	if abs < 0 {
+		abs = -abs
+	}
+	var s string
+	switch {
+	case abs >= 1e9:
+		s = strings.Replace(fmt.Sprintf("%.1f M", v/1e9), ".", ",", 1)
+	case abs >= 1e6:
+		s = fmt.Sprintf("%.0f jt", v/1e6)
+	case abs >= 1e3:
+		s = fmt.Sprintf("%.0f rb", v/1e3)
+	default:
+		s = fmt.Sprintf("%.0f", v)
+	}
+	return "Rp " + s
 }
