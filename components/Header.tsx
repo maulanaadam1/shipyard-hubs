@@ -7,6 +7,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import { api } from '@/lib/api-client';
 import { useNavigate } from 'react-router-dom';
 import ProfileModal from './ProfileModal';
+import { useDialogKeyboard } from '@/hooks/use-dialog-keyboard';
 
 export default function Header({ onMenuClick }: { onMenuClick?: () => void }) {
   const { currentUser, setCurrentUser, notifications, markNotificationRead } = useData();
@@ -22,6 +23,19 @@ export default function Header({ onMenuClick }: { onMenuClick?: () => void }) {
   const [successMessage, setSuccessMessage] = React.useState('');
   const [isAuthLoading, setIsAuthLoading] = React.useState(false);
   const loadingRef = React.useRef(false);
+  const loginDialogRef = useDialogKeyboard(isLoginModalOpen, () => setIsLoginModalOpen(false));
+
+  // Escape closes whichever header dropdown is open.
+  React.useEffect(() => {
+    if (!isNotificationsOpen && !isUserSwitcherOpen) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return;
+      setIsNotificationsOpen(false);
+      setIsUserSwitcherOpen(false);
+    };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [isNotificationsOpen, isUserSwitcherOpen]);
 
   const handleNotificationClick = (notification: any) => {
     // Mark as read
@@ -161,6 +175,7 @@ export default function Header({ onMenuClick }: { onMenuClick?: () => void }) {
         {currentUser && (
           <button 
             onClick={onMenuClick}
+            aria-label="Open menu"
             className="p-2 hover:bg-[#FDB913] rounded-lg transition-colors flex flex-col items-center justify-center gap-1.5"
           >
             <div className="w-6 h-0.5 bg-white rounded-full"></div>
@@ -178,6 +193,8 @@ export default function Header({ onMenuClick }: { onMenuClick?: () => void }) {
                 setIsNotificationsOpen(!isNotificationsOpen);
                 setIsUserSwitcherOpen(false);
               }}
+              aria-label="Notifications"
+              aria-expanded={isNotificationsOpen}
               className="relative p-2 hover:bg-slate-900/10 rounded-full transition-colors"
             >
               <Bell className="w-5 h-5" />
@@ -262,6 +279,8 @@ export default function Header({ onMenuClick }: { onMenuClick?: () => void }) {
           <div className="relative">
             <button 
               onClick={() => setIsUserSwitcherOpen(!isUserSwitcherOpen)}
+              aria-label="Account menu"
+              aria-expanded={isUserSwitcherOpen}
               className="flex items-center gap-3 pl-4 border-l border-slate-900/20 hover:opacity-80 transition-opacity"
             >
               <div className="text-right hidden sm:block">
@@ -339,17 +358,21 @@ export default function Header({ onMenuClick }: { onMenuClick?: () => void }) {
               onClick={() => setIsLoginModalOpen(false)}
               className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm"
             />
-            <motion.div 
+            <motion.div
+              ref={loginDialogRef}
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="login-dialog-title"
               initial={{ scale: 0.95, opacity: 0, y: 20 }}
               animate={{ scale: 1, opacity: 1, y: 0 }}
               exit={{ scale: 0.95, opacity: 0, y: 20 }}
               className="relative w-full max-w-sm bg-white rounded-3xl shadow-2xl overflow-hidden text-slate-800"
             >
               <div className="p-6 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
-                <h3 className="font-display font-bold text-xl text-slate-800">
+                <h3 id="login-dialog-title" className="font-display font-bold text-xl text-slate-800">
                   {authMode === 'login' ? 'Welcome Back' : 'Create Account'}
                 </h3>
-                <button onClick={() => setIsLoginModalOpen(false)} className="p-2 hover:bg-slate-200 rounded-full">
+                <button onClick={() => setIsLoginModalOpen(false)} aria-label="Close" className="p-2 hover:bg-slate-200 rounded-full">
                   <X className="w-5 h-5 text-slate-500" />
                 </button>
               </div>

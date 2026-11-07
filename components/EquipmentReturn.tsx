@@ -20,6 +20,7 @@ import {
 
 import { useData, LoanRequest, DeploymentRecord } from '@/context/DataContext';
 import { api } from '@/lib/api-client';
+import { useDialogKeyboard } from '@/hooks/use-dialog-keyboard';
 
 export default function EquipmentReturn() {
   const { fleet: assets, setFleet: setAssets, loans, setLoans, deployments, setDeployments, fetchData, currentUser } = useData();
@@ -35,6 +36,7 @@ export default function EquipmentReturn() {
   const [returnStatus, setReturnStatus] = useState<'Yes' | 'Damaged'>('Yes');
   const [returnDate, setReturnDate] = useState(new Date().toISOString().split('T')[0]);
   const [returnNotes, setReturnNotes] = useState('');
+  const returnDialogRef = useDialogKeyboard(isReturnModalOpen && Boolean(selectedRecord), () => setIsReturnModalOpen(false));
 
   const toggleExpand = (requestId: string) => {
     const newSet = new Set(expandedRequests);
@@ -413,6 +415,7 @@ export default function EquipmentReturn() {
             <button 
               onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
               disabled={currentPage === 1}
+              aria-label="Previous page"
               className="p-1.5 border border-slate-200 rounded-lg text-slate-400 hover:text-[#FDB913] hover:border-[#FDB913]/30 disabled:opacity-50 transition-colors"
             >
               <ChevronLeft className="w-4 h-4" />
@@ -425,6 +428,7 @@ export default function EquipmentReturn() {
             <button 
               onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
               disabled={currentPage === totalPages || totalPages === 0}
+              aria-label="Next page"
               className="p-1.5 border border-slate-200 rounded-lg text-slate-400 hover:text-[#FDB913] hover:border-[#FDB913]/30 disabled:opacity-50 transition-colors"
             >
               <ChevronRight className="w-4 h-4" />
@@ -448,6 +452,10 @@ export default function EquipmentReturn() {
               initial={{ scale: 0.95, opacity: 0, y: 20 }}
               animate={{ scale: 1, opacity: 1, y: 0 }}
               exit={{ scale: 0.95, opacity: 0, y: 20 }}
+              ref={returnDialogRef}
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="return-equipment-title"
               className="relative w-full max-w-lg bg-white rounded-3xl shadow-2xl overflow-hidden flex flex-col border border-slate-200"
             >
               <div className="p-6 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
@@ -456,7 +464,7 @@ export default function EquipmentReturn() {
                     <RotateCcw className="w-5 h-5" />
                   </div>
                   <div>
-                    <h3 className="font-bold text-xl text-slate-800">Return Equipment</h3>
+                    <h3 id="return-equipment-title" className="font-bold text-xl text-slate-800">Return Equipment</h3>
                     <p className="text-xs text-slate-500">Processing return for {selectedRecord.product_id}</p>
                   </div>
                 </div>

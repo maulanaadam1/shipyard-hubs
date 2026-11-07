@@ -11,3 +11,21 @@ body {
   font-family: var(--font-sans);
   background: #f8fafc;
 }
+
+/* Touch screens: controls get a 44px target (antislop R-03). Mouse layouts
+   keep their compact sizes. In the base layer, so a min-h-* utility on an
+   element still wins where a control must stay smaller. */
+@layer base {
+  @media (pointer: coarse) {
+    button,
+    [role="button"],
+    select,
+    input:not([type="checkbox"], [type="radio"], [type="range"], [type="hidden"]) {
+      min-height: 44px;
+    }
+    button:has(> svg:only-child),
+    a:has(> svg:only-child) {
+      min-width: 44px;
+    }
+  }
+}

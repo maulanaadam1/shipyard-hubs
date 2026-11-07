@@ -23,6 +23,7 @@ import { useData, Vendor } from '@/context/DataContext';
 import { motion, AnimatePresence } from 'motion/react';
 import { api } from '@/lib/api-client';
 import Papa from 'papaparse';
+import { useDialogKeyboard } from '@/hooks/use-dialog-keyboard';
 
 export default function VendorManagement() {
   const { vendors, setVendors, fetchData, canAccess } = useData();
@@ -37,6 +38,8 @@ export default function VendorManagement() {
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState<number | 'all'>(10);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const vendorDialogRef = useDialogKeyboard(isModalOpen, () => setIsModalOpen(false));
+  const successDialogRef = useDialogKeyboard(showSuccessModal, () => setShowSuccessModal(false));
 
   const [formData, setFormData] = useState({
     vendor: '',
@@ -324,7 +327,7 @@ export default function VendorManagement() {
                 <option value="all">All</option>
               </select>
             </div>
-            <button className="p-2 bg-white border border-slate-200 rounded-lg text-slate-500 hover:text-[#FDB913] hover:border-[#FDB913]/30 transition-colors">
+            <button aria-label="Filter" className="p-2 bg-white border border-slate-200 rounded-lg text-slate-500 hover:text-[#FDB913] hover:border-[#FDB913]/30 transition-colors">
               <Filter className="w-4 h-4" />
             </button>
           </div>
@@ -414,6 +417,7 @@ export default function VendorManagement() {
                       {canAccess('Master Vendor', 'edit') && (
                         <button 
                           onClick={() => handleOpenModal(vendor)}
+                          aria-label="Edit vendor"
                           className="p-2 hover:bg-white hover:shadow-sm rounded-lg transition-all text-slate-400 hover:text-[#FDB913]"
                         >
                           <Edit2 className="w-4 h-4" />
@@ -422,6 +426,7 @@ export default function VendorManagement() {
                       {canAccess('Master Vendor', 'delete') && (
                         <button 
                           onClick={() => handleDelete(vendor.id)}
+                          aria-label="Delete vendor"
                           className="p-2 hover:bg-white hover:shadow-sm rounded-lg transition-all text-slate-400 hover:text-red-600"
                         >
                           <Trash2 className="w-4 h-4" />
@@ -453,6 +458,7 @@ export default function VendorManagement() {
             <button 
               onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
               disabled={currentPage === 1}
+              aria-label="Previous page"
               className="p-1.5 border border-slate-200 rounded-lg text-slate-400 hover:text-[#FDB913] hover:border-[#FDB913]/30 disabled:opacity-50 transition-colors"
             >
               <ChevronLeft className="w-4 h-4" />
@@ -465,6 +471,7 @@ export default function VendorManagement() {
             <button 
               onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
               disabled={currentPage === totalPages}
+              aria-label="Next page"
               className="p-1.5 border border-slate-200 rounded-lg text-slate-400 hover:text-[#FDB913] hover:border-[#FDB913]/30 disabled:opacity-50 transition-colors"
             >
               <ChevronRight className="w-4 h-4" />
@@ -489,16 +496,21 @@ export default function VendorManagement() {
               animate={{ scale: 1, opacity: 1, y: 0 }}
               exit={{ scale: 0.9, opacity: 0, y: 20 }}
               className="relative w-full max-w-lg bg-white rounded-[2.5rem] shadow-2xl overflow-hidden"
+              ref={vendorDialogRef}
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="vendor-dialog-title"
             >
               <div className="p-8 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
                 <div>
-                  <h2 className="font-display font-bold text-2xl text-slate-900">
+                  <h2 id="vendor-dialog-title" className="font-display font-bold text-2xl text-slate-900">
                     {editingVendor ? 'Edit Vendor' : 'Add New Vendor'}
                   </h2>
                   <p className="text-slate-500 text-sm">Fill in the details below.</p>
                 </div>
-                <button 
+                <button
                   onClick={() => setIsModalOpen(false)}
+                  aria-label="Close"
                   className="p-2 hover:bg-white rounded-xl transition-colors shadow-sm"
                 >
                   <X className="w-6 h-6 text-slate-400" />
@@ -615,11 +627,15 @@ export default function VendorManagement() {
               animate={{ scale: 1, opacity: 1, y: 0 }}
               exit={{ scale: 0.9, opacity: 0, y: 20 }}
               className="relative w-full max-w-sm bg-white rounded-3xl shadow-2xl p-8 text-center"
+              ref={successDialogRef}
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="vendor-success-title"
             >
               <div className="w-20 h-20 bg-[#FDB913]/10 rounded-full flex items-center justify-center mx-auto mb-6">
                 <Check className="w-10 h-10 text-[#FDB913]" />
               </div>
-              <h3 className="font-display font-bold text-2xl text-slate-900 mb-2">Vendor Added!</h3>
+              <h3 id="vendor-success-title" className="font-display font-bold text-2xl text-slate-900 mb-2">Vendor Added!</h3>
               <p className="text-slate-500 mb-8">
                 The new vendor has been successfully added to the master database.
               </p>

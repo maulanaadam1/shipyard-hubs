@@ -123,7 +123,7 @@ export default function ApprovalWorkflowManagement() {
               {isLoading ? 'Saving...' : 'Save Workflow'}
             </button>
           )}
-          <button onClick={() => fetchData()}
+          <button onClick={() => fetchData()} aria-label="Refresh"
             className="p-2.5 bg-white border border-slate-200 text-slate-500 rounded-xl hover:bg-slate-50 transition-colors shadow-sm">
             <RefreshCw className={`w-4 h-4 ${isLoading ? 'animate-spin' : ''}`} />
           </button>
@@ -204,7 +204,7 @@ export default function ApprovalWorkflowManagement() {
                             onChange={e => updateStep(step.id!, 'label', e.target.value)}
                             className="flex-1 px-4 py-2 bg-white border border-slate-200 rounded-xl text-sm font-bold outline-none focus:ring-2 focus:ring-[#FDB913]/30"
                             placeholder="e.g. Department Head Approval" />
-                          <button onClick={() => removeStep(step.id!)}
+                          <button onClick={() => removeStep(step.id!)} aria-label="Remove step"
                             className="p-2 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-lg transition-all">
                             <Trash2 className="w-4 h-4" />
                           </button>
@@ -275,7 +275,7 @@ export default function ApprovalWorkflowManagement() {
                                 <span key={uid}
                                   className="flex items-center gap-1.5 px-3 py-1 bg-[#FDB913]/15 text-[#c9930a] rounded-full text-xs font-bold border border-[#FDB913]/30">
                                   {u.name}
-                                  <button onClick={() => toggleUser(step.id!, uid)}
+                                  <button onClick={() => toggleUser(step.id!, uid)} aria-label={`Remove ${u.name}`}
                                     className="hover:text-red-500 transition-colors ml-0.5">
                                     <X className="w-3 h-3" />
                                   </button>

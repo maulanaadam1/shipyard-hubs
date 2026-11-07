@@ -20,6 +20,7 @@ import {
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { useData } from '@/context/DataContext';
+import { useDialogKeyboard } from '@/hooks/use-dialog-keyboard';
 
 // Sample data from the user
 const MOCK_DATA = [
@@ -70,6 +71,7 @@ export default function MaterialRequisition() {
   const [projectFilter, setProjectFilter] = useState('all');
   const itemsPerPage = 10;
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const detailDialogRef = useDialogKeyboard(Boolean(selectedDetailItem), () => setSelectedDetailItem(null));
 
   // Fetch Master Components for mapping material descriptions
   useEffect(() => {
@@ -700,6 +702,10 @@ export default function MaterialRequisition() {
               animate={{ x: 0, opacity: 1 }}
               exit={{ x: 520, opacity: 0 }}
               transition={{ type: 'spring', damping: 28, stiffness: 260 }}
+              ref={detailDialogRef}
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="material-request-detail-title"
               className="relative z-[121] h-full w-full max-w-xl bg-white shadow-2xl overflow-hidden flex flex-col border-l border-slate-200"
             >
               <div className="p-5 border-b border-slate-100 flex justify-between items-center bg-slate-50/80">
@@ -708,11 +714,11 @@ export default function MaterialRequisition() {
                     <FileText className="w-5 h-5" />
                   </div>
                   <div>
-                    <h2 className="text-lg font-bold text-slate-800">Detail Permintaan Material</h2>
+                    <h2 id="material-request-detail-title" className="text-lg font-bold text-slate-800">Detail Permintaan Material</h2>
                     <p className="text-xs text-slate-500">Kode: {selectedDetailItem.code || `ID: ${selectedDetailItem.id}`}</p>
                   </div>
                 </div>
-                <button onClick={() => setSelectedDetailItem(null)} className="p-2 hover:bg-slate-200 rounded-full transition-colors">
+                <button onClick={() => setSelectedDetailItem(null)} aria-label="Tutup" className="p-2 hover:bg-slate-200 rounded-full transition-colors">
                   <X className="w-5 h-5 text-slate-500" />
                 </button>
               </div>

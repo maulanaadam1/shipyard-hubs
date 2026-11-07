@@ -16,6 +16,7 @@ import {
 
 import { useData, Equipment } from '@/context/DataContext';
 import { api } from '@/lib/api-client';
+import { useDialogKeyboard } from '@/hooks/use-dialog-keyboard';
 
 export default function EquipmentMaintenance() {
   const { fleet: assets, setFleet: setAssets, fetchData } = useData();
@@ -28,6 +29,7 @@ export default function EquipmentMaintenance() {
   const [selectedAsset, setSelectedAsset] = useState<Equipment | null>(null);
   const [repairNotes, setRepairNotes] = useState('');
   const [repairCost, setRepairCost] = useState('');
+  const repairDialogRef = useDialogKeyboard(isRepairModalOpen && Boolean(selectedAsset), () => setIsRepairModalOpen(false));
 
   // Filter assets that are Damaged or in Maintenance
   const maintenanceAssets = assets.filter(asset => {
@@ -250,6 +252,10 @@ export default function EquipmentMaintenance() {
               initial={{ scale: 0.95, opacity: 0, y: 20 }}
               animate={{ scale: 1, opacity: 1, y: 0 }}
               exit={{ scale: 0.95, opacity: 0, y: 20 }}
+              ref={repairDialogRef}
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="complete-repair-title"
               className="relative w-full max-w-lg bg-white rounded-3xl shadow-2xl overflow-hidden flex flex-col"
             >
               <div className="p-6 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
@@ -258,11 +264,11 @@ export default function EquipmentMaintenance() {
                     <Wrench className="w-5 h-5" />
                   </div>
                   <div>
-                    <h3 className="font-display font-bold text-xl text-slate-800">Complete Repair</h3>
+                    <h3 id="complete-repair-title" className="font-display font-bold text-xl text-slate-800">Complete Repair</h3>
                     <p className="text-xs text-slate-500">Finalizing maintenance for {selectedAsset.no_asset}</p>
                   </div>
                 </div>
-                <button onClick={() => setIsRepairModalOpen(false)} className="p-2 hover:bg-slate-200 rounded-full">
+                <button onClick={() => setIsRepairModalOpen(false)} aria-label="Close" className="p-2 hover:bg-slate-200 rounded-full">
                   <X className="w-5 h-5 text-slate-500" />
                 </button>
               </div>

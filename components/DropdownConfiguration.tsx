@@ -14,6 +14,7 @@ import {
 } from 'lucide-react';
 import { useData, DropdownConfig } from '@/context/DataContext';
 import { api } from '@/lib/api-client';
+import { useDialogKeyboard } from '@/hooks/use-dialog-keyboard';
 
 const CATEGORIES = [
   { id: 'roles', label: 'User Roles', icon: 'Shield' },
@@ -41,6 +42,7 @@ export default function DropdownConfiguration() {
     category: CATEGORIES[0].id,
     is_active: true
   });
+  const optionDialogRef = useDialogKeyboard(isModalOpen, () => setIsModalOpen(false));
 
   const filteredConfigs = dropdownConfigs
     .filter(c => c.category === selectedCategory)
@@ -275,6 +277,10 @@ export default function DropdownConfiguration() {
               initial={{ scale: 0.95, opacity: 0, y: 20 }}
               animate={{ scale: 1, opacity: 1, y: 0 }}
               exit={{ scale: 0.95, opacity: 0, y: 20 }}
+              ref={optionDialogRef}
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="dropdown-option-dialog-title"
               className="relative w-full max-w-md bg-white rounded-3xl shadow-2xl overflow-hidden"
             >
               <form onSubmit={handleSubmit}>
@@ -283,9 +289,9 @@ export default function DropdownConfiguration() {
                     <div className="w-10 h-10 bg-[#FDB913]/20 rounded-xl flex items-center justify-center text-[#FDB913]">
                       <Settings className="w-5 h-5" />
                     </div>
-                    <h3 className="font-display font-bold text-xl text-slate-800">{editingConfig ? 'Edit Option' : 'Add New Option'}</h3>
+                    <h3 id="dropdown-option-dialog-title" className="font-display font-bold text-xl text-slate-800">{editingConfig ? 'Edit Option' : 'Add New Option'}</h3>
                   </div>
-                  <button type="button" onClick={() => setIsModalOpen(false)} className="p-2 hover:bg-slate-200 rounded-full">
+                  <button type="button" onClick={() => setIsModalOpen(false)} aria-label="Close" className="p-2 hover:bg-slate-200 rounded-full">
                     <X className="w-5 h-5 text-slate-500" />
                   </button>
                 </div>

@@ -22,6 +22,7 @@ import {
 } from 'lucide-react';
 import { useData, Equipment } from '@/context/DataContext';
 import { api } from '@/lib/api-client';
+import { useDialogKeyboard } from '@/hooks/use-dialog-keyboard';
 
 export default function EquipmentFleet() {
   const { fleet: assets, setFleet: setAssets, currentUser, fetchData, canAccess, users } = useData();
@@ -46,6 +47,12 @@ export default function EquipmentFleet() {
   const [itemsPerPage, setItemsPerPage] = useState<number | 'all'>(10);
   
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const equipmentDialogRef = useDialogKeyboard(isModalOpen, () => setIsModalOpen(false));
+  const bulkAssignDialogRef = useDialogKeyboard(isBulkAssignModalOpen, () => setIsBulkAssignModalOpen(false));
+  const successDialogRef = useDialogKeyboard(isSuccessModalOpen, () => setIsSuccessModalOpen(false));
+  const clearAllDialogRef = useDialogKeyboard(isClearAllModalOpen, () => setIsClearAllModalOpen(false));
+  const deleteDialogRef = useDialogKeyboard(isDeleteModalOpen, () => setIsDeleteModalOpen(false));
+  const importTextDialogRef = useDialogKeyboard(isImportTextModalOpen, () => setIsImportTextModalOpen(false));
 
   // Global Filter Logic
   const filteredData = (assets || []).filter(item => {
@@ -392,6 +399,7 @@ export default function EquipmentFleet() {
           />
           <button 
             onClick={() => handleExport()}
+            aria-label="Export"
             className="flex items-center gap-2 px-3 sm:px-4 py-2 bg-white border border-slate-200 rounded-xl text-xs sm:text-sm font-medium text-slate-600 hover:bg-slate-50 transition-colors shadow-sm"
           >
             <Upload className="w-4 h-4" />
@@ -406,6 +414,7 @@ export default function EquipmentFleet() {
                 }
                 fileInputRef.current?.click();
               }}
+              aria-label="Import"
               className="flex items-center gap-2 px-3 sm:px-4 py-2 bg-white border border-slate-200 rounded-xl text-xs sm:text-sm font-medium text-slate-600 hover:bg-slate-50 transition-colors shadow-sm"
             >
               <Download className="w-4 h-4" />
@@ -416,6 +425,7 @@ export default function EquipmentFleet() {
             <button 
               onClick={() => setIsClearAllModalOpen(true)}
               disabled={totalItems === 0 || isSaving}
+              aria-label="Clear All"
               className="flex items-center gap-2 px-3 sm:px-4 py-2 bg-red-50 text-red-600 border border-red-100 rounded-xl text-xs sm:text-sm font-bold hover:bg-red-100 transition-colors shadow-sm disabled:opacity-50"
             >
               <Trash2 className="w-4 h-4" />
@@ -549,7 +559,7 @@ export default function EquipmentFleet() {
             >
               <FileText className="w-4 h-4" />
             </button>
-            <button className="p-2 bg-white border border-slate-200 rounded-lg text-slate-500 hover:text-[#FDB913] hover:border-[#FDB913]/30 transition-colors">
+            <button aria-label="Filter" className="p-2 bg-white border border-slate-200 rounded-lg text-slate-500 hover:text-[#FDB913] hover:border-[#FDB913]/30 transition-colors">
               <Filter className="w-4 h-4" />
             </button>
           </div>
@@ -697,6 +707,7 @@ export default function EquipmentFleet() {
             <button 
               onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
               disabled={currentPage === 1}
+              aria-label="Previous page"
               className="p-1.5 border border-slate-200 rounded-lg text-slate-400 hover:text-[#FDB913] hover:border-[#FDB913]/30 disabled:opacity-50 transition-colors"
             >
               <ChevronLeft className="w-4 h-4" />
@@ -709,6 +720,7 @@ export default function EquipmentFleet() {
             <button 
               onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
               disabled={currentPage === totalPages}
+              aria-label="Next page"
               className="p-1.5 border border-slate-200 rounded-lg text-slate-400 hover:text-[#FDB913] hover:border-[#FDB913]/30 disabled:opacity-50 transition-colors"
             >
               <ChevronRight className="w-4 h-4" />
@@ -732,14 +744,19 @@ export default function EquipmentFleet() {
               initial={{ scale: 0.95, opacity: 0, y: 20 }}
               animate={{ scale: 1, opacity: 1, y: 0 }}
               exit={{ scale: 0.95, opacity: 0, y: 20 }}
+              ref={equipmentDialogRef}
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="equipment-form-title"
               className="relative w-full max-w-2xl bg-white rounded-3xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]"
             >
               <div className="p-4 sm:p-6 border-b border-slate-100 flex items-center justify-between bg-slate-50/50 shrink-0">
-                <h3 className="font-display font-bold text-lg sm:text-xl text-slate-800">
+                <h3 id="equipment-form-title" className="font-display font-bold text-lg sm:text-xl text-slate-800">
                   {isDetailMode ? 'Equipment Details' : selectedItem ? 'Edit Equipment' : 'Add New Equipment'}
                 </h3>
                 <button 
                   onClick={() => setIsModalOpen(false)}
+                  aria-label="Close"
                   className="p-2 hover:bg-slate-200 rounded-full transition-colors"
                 >
                   <X className="w-5 h-5 text-slate-500" />
@@ -899,6 +916,10 @@ export default function EquipmentFleet() {
               initial={{ scale: 0.95, opacity: 0, y: 20 }}
               animate={{ scale: 1, opacity: 1, y: 0 }}
               exit={{ scale: 0.95, opacity: 0, y: 20 }}
+              ref={bulkAssignDialogRef}
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="bulk-assign-title"
               className="relative w-full max-w-md bg-white rounded-3xl shadow-2xl overflow-hidden p-8 border border-slate-200"
             >
               <div className="flex items-center gap-3 mb-6">
@@ -906,7 +927,7 @@ export default function EquipmentFleet() {
                   <User className="w-6 h-6" />
                 </div>
                 <div>
-                  <h3 className="text-xl font-bold text-slate-800">Bulk Assign PIC</h3>
+                  <h3 id="bulk-assign-title" className="text-xl font-bold text-slate-800">Bulk Assign PIC</h3>
                   <p className="text-sm text-slate-500">Updating {selectedIds.size} items</p>
                 </div>
               </div>
@@ -962,6 +983,10 @@ export default function EquipmentFleet() {
               initial={{ scale: 0.9, opacity: 0, y: 20 }}
               animate={{ scale: 1, opacity: 1, y: 0 }}
               exit={{ scale: 0.9, opacity: 0, y: 20 }}
+              ref={successDialogRef}
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="fleet-success-title"
               className="relative w-full max-w-sm bg-white rounded-[2rem] shadow-2xl overflow-hidden p-8 text-center border border-slate-100"
             >
               <div className="mb-6 relative">
@@ -975,7 +1000,7 @@ export default function EquipmentFleet() {
                 />
               </div>
               
-              <h3 className="text-xl font-bold text-slate-800 mb-2">Success!</h3>
+              <h3 id="fleet-success-title" className="text-xl font-bold text-slate-800 mb-2">Success!</h3>
               <p className="text-sm text-slate-500 mb-8 leading-relaxed">
                 {successMessage}
               </p>
@@ -1006,12 +1031,16 @@ export default function EquipmentFleet() {
               initial={{ scale: 0.95, opacity: 0, y: 20 }}
               animate={{ scale: 1, opacity: 1, y: 0 }}
               exit={{ scale: 0.95, opacity: 0, y: 20 }}
+              ref={clearAllDialogRef}
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="clear-all-title"
               className="relative w-full max-w-md bg-white rounded-3xl shadow-2xl p-8 text-center"
             >
               <div className="w-16 h-16 bg-red-100 text-red-600 rounded-full flex items-center justify-center mx-auto mb-4">
                 <Trash2 className="w-8 h-8" />
               </div>
-              <h3 className="font-display font-bold text-xl text-slate-800 mb-2">Clear All Data</h3>
+              <h3 id="clear-all-title" className="font-display font-bold text-xl text-slate-800 mb-2">Clear All Data</h3>
               <p className="text-sm text-slate-500 mb-8">
                 Are you absolutely sure? This will permanently delete <strong>{totalItems} items</strong> from the database. This action cannot be undone.
               </p>
@@ -1048,12 +1077,16 @@ export default function EquipmentFleet() {
               initial={{ scale: 0.95, opacity: 0, y: 20 }}
               animate={{ scale: 1, opacity: 1, y: 0 }}
               exit={{ scale: 0.95, opacity: 0, y: 20 }}
+              ref={deleteDialogRef}
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="delete-equipment-title"
               className="relative w-full max-w-md bg-white rounded-3xl shadow-2xl p-8 text-center"
             >
               <div className="w-16 h-16 bg-red-100 text-red-600 rounded-full flex items-center justify-center mx-auto mb-4">
                 <Trash2 className="w-8 h-8" />
               </div>
-              <h3 className="font-display font-bold text-xl text-slate-800 mb-2">Confirm Delete</h3>
+              <h3 id="delete-equipment-title" className="font-display font-bold text-xl text-slate-800 mb-2">Confirm Delete</h3>
               <p className="text-sm text-slate-500 mb-8">
                 Are you sure you want to delete this asset? This action cannot be undone.
               </p>
@@ -1091,6 +1124,10 @@ export default function EquipmentFleet() {
               initial={{ scale: 0.95, opacity: 0, y: 20 }}
               animate={{ scale: 1, opacity: 1, y: 0 }}
               exit={{ scale: 0.95, opacity: 0, y: 20 }}
+              ref={importTextDialogRef}
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="paste-csv-title"
               className="relative w-full max-w-2xl bg-white rounded-3xl shadow-2xl overflow-hidden"
             >
               <div className="p-6 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
@@ -1099,12 +1136,13 @@ export default function EquipmentFleet() {
                     <FileText className="w-5 h-5" />
                   </div>
                   <div>
-                    <h3 className="font-display font-bold text-xl text-slate-800">Paste CSV Data</h3>
+                    <h3 id="paste-csv-title" className="font-display font-bold text-xl text-slate-800">Paste CSV Data</h3>
                     <p className="text-xs text-slate-500">Copy and paste your data rows below.</p>
                   </div>
                 </div>
                 <button 
                   onClick={() => setIsImportTextModalOpen(false)}
+                  aria-label="Close"
                   className="p-2 hover:bg-slate-200 rounded-full transition-colors"
                 >
                   <X className="w-5 h-5 text-slate-500" />

@@ -25,6 +25,7 @@ import {
 
 import { useData, LoanRequest, RequestedItem } from '@/context/DataContext';
 import { api } from '@/lib/api-client';
+import { useDialogKeyboard } from '@/hooks/use-dialog-keyboard';
 
 const statusColors: Record<string, string> = {
   Draft: 'bg-slate-100 text-slate-600 border-slate-200',
@@ -81,6 +82,10 @@ export default function EquipmentLoans() {
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState<number | 'all'>(10);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const loanDialogRef = useDialogKeyboard(isModalOpen, () => setIsModalOpen(false));
+  const approveDialogRef = useDialogKeyboard(isApproveModalOpen, () => setIsApproveModalOpen(false));
+  const rejectDialogRef = useDialogKeyboard(isRejectModalOpen, () => setIsRejectModalOpen(false));
+  const progressDialogRef = useDialogKeyboard(isProgressModalOpen && Boolean(selectedLoan), () => setIsProgressModalOpen(false));
 
   // Auto-open approval modal when navigated from notification (?approve=requestId)
   // Use a ref to prevent re-triggering on every polling cycle
@@ -668,7 +673,7 @@ export default function EquipmentLoans() {
                 <option value="all">All</option>
               </select>
             </div>
-            <button className="p-2 bg-white border border-slate-200 rounded-lg text-slate-500 hover:text-[#FDB913] hover:border-[#FDB913]/30 transition-colors">
+            <button aria-label="Filter" className="p-2 bg-white border border-slate-200 rounded-lg text-slate-500 hover:text-[#FDB913] hover:border-[#FDB913]/30 transition-colors">
               <Filter className="w-4 h-4" />
             </button>
           </div>
@@ -853,6 +858,7 @@ export default function EquipmentLoans() {
             <button 
               onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
               disabled={currentPage === 1}
+              aria-label="Previous page"
               className="p-1.5 border border-slate-200 rounded-lg text-slate-400 hover:text-[#FDB913] hover:border-[#FDB913]/30 disabled:opacity-50 transition-colors"
             >
               <ChevronLeft className="w-4 h-4" />
@@ -865,6 +871,7 @@ export default function EquipmentLoans() {
             <button 
               onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
               disabled={currentPage === totalPages}
+              aria-label="Next page"
               className="p-1.5 border border-slate-200 rounded-lg text-slate-400 hover:text-[#FDB913] hover:border-[#FDB913]/30 disabled:opacity-50 transition-colors"
             >
               <ChevronRight className="w-4 h-4" />
@@ -888,6 +895,10 @@ export default function EquipmentLoans() {
               initial={{ scale: 0.95, opacity: 0, y: 20 }}
               animate={{ scale: 1, opacity: 1, y: 0 }}
               exit={{ scale: 0.95, opacity: 0, y: 20 }}
+              ref={loanDialogRef}
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="loan-request-title"
               className="relative w-full max-w-3xl bg-white rounded-3xl shadow-2xl overflow-hidden"
             >
               <div className="p-6 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
@@ -896,7 +907,7 @@ export default function EquipmentLoans() {
                     <FileText className="w-5 h-5" />
                   </div>
                   <div>
-                    <h3 className="font-display font-bold text-xl text-slate-800">
+                    <h3 id="loan-request-title" className="font-display font-bold text-xl text-slate-800">
                       {selectedLoan ? 'Edit Loan Request' : 'New Loan Request'}
                     </h3>
                     <p className="text-xs text-slate-500">Submit a request for equipment allocation</p>
@@ -904,6 +915,7 @@ export default function EquipmentLoans() {
                 </div>
                 <button 
                   onClick={() => setIsModalOpen(false)}
+                  aria-label="Close"
                   className="p-2 hover:bg-slate-200 rounded-full transition-colors"
                 >
                   <X className="w-5 h-5 text-slate-500" />
@@ -1139,6 +1151,7 @@ export default function EquipmentLoans() {
                             <button 
                               type="button"
                               onClick={() => handleRemoveItemType(index)}
+                              aria-label="Remove item type"
                               className="p-2 text-slate-400 hover:text-red-500 transition-colors"
                             >
                               <Trash2 className="w-4 h-4" />
@@ -1225,12 +1238,16 @@ export default function EquipmentLoans() {
               initial={{ scale: 0.95, opacity: 0, y: 20 }}
               animate={{ scale: 1, opacity: 1, y: 0 }}
               exit={{ scale: 0.95, opacity: 0, y: 20 }}
+              ref={approveDialogRef}
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="approve-loan-title"
               className="relative w-full max-w-md bg-white rounded-3xl shadow-2xl p-8"
             >
               <div className="w-16 h-16 bg-[#FDB913]/20 text-[#FDB913] rounded-full flex items-center justify-center mx-auto mb-4">
                 <Check className="w-8 h-8" />
               </div>
-              <h3 className="font-display font-bold text-xl text-slate-800 mb-2 text-center">Confirm Approval</h3>
+              <h3 id="approve-loan-title" className="font-display font-bold text-xl text-slate-800 mb-2 text-center">Confirm Approval</h3>
               <p className="text-sm text-slate-500 mb-6 text-center">
                 Are you sure you want to approve this equipment loan request?
               </p>
@@ -1278,12 +1295,16 @@ export default function EquipmentLoans() {
               initial={{ scale: 0.95, opacity: 0, y: 20 }}
               animate={{ scale: 1, opacity: 1, y: 0 }}
               exit={{ scale: 0.95, opacity: 0, y: 20 }}
+              ref={rejectDialogRef}
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="reject-loan-title"
               className="relative w-full max-w-md bg-white rounded-3xl shadow-2xl p-8"
             >
               <div className="w-16 h-16 bg-red-100 text-red-600 rounded-full flex items-center justify-center mx-auto mb-4">
                 <X className="w-8 h-8" />
               </div>
-              <h3 className="font-display font-bold text-xl text-slate-800 mb-2 text-center">Confirm Rejection</h3>
+              <h3 id="reject-loan-title" className="font-display font-bold text-xl text-slate-800 mb-2 text-center">Confirm Rejection</h3>
               <p className="text-sm text-slate-500 mb-6 text-center">
                 Are you sure you want to reject this equipment loan request?
               </p>
@@ -1332,6 +1353,10 @@ export default function EquipmentLoans() {
               initial={{ scale: 0.95, opacity: 0, y: 20 }}
               animate={{ scale: 1, opacity: 1, y: 0 }}
               exit={{ scale: 0.95, opacity: 0, y: 20 }}
+              ref={progressDialogRef}
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="approval-progress-title"
               className="relative w-full max-w-lg bg-white rounded-3xl shadow-2xl overflow-hidden"
             >
               <div className="p-6 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
@@ -1340,7 +1365,7 @@ export default function EquipmentLoans() {
                     <Clock className="w-5 h-5" />
                   </div>
                   <div>
-                    <h3 className="font-display font-bold text-lg text-slate-800">Approval Progress</h3>
+                    <h3 id="approval-progress-title" className="font-display font-bold text-lg text-slate-800">Approval Progress</h3>
                     <p className="text-[10px] text-slate-500 uppercase tracking-widest font-bold">{selectedLoan.request_id}</p>
                   </div>
                 </div>
@@ -1357,6 +1382,7 @@ export default function EquipmentLoans() {
                   )}
                   <button 
                     onClick={() => setIsProgressModalOpen(false)}
+                    aria-label="Close"
                     className="p-2 hover:bg-slate-200 rounded-full transition-colors"
                   >
                     <X className="w-5 h-5 text-slate-500" />

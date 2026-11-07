@@ -20,6 +20,7 @@ import {
 
 import { useData, LoanRequest, DeploymentRecord, Equipment as EquipmentAsset } from '@/context/DataContext';
 import { api } from '@/lib/api-client';
+import { useDialogKeyboard } from '@/hooks/use-dialog-keyboard';
 
 export default function EquipmentDeployment() {
   const { fleet: assets, setFleet: setAssets, loans, setLoans, deployments, setDeployments, canAccess } = useData();
@@ -29,6 +30,7 @@ export default function EquipmentDeployment() {
   const [expandedRequests, setExpandedRequests] = useState<Set<string>>(new Set());
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState<number | 'all'>(10);
+  const deployDialogRef = useDialogKeyboard(isModalOpen && Boolean(selectedLoan), () => setIsModalOpen(false));
 
   const toggleExpand = (requestId: string) => {
     const newSet = new Set(expandedRequests);
@@ -265,6 +267,7 @@ export default function EquipmentDeployment() {
                         <td className="px-6 py-4">
                           <button 
                             onClick={() => toggleExpand(loan.id)}
+                            aria-label={isExpanded ? 'Collapse details' : 'Expand details'}
                             className={`p-1 rounded-lg transition-colors ${isExpanded ? 'bg-[#FDB913]/20 text-[#e5a611]' : 'hover:bg-slate-100 text-slate-400'}`}
                           >
                             <ChevronRight className={`w-4 h-4 transition-transform ${isExpanded ? 'rotate-90' : ''}`} />
@@ -390,7 +393,7 @@ export default function EquipmentDeployment() {
                                               </td>
                                               <td className="px-4 py-3 text-right">
                                                 {canAccess('Utility', 'delete') && (
-                                                  <button className="p-1 text-slate-400 hover:text-red-600 transition-colors">
+                                                  <button aria-label="Delete deployment" className="p-1 text-slate-400 hover:text-red-600 transition-colors">
                                                     <Trash2 className="w-3.5 h-3.5" />
                                                   </button>
                                                 )}
@@ -508,6 +511,10 @@ export default function EquipmentDeployment() {
               initial={{ scale: 0.95, opacity: 0, y: 20 }}
               animate={{ scale: 1, opacity: 1, y: 0 }}
               exit={{ scale: 0.95, opacity: 0, y: 20 }}
+              ref={deployDialogRef}
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="deploy-equipment-title"
               className="relative w-full max-w-4xl bg-white rounded-3xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]"
             >
               <div className="p-6 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
@@ -516,12 +523,13 @@ export default function EquipmentDeployment() {
                     <Package className="w-5 h-5" />
                   </div>
                   <div>
-                    <h3 className="font-display font-bold text-xl text-slate-800">Deploy Equipment</h3>
+                    <h3 id="deploy-equipment-title" className="font-display font-bold text-xl text-slate-800">Deploy Equipment</h3>
                     <p className="text-xs text-slate-500">Allocating assets for {selectedLoan.request_id}</p>
                   </div>
                 </div>
                 <button 
                   onClick={() => setIsModalOpen(false)}
+                  aria-label="Close"
                   className="p-2 hover:bg-slate-200 rounded-full transition-colors"
                 >
                   <X className="w-5 h-5 text-slate-500" />
@@ -678,6 +686,7 @@ export default function EquipmentDeployment() {
                               <button 
                                 type="button"
                                 onClick={() => handleRemoveAllocation(index)}
+                                aria-label="Remove asset"
                                 className="p-2 text-slate-400 hover:text-red-500 transition-colors mb-1"
                               >
                                 <Trash2 className="w-4 h-4" />
