@@ -4,6 +4,7 @@ import React from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { 
   LayoutDashboard, 
+  BadgeDollarSign,
   Ship, 
   Wrench, 
   ClipboardList, 
@@ -63,6 +64,7 @@ export default function Sidebar({ onTabChange }: { onTabChange: () => void }) {
       items: [
         { icon: ClipboardList, label: 'Repair List', path: '/repair-list', resource: 'Repair List' },
         { icon: ListChecks, label: 'Item Repair List', path: '/repair-items', resource: 'Item Repair List' },
+        { icon: BadgeDollarSign, label: 'Harga Acuan Marketing', path: '/marketing-price-reference', resource: 'Harga Acuan Marketing' },
       ]
     },
     {

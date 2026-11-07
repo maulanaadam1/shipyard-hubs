@@ -325,6 +325,26 @@ func TestRepairLists(t *testing.T) {
 		t.Errorf("facets: %v", f)
 	}
 
+	// Harga Acuan Marketing: offer prices per work type, size and unit.
+	router.Get("/api/marketing-price-reference", GetMarketingPriceReference)
+	router.Get("/api/marketing-price-reference/detail", GetMarketingPriceReferenceDetail)
+	refs := get("rl-admin", "/api/marketing-price-reference?months=0&search=pipa")
+	if refs["total"] != float64(1) {
+		t.Fatalf("marketing references: %v", refs)
+	}
+	ref := refs["rows"].([]interface{})[0].(map[string]interface{})
+	if ref["work_type"] != "Ganti baru pipa" || ref["unit"] != "m" || ref["median"] != float64(250000) || ref["n"] != float64(1) || ref["job_orders"] != float64(1) {
+		t.Errorf("marketing reference: %v", ref)
+	}
+	detail = get("rl-admin", "/api/marketing-price-reference/detail?months=0&work_type=Ganti+baru+pipa&size=&unit=m&component=")
+	if items := detail["items"].([]interface{}); len(items) != 1 || items[0].(map[string]interface{})["activity"] != "Ganti pipa" {
+		t.Errorf("marketing reference detail: %v", detail)
+	}
+	// The default period (24 months, by planned start) leaves out Job Orders without a date.
+	if n := get("rl-admin", "/api/marketing-price-reference?search=pipa")["total"]; n != float64(0) {
+		t.Errorf("default period: %v", n)
+	}
+
 	// Job Order margins now use the whole repair list.
 	rec := httptest.NewRecorder()
 	GetJobMargins(rec, httptest.NewRequest("GET", "/api/job-margins?q=uji", nil))
