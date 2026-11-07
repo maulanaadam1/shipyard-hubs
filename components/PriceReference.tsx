@@ -188,7 +188,7 @@ export default function PriceReference() {
         <div>
           <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
             <h2 className="font-display font-bold text-xl md:text-2xl tracking-tight text-slate-800 flex items-center gap-2">
-              <Tags className="text-indigo-500" size={22} /> Harga Acuan
+              <Tags className="text-indigo-500" size={22} /> Harga Acuan Jasa
             </h2>
             <AskAIButton scope="wo" questions={["Berapa harga wajar bongkar & ganti baru kampas rem?", "Jenis pekerjaan yang harganya paling bervariasi", "Vendor yang sering di atas harga acuan"]} />
           </div>
