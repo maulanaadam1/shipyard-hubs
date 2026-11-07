@@ -274,6 +274,57 @@ func TestRepairLists(t *testing.T) {
 		t.Errorf("repair_list none: %v", none)
 	}
 
+	// Item Repair List: every activity of every repair list.
+	router.Get("/api/repair-items", GetRepairItems)
+	router.Get("/api/repair-items/summary", GetRepairItemSummary)
+	router.Get("/api/repair-items/facets", GetRepairItemFacets)
+	itemsAll := get("rl-admin", "/api/repair-items?limit=100")
+	if itemsAll["total"] != float64(6) || itemsAll["total_price"] != float64(3500200) { // 77: 4, 88: 2
+		t.Errorf("repair items: total %v, price %v", itemsAll["total"], itemsAll["total_price"])
+	}
+	without77 := get("rl-admin", "/api/repair-items?jo_id=77&wo=without")["items"].([]interface{})
+	if len(without77) != 2 {
+		t.Fatalf("repair items without WO: %v", without77)
+	}
+	pipe := without77[0].(map[string]interface{})
+	if pipe["activity"] != "Ganti pipa" || pipe["group"] != "Perpipaan" || pipe["work_type"] != "Ganti baru pipa" || pipe["version"] != float64(1) {
+		t.Errorf("repair item: %v", pipe)
+	}
+	if extra := without77[1].(map[string]interface{}); extra["version"] != float64(2) {
+		t.Errorf("additional activity: %v", extra)
+	}
+	with77 := get("rl-admin", "/api/repair-items?jo_id=77&wo=with&q=manhole")["items"].([]interface{})
+	if len(with77) != 1 || len(with77[0].(map[string]interface{})["wos"].([]interface{})) != 2 {
+		t.Errorf("repair items with WO: %v", with77)
+	}
+	if n := get("rl-admin", "/api/repair-items?version=tambahan")["total"]; n != float64(2) { // 77 v2, 88 v2
+		t.Errorf("additional activities: %v", n)
+	}
+	byWork := get("rl-admin", "/api/repair-items/summary?by=work_type_size&jo_id=77&version=utama")
+	found := false
+	for _, row := range byWork["rows"].([]interface{}) {
+		m := row.(map[string]interface{})
+		if m["work_type"] == "Ganti baru pipa" {
+			found = m["unit_price_median"] == float64(250000) && m["activities"] == float64(1) && m["unit"] == "m"
+		}
+	}
+	if !found {
+		t.Errorf("summary by work type & size: %v", byWork)
+	}
+	byJO := get("rl-admin", "/api/repair-items/summary?by=job_order")["rows"].([]interface{})
+	if len(byJO) != 2 || byJO[0].(map[string]interface{})["jo_id"] != "77" {
+		t.Errorf("summary by Job Order: %v", byJO)
+	}
+	if s := get("rl-viewer", "/api/repair-items/summary?by=work_type_size")["rows"].([]interface{}); len(s) == 0 || s[0].(map[string]interface{})["unit_price_median"] != nil {
+		t.Errorf("summary prices without Harga Penawaran: %v", s)
+	}
+	if it := get("rl-viewer", "/api/repair-items")["items"].([]interface{}); it[0].(map[string]interface{})["total_price"] != nil {
+		t.Error("item prices without Harga Penawaran")
+	}
+	if f := get("rl-admin", "/api/repair-items/facets"); len(f["work_types"].([]interface{})) == 0 {
+		t.Errorf("facets: %v", f)
+	}
+
 	// Job Order margins now use the whole repair list.
 	rec := httptest.NewRecorder()
 	GetJobMargins(rec, httptest.NewRequest("GET", "/api/job-margins?q=uji", nil))

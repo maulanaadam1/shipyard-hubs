@@ -27,6 +27,7 @@ const RESOURCES = [
   { id: 'Utility', type: 'menu' },
   { id: 'Job Order', type: 'menu' },
   { id: 'Repair List', type: 'menu' },
+  { id: 'Item Repair List', type: 'menu' },
   { id: 'Work Order', type: 'menu' },
   { id: 'Item Pekerjaan WO', type: 'menu' },
   { id: 'Data Perlu Dicek', type: 'menu' },

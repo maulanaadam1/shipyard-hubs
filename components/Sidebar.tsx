@@ -50,13 +50,19 @@ export default function Sidebar({ onTabChange }: { onTabChange: () => void }) {
         { icon: MapIcon, label: 'Vessel Layout', path: '/vessel-layout', resource: 'Vessel Layout' },
         { icon: Activity, label: 'Utility', path: '/utility', resource: 'Utility' },
         { icon: Briefcase, label: 'Job Order', path: '/job-order', resource: 'Job Order' },
-        { icon: ClipboardList, label: 'Repair List', path: '/repair-list', resource: 'Repair List' },
         { icon: FileSpreadsheet, label: 'Work Order', path: '/work-order', resource: 'Work Order' },
         { icon: ListChecks, label: 'Item Pekerjaan WO', path: '/work-order-items', resource: 'Item Pekerjaan WO' },
         { icon: SearchCheck, label: 'Data Perlu Dicek', path: '/data-findings', resource: 'Data Perlu Dicek' },
-        { icon: Tags, label: 'Harga Acuan', path: '/price-reference', resource: 'Harga Acuan' },
+        { icon: Tags, label: 'Harga Acuan Jasa', path: '/price-reference', resource: 'Harga Acuan' },
         { icon: Bot, label: 'AI Assistant', path: '/ai-assistant', resource: 'AI Asisten' },
         { icon: Anchor, label: 'Ship Docking', path: '/ship-docking', resource: 'Ship Docking' },
+      ]
+    },
+    {
+      title: 'Marketing',
+      items: [
+        { icon: ClipboardList, label: 'Repair List', path: '/repair-list', resource: 'Repair List' },
+        { icon: ListChecks, label: 'Item Repair List', path: '/repair-items', resource: 'Item Repair List' },
       ]
     },
     {
