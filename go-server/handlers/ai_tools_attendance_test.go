@@ -139,17 +139,31 @@ func TestAttendanceHoursTool(t *testing.T) {
 		maju["wo_approved_value"] != float64(1600000) || maju["value_per_hour"] != float64(200000) || maju["wo_vendors"] != nil {
 		t.Errorf("Maju Jaya: %v", maju)
 	}
-	// E7 has no PT but is a yard employee in Personal-Data; E5 is in no list.
+	// Vendor workers are the ones in the vendor member list (vendor_detail).
+	// E7 is a yard employee in Personal-Data; E8 (a PT on its punch) and E5
+	// are in no member list, so they are internal too, not vendors.
 	if q := byVendor["Internal - QHSE"]; q == nil || q["workers"] != float64(1) || q["wo_vendor"] != nil {
 		t.Errorf("internal department: %v", q)
 	}
-	if byVendor[noPTLabel] == nil || byVendor[noPTLabel]["workers"] != float64(1) || byVendor[noPTLabel]["incomplete_days"] != float64(1) {
-		t.Errorf("worker without PT: %v", byVendor[noPTLabel])
+	if in := byVendor["Internal"]; in == nil || in["workers"] != float64(2) || in["incomplete_days"] != float64(2) {
+		t.Errorf("internal without department: %v", in)
+	}
+	if byVendor["PT Tanpa Order"] != nil || byVendor[noPTLabel] != nil {
+		t.Errorf("a worker outside the member list counted as a vendor: %v", byVendor)
 	}
 	notes := strings.Join(toStrings(out["notes"]), " | ")
-	if !strings.Contains(notes, "Vendor tanpa WO di ShipHub (nama PT maupun kepala vendornya tidak sama dengan vendor WO mana pun): PT Tanpa Order") ||
-		!strings.Contains(notes, "PT Maju Jaya = MARYONO") || !strings.Contains(notes, "PT. Las Abadi = LASMAN") || !strings.Contains(notes, "1 pekerja tanpa PT") {
+	if !strings.Contains(notes, "PT Maju Jaya = MARYONO") || !strings.Contains(notes, "PT. Las Abadi = LASMAN") || strings.Contains(notes, "PT Tanpa Order") {
 		t.Errorf("notes: %s", notes)
+	}
+	// Asking about vendors leaves the yard's employees out.
+	vendorsOnly, _ := runAttendanceTool(t, "att-admin", `{`+week+`, "vendor": "vendor"}`)
+	for _, r := range vendorsOnly["rows"].([]interface{}) {
+		if v := r.(map[string]interface{})["vendor"].(string); strings.HasPrefix(v, "Internal") {
+			t.Errorf("internal row in the vendor list: %v", r)
+		}
+	}
+	if tot := vendorsOnly["totals"].(map[string]interface{}); tot["workers"] != float64(2) {
+		t.Errorf("vendor workers: %v", tot)
 	}
 	if strings.Contains(notes, "Internal - QHSE") {
 		t.Errorf("an internal department listed as a vendor without WO: %s", notes)
@@ -279,27 +293,36 @@ func TestAttendanceWorkerDaysAndInternal(t *testing.T) {
 		t.Errorf("Andi's day: %v", r)
 	}
 
-	// The yard employee: department as group, position, one morning punch.
+	// Internal: everyone outside the vendor member list. The yard employee
+	// has its department as group, position, one morning punch.
 	out, _ = runAttendanceTool(t, "att-admin", `{`+week+`, "group_by": "worker_day", "vendor": "internal"}`)
 	rows = out["rows"].([]interface{})
-	if len(rows) != 1 {
+	if len(rows) != 3 {
 		t.Fatalf("internal rows: %v", rows)
 	}
-	r = rows[0].(map[string]interface{})
-	if r["emp_code"] != "E7" || r["vendor"] != "Internal - QHSE" || r["position"] != "Staff" || r["check_in"] != "07:00:00" ||
+	byEmp := map[string]map[string]interface{}{}
+	for _, x := range rows {
+		byEmp[x.(map[string]interface{})["emp_code"].(string)] = x.(map[string]interface{})
+	}
+	r = byEmp["E7"]
+	if r == nil || r["vendor"] != "Internal - QHSE" || r["position"] != "Staff" || r["check_in"] != "07:00:00" ||
 		r["check_out"] != "" || r["status"] != "tanpa_absen_pulang" || r["worked_hours"] != nil {
 		t.Errorf("E7's day: %v", r)
+	}
+	// E8 carries a PT on its punch but isn't in the member list.
+	if r := byEmp["E8"]; r == nil || r["vendor"] != "Internal" {
+		t.Errorf("E8's day: %v", r)
 	}
 	// "Internal QHSE" in any spelling selects the department.
 	out, _ = runAttendanceTool(t, "att-admin", `{`+week+`, "vendor": "internal qhse"}`)
 	if rows := out["rows"].([]interface{}); len(rows) != 1 || rows[0].(map[string]interface{})["vendor"] != "Internal - QHSE" {
 		t.Errorf("department filter: %v", rows)
 	}
-	// The placeholder department "Department" is not a department.
-	out, _ = runAttendanceTool(t, "att-admin", `{`+week+`, "vendor": "Tanpa PT", "group_by": "worker_day"}`)
+	// The placeholder department "Department" is not a department: E5 is plain internal.
+	out, _ = runAttendanceTool(t, "att-admin", `{`+week+`, "vendor": "internal", "worker": "tono", "group_by": "worker_day"}`)
 	if rows := out["rows"].([]interface{}); len(rows) != 1 || rows[0].(map[string]interface{})["emp_code"] != "E5" ||
-		rows[0].(map[string]interface{})["status"] != "tanpa_absen_masuk" {
-		t.Errorf("Tanpa PT: %v", rows)
+		rows[0].(map[string]interface{})["vendor"] != "Internal" || rows[0].(map[string]interface{})["status"] != "tanpa_absen_masuk" {
+		t.Errorf("E5: %v", rows)
 	}
 	if tot := out["totals"].(map[string]interface{}); tot["days"] != float64(1) || tot["tanpa_absen_masuk"] != float64(1) {
 		t.Errorf("worker_day totals: %v", tot)
@@ -349,9 +372,10 @@ func TestNamaPTFallsBackToNeighbour(t *testing.T) {
 	if k := byVendor["CV Kepala Usaha"]; k == nil || k["worked_hours"] != float64(8) || k["wo_vendor"] != "KEPALA USAHA, CV" || k["wo_approved_value"] != float64(800000) {
 		t.Errorf("member without PT: %v", k)
 	}
-	// From the punch itself: PT "-", kepala subkon on the punch.
-	if m := byVendor["Pak Mandor"]; m == nil || m["workers"] != float64(1) {
-		t.Errorf("punch without PT: %v", m)
+	// A kepala subkon on the punch alone doesn't make a vendor worker: E3 is
+	// in no member list, so internal.
+	if m := byVendor["Pak Mandor"]; m != nil {
+		t.Errorf("punch outside the member list grouped as a vendor: %v", m)
 	}
 	if aliases := vendorAliases()["TEMU"]; len(aliases) != 1 || aliases[0] != "TEMU" {
 		t.Errorf("vendor tab row without PT: %v", aliases)

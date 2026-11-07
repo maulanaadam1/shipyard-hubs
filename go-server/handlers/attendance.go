@@ -204,6 +204,11 @@ type attendanceDay struct {
 	NamaPT       string `json:"nama_pt"`
 	// Keahlian (skill) from the vendor member list, when the worker is in it.
 	Keahlian string `json:"keahlian,omitempty"`
+	// VendorWorker: the worker is in MasterOperation's vendor member list
+	// (vendor_detail). Group is the vendor (PT) for those and "Internal -
+	// <department>" for everyone else, the yard's own employees.
+	VendorWorker bool   `json:"vendor_worker"`
+	Group        string `json:"group,omitempty"`
 	// Department and position from the attendance spreadsheet's Personal-Data
 	// tab: set for the yard's own employees, who have no PT.
 	Department string `json:"department,omitempty"`
@@ -514,14 +519,42 @@ func loadAttendanceDays(from, to time.Time, filters map[string]string, rules att
 		return nil, err
 	}
 	days := computeAttendanceDays(punches, rules)
-	fillFromMembers(days, loadVendorMembers())
+	members := loadVendorMembers()
+	fillFromMembers(days, members)
 	fillFromPersonnel(days, loadAttendancePersonnel())
+	groupAttendanceDays(days, len(members) > 0)
 	return days, nil
+}
+
+// groupAttendanceDays sets each day's group. With a vendor member list, it
+// decides who is a vendor worker: in the list = the vendor (PT) from the
+// list, not in it = internal, whatever PT the punch carries. Without one
+// (the sheet not synced) the punch's PT is kept, as before.
+func groupAttendanceDays(days []attendanceDay, validated bool) {
+	if !validated {
+		return
+	}
+	for i := range days {
+		d := &days[i]
+		switch {
+		case d.VendorWorker && d.NamaPT != "" && d.NamaPT != "-":
+			d.Group = d.NamaPT
+		case d.VendorWorker:
+			d.Group = noPTLabel
+		case d.Department != "":
+			d.Group = "Internal - " + d.Department
+		default:
+			d.Group = "Internal"
+		}
+	}
 }
 
 // attendanceGroupLabel: the worker's PT, or "Internal - <department>" for the
 // yard's own employees, or empty when neither is known.
 func attendanceGroupLabel(d attendanceDay, empty string) string {
+	if d.Group != "" {
+		return d.Group
+	}
 	if d.NamaPT != "" && d.NamaPT != "-" {
 		return d.NamaPT
 	}
@@ -587,13 +620,15 @@ func fillFromMembers(days []attendanceDay, members map[string]vendorMember) {
 			continue
 		}
 		d := &days[i]
+		d.VendorWorker = true
 		if d.Name == "" {
 			d.Name = m.Name
 		}
-		if d.KepalaSubkon == "" || d.KepalaSubkon == "-" {
+		// The member list is the reference for a vendor worker's vendor.
+		if m.KepalaSubkon != "" && m.KepalaSubkon != "-" {
 			d.KepalaSubkon = m.KepalaSubkon
 		}
-		if d.NamaPT == "" || d.NamaPT == "-" {
+		if m.NamaPT != "" && m.NamaPT != "-" {
 			d.NamaPT = m.NamaPT
 		}
 		d.Keahlian = m.Keahlian

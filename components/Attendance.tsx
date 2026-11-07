@@ -8,6 +8,7 @@ import { getHeaders } from '@/lib/api-client';
 
 type Day = {
   emp_code: string; name: string; kepala_subkon: string; nama_pt: string; keahlian?: string; department?: string; position?: string;
+  group?: string; vendor_worker?: boolean;
   date: string; hari: string; check_in: string; check_out: string; punches: number; status: string;
   worked_minutes: number | null; estimated_minutes: number; overtime_minutes: number;
 };
@@ -18,7 +19,9 @@ const today = () => new Date(Date.now() - new Date().getTimezoneOffset() * 60000
 const h = (m: number) => (Math.round(m / 6) / 10).toLocaleString('id-ID');
 const STATUS: Record<string, string> = { lengkap: 'Lengkap', tanpa_absen_pulang: 'Tanpa absen pulang', tanpa_absen_masuk: 'Tanpa absen masuk' };
 const TABS = [['vendors', 'Per Vendor'], ['dates', 'Per Hari'], ['people', 'Per Orang']] as const;
-const groupOf = (d: Day) => (d.nama_pt && d.nama_pt !== '-' ? d.nama_pt : d.department ? `Internal - ${d.department}` : 'Tanpa PT');
+// The server's group: the vendor (PT) for workers in MasterOperation's vendor
+// member list, "Internal - <department>" for everyone else.
+const groupOf = (d: Day) => d.group || (d.nama_pt && d.nama_pt !== '-' ? d.nama_pt : d.department ? `Internal - ${d.department}` : 'Tanpa PT');
 
 export default function Attendance() {
   const [params, setParams] = useSearchParams();
@@ -238,7 +241,7 @@ export default function Attendance() {
                     </td>
                     <td className="px-3 py-2 hidden md:table-cell min-w-[10rem]">
                       <span className="text-slate-700 break-words">{groupOf(d)}</span>
-                      {d.kepala_subkon && d.kepala_subkon !== '-' && <span className="block text-xs text-slate-500 break-words">{d.kepala_subkon}</span>}
+                      {(d.vendor_worker || !d.group) && d.kepala_subkon && d.kepala_subkon !== '-' && <span className="block text-xs text-slate-500 break-words">{d.kepala_subkon}</span>}
                     </td>
                     <td className="px-3 py-2 tabular-nums whitespace-nowrap">{d.check_in ? d.check_in.slice(0, 5) : <span className="text-xs font-semibold text-amber-800">tidak ada</span>}</td>
                     <td className="px-3 py-2 tabular-nums whitespace-nowrap">{d.check_out ? d.check_out.slice(0, 5) : <span className="text-xs font-semibold text-amber-800">tidak ada</span>}</td>
