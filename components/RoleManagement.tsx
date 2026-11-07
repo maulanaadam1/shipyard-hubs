@@ -29,6 +29,7 @@ const RESOURCES = [
   { id: 'Repair List', type: 'menu' },
   { id: 'Item Repair List', type: 'menu' },
   { id: 'Harga Acuan Marketing', type: 'menu' },
+  { id: 'Dashboard HSE', type: 'menu' },
   { id: 'Work Order', type: 'menu' },
   { id: 'Item Pekerjaan WO', type: 'menu' },
   { id: 'Data Perlu Dicek', type: 'menu' },
@@ -64,8 +65,8 @@ const RESOURCES = [
   { id: 'Log AI', type: 'menu' },
   // Data permissions: no menu; they let the AI Assistant read spreadsheet data.
   { id: 'Data MasterOperation', type: 'data', note: 'Data spreadsheet MasterOperation untuk AI Assistant: proyek, progres, biaya, manpower, vendor' },
-  { id: 'Data Absensi', type: 'data', note: 'Data absensi untuk AI Assistant: jam kerja dan data karyawan' },
-  { id: 'Data HSE', type: 'data', note: 'Data MasterHSE untuk AI Assistant: izin kerja' },
+  { id: 'Data Absensi', type: 'data', note: 'Menu Absensi (HSE), bagian absensi di Dashboard HSE, dan AI Assistant: jam kerja dan data karyawan' },
+  { id: 'Data HSE', type: 'data', note: 'Menu Work Permit (HSE), bagian izin kerja di Dashboard HSE, dan AI Assistant' },
   { id: 'Harga Penawaran', type: 'data', note: 'Harga ke customer dari repair list dan margin per Job Order (Item Pekerjaan WO dan AI Assistant)' },
 ];
 

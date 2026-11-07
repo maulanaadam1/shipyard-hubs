@@ -135,8 +135,13 @@ func main() {
 		r.With(aiView).Get("/api/ai/conversations/{id}", handlers.GetAIConversation)
 		r.With(aiView).Delete("/api/ai/conversations/{id}", handlers.DeleteAIConversation)
 		r.With(handlers.RequirePermission(handlers.ResourceAILogs, "view")).Get("/api/ai/logs", handlers.GetAILogs)
-		// Work hours from attendance punches; Admin only until it has a menu.
-		r.With(appMiddleware.RequireRole("Admin")).Get("/api/attendance/daily", handlers.GetAttendanceDaily)
+		// HSE menus: Absensi (Data Absensi), Work Permit (Data HSE) and the
+		// HSE dashboard (its own menu permission; each part checks its data).
+		r.With(handlers.RequirePermission(handlers.ResourceDataAttendance, "view")).Get("/api/attendance/daily", handlers.GetAttendanceDaily)
+		hseView := handlers.RequirePermission(handlers.ResourceDataHSE, "view")
+		r.With(hseView).Get("/api/hse/work-permits", handlers.GetWorkPermits)
+		r.With(hseView).Get("/api/hse/work-permits/facets", handlers.GetWorkPermitFacets)
+		r.With(handlers.RequirePermission(handlers.ResourceHSEDashboard, "view")).Get("/api/hse/dashboard", handlers.GetHSEDashboard)
 		// Sumber Data Eksternal: sources and their tokens, Admin only.
 		// Sumber Data Eksternal, Pengaturan AI and Log AI: role permissions
 		// (Role Management); Admin always has them.

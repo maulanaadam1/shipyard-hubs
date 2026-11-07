@@ -356,7 +356,7 @@ func summarizeAttendanceByVendor(days []attendanceDay) []attendanceVendorSummary
 	byPT := map[string]*attendanceVendorSummary{}
 	workers := map[string]map[string]bool{}
 	for _, d := range days {
-		pt := attendanceGroupLabel(d, "-")
+		pt := attendanceGroupLabel(d, noPTLabel)
 		s := byPT[pt]
 		if s == nil {
 			s = &attendanceVendorSummary{NamaPT: pt}
@@ -433,13 +433,47 @@ func GetAttendanceDaily(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{
+	// Per shift day: workers present, incomplete days and hours (estimated).
+	type dateSummary struct {
+		Date       string  `json:"date"`
+		Day        string  `json:"hari"`
+		Workers    int     `json:"workers"`
+		Incomplete int     `json:"incomplete"`
+		Hours      float64 `json:"hours"`
+		Overtime   float64 `json:"overtime_hours"`
+	}
+	byDate := map[string]*dateSummary{}
+	minutes := map[string][2]int{}
+	for _, d := range days {
+		s := byDate[d.Date]
+		if s == nil {
+			s = &dateSummary{Date: d.Date, Day: d.Day}
+			byDate[d.Date] = s
+		}
+		s.Workers++
+		if d.Status != "lengkap" {
+			s.Incomplete++
+		}
+		m := minutes[d.Date]
+		minutes[d.Date] = [2]int{m[0] + d.EstimatedMinutes, m[1] + d.OvertimeMinutes}
+	}
+	dates := make([]dateSummary, 0, len(byDate))
+	for k, s := range byDate {
+		s.Hours, s.Overtime = hours(minutes[k][0]), hours(minutes[k][1])
+		dates = append(dates, *s)
+	}
+	sort.Slice(dates, func(i, j int) bool { return dates[i].Date < dates[j].Date })
+	out := map[string]any{
 		"from":    fromS,
 		"to":      toS,
 		"rules":   map[string]float64{"weekday_hours": weekday, "saturday_hours": sat},
 		"vendors": summarizeAttendanceByVendor(days),
-		"days":    days,
-	})
+		"dates":   dates,
+	}
+	if q.Get("rows") != "0" {
+		out["days"] = days
+	}
+	writeJSON(w, http.StatusOK, out)
 }
 
 // loadAttendanceDays reads the punches of the shift days from..to. filters
