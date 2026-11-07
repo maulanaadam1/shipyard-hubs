@@ -173,6 +173,12 @@ func main() {
 		r.With(handlers.RequirePermission(handlers.ResourceAISettings, "edit")).Put("/api/ai/settings", handlers.PutAISettings)
 		r.With(handlers.RequirePermission(handlers.ResourceAISettings, "edit")).Post("/api/ai/settings/test", handlers.TestAISettings)
 		r.With(handlers.RequirePermission(handlers.ResourceAISettings, "view")).Get("/api/ai/share-settings", handlers.GetAIShareSettings)
+		// Kamus Istilah (Pengaturan AI)
+		r.With(handlers.RequirePermission(handlers.ResourceAISettings, "view")).Get("/api/ai/terms", handlers.GetAITerms)
+		r.With(handlers.RequirePermission(handlers.ResourceAISettings, "edit")).Post("/api/ai/terms", handlers.PostAITerm)
+		r.With(handlers.RequirePermission(handlers.ResourceAISettings, "edit")).Post("/api/ai/terms/autofill", handlers.PostAITermsAutofill)
+		r.With(handlers.RequirePermission(handlers.ResourceAISettings, "edit")).Put("/api/ai/terms/{id}", handlers.PutAITerm)
+		r.With(handlers.RequirePermission(handlers.ResourceAISettings, "edit")).Delete("/api/ai/terms/{id}", handlers.DeleteAITerm)
 		r.With(handlers.RequirePermission(handlers.ResourceAISettings, "edit")).Put("/api/ai/share-settings", handlers.PutAIShareSettings)
 		r.With(handlers.RequirePermission(handlers.ResourceAISettings, "view")).Get("/api/ai/share-guests", handlers.GetAIShareGuests)
 		// Harga Acuan: reference unit costs per work type, size and unit.

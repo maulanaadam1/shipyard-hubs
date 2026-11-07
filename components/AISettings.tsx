@@ -2,6 +2,8 @@ import React, { useEffect, useState } from 'react';
 import { Bot, KeyRound, PlugZap, Save } from 'lucide-react';
 import { getHeaders } from '@/lib/api-client';
 import AIShareSettings from './AIShareSettings';
+import AITermsSettings from './AITermsSettings';
+import { useData } from '@/context/DataContext';
 
 // Pengaturan AI (Role Management permission): which AI provider the AI Assistant uses. Saved in
 // the database; the API key is stored encrypted and never shown again.
@@ -34,6 +36,8 @@ const label = 'block text-sm font-semibold text-slate-700 mb-1';
 const help = 'mt-1 text-xs text-slate-500';
 
 export default function AISettings() {
+  const { canAccess } = useData();
+  const canEditTerms = canAccess('Pengaturan AI', 'edit');
   const [saved, setSaved] = useState<Settings | null>(null);
   const [form, setForm] = useState<Settings | null>(null);
   const [apiKey, setApiKey] = useState('');
@@ -227,6 +231,8 @@ export default function AISettings() {
                   : <p className="break-words"><span className="font-semibold">Gagal terhubung.</span> {test.error}</p>}
               </section>
             )}
+
+            <AITermsSettings canEdit={canEditTerms} />
 
             <AIShareSettings canEdit />
           </>

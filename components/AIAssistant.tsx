@@ -18,7 +18,7 @@ type ToolCall = { name: string; input: Record<string, unknown>; is_error: boolea
 type Message = {
   role: 'user' | 'assistant'; content: string; tools?: ToolCall[]; error?: boolean;
   id?: string; feedback?: 'up' | 'down' | ''; streaming?: boolean; activity?: string[];
-  suggestions?: string[]; durationMs?: number; stopped?: boolean;
+  suggestions?: string[]; choices?: string[]; durationMs?: number; stopped?: boolean;
 };
 type Status = { enabled: boolean; provider: string; model: string; daily_limit: number; used_today: number; tools: string[]; is_admin: boolean; can_configure?: boolean };
 type Conversation = { id: string; title: string; updated_at: string; questions: number };
@@ -79,11 +79,12 @@ const CATEGORIES = [
 const describeInput = (input: Record<string, unknown>) =>
   Object.entries(input || {}).map(([k, v]) => `${k}: ${typeof v === 'string' ? v : JSON.stringify(v)}`).join(', ');
 
-// While streaming, hide the follow-up line ("LANJUT: …") the server takes off.
+// While streaming, hide the follow-up ("LANJUT: …") and choice ("PILIHAN: …")
+// lines the server takes off.
 const visibleText = (text: string) => {
-  const cut = text.search(/(^|\n)[ \t*_]*LANJUT:/i);
+  const cut = text.search(/(^|\n)[ \t*_]*(LANJUT|PILIHAN):/i);
   const t = cut >= 0 ? text.slice(0, cut) : text;
-  return t.replace(/\n[ \t*_]*L(A(N(J(U(T)?)?)?)?)?$/i, '');
+  return t.replace(/\n[ \t*_]*(L(A(N(J(U(T)?)?)?)?)?|P(I(L(I(H(A(N)?)?)?)?)?)?)$/i, '');
 };
 
 const dayGroup = (when: string) => {
@@ -308,7 +309,7 @@ export default function AIAssistant({ guest }: { guest?: AIGuest } = {}) {
     const question = text.trim();
     if (!question || sending) return;
     const history = messages.filter(m => !m.error && !m.streaming && !m.stopped);
-    setMessages([...messages.map(m => ({ ...m, suggestions: undefined })), { role: 'user', content: question },
+    setMessages([...messages.map(m => ({ ...m, suggestions: undefined, choices: undefined })), { role: 'user', content: question },
       { role: 'assistant', content: '', streaming: true, activity: ['Membaca pertanyaan'] }]);
     setDraft('');
     if (inputRef.current) inputRef.current.style.height = 'auto';
@@ -317,7 +318,7 @@ export default function AIAssistant({ guest }: { guest?: AIGuest } = {}) {
       if (data.conversation_id) setConversationId(data.conversation_id);
       updateLast(() => ({
         role: 'assistant', content: data.answer, tools: data.tool_calls, id: data.id, feedback: '',
-        suggestions: data.suggestions, durationMs: data.duration_ms,
+        suggestions: data.suggestions, choices: data.choices, durationMs: data.duration_ms,
       }));
     };
     const controller = new AbortController();
@@ -649,7 +650,21 @@ export default function AIAssistant({ guest }: { guest?: AIGuest } = {}) {
                     </div>
                   )}
 
-                  {!m.streaming && i === messages.length - 1 && m.suggestions && m.suggestions.length > 0 && (
+                  {!m.streaming && i === messages.length - 1 && m.choices && m.choices.length > 0 && (
+                    <div className="mt-1" role="group" aria-label="Pilih maksud Anda">
+                      <p className="text-xs font-semibold text-slate-500 mb-1.5">Maksud Anda?</p>
+                      <div className="flex flex-wrap gap-2">
+                        {m.choices.map(c => (
+                          <button key={c} type="button" onClick={() => send(`Maksud saya: ${c}`)} disabled={!canAsk || sending}
+                            className="px-3 py-1.5 rounded-full text-sm text-left border border-[#FDB913] bg-[#FDB913]/10 text-slate-800 font-medium hover:bg-[#FDB913]/25 disabled:opacity-50">
+                            {c}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {!m.streaming && i === messages.length - 1 && !(m.choices && m.choices.length) && m.suggestions && m.suggestions.length > 0 && (
                     <div className="mt-1">
                       <p className="text-xs font-semibold text-slate-500 mb-1.5">Lanjutkan</p>
                       <div className="flex flex-wrap gap-2">
