@@ -134,6 +134,19 @@ func TestAIInsights(t *testing.T) {
 	defer db.Exec("DELETE FROM projects WHERE id = 'ai-latest'")
 	db.Exec(`INSERT INTO projects (id, shipname, est_docking_date) VALUES ('ai-latest', 'KM Uji', ?)`, today)
 
+	db.Exec(`INSERT INTO external_records (source_id, record_key, data) VALUES ('ai-test', 'wp3', ?)`,
+		`{"_key":"wp3","_sheet":"workpermit","no_workpermit":"WP-3","status":"Approved","manpower":"5","date_start":"`+now.Format("1/2/2006")+`","date_finish":"`+tomorrow+`"}`)
+	db.Exec("DELETE FROM attendance_punches WHERE source_id = 'ai-insights'")
+	defer db.Exec("DELETE FROM attendance_punches WHERE source_id = 'ai-insights'")
+	upsertAttendancePunches("ai-insights", []attendancePunch{
+		{ID: "p1", EmpCode: "X1", NamaPT: "PT X", PunchTime: today + " 07:30:00"},
+		{ID: "p2", EmpCode: "X2", NamaPT: "PT X", PunchTime: today + " 07:40:00"},
+	})
+	db.Exec("DELETE FROM jo_repair_lists WHERE jo_id = 'ai-rl'")
+	defer db.Exec("DELETE FROM jo_repair_lists WHERE jo_id = 'ai-rl'")
+	db.Exec(`INSERT INTO jo_repair_lists (jo_id, version, items, total_price, fetched_at, error, format, changed_at, change_kind)
+		VALUES ('ai-rl', 2, 3, 100, ?, '', 3, ?, 'tambahan')`, today+" 09:00:00", today+" 09:00:00")
+
 	admin := get("ai-admin")
 	if admin["latest:approved_today"] != 1 || admin["latest:new_findings"] != 1 {
 		t.Errorf("latest: %v", admin)
@@ -145,8 +158,20 @@ func TestAIInsights(t *testing.T) {
 	if _, ok := admin["docking"]; ok {
 		t.Error("docking still in insights")
 	}
-	if admin["findings"] != 2 || admin["stock"] != 2 || admin["permits"] != 1 {
+	// Perlu perhatian: this week's jasa and material use, jasa approved vs
+	// last week, overtime and workers; the old backlog counts are gone.
+	if admin["jasa_week"] != 1 || admin["usage_week"] != 1 || admin["workers_week"] != 2 {
 		t.Errorf("admin insights: %v", admin)
+	}
+	for _, old := range []string{"findings", "stock", "permits", "waiting"} {
+		if _, ok := admin[old]; ok {
+			t.Errorf("%s still in insights", old)
+		}
+	}
+	// Terbaru hari ini: workers present, permits active and starting (a sheet
+	// date written month first), repair lists changed today.
+	if admin["latest:present_today"] != 2 || admin["latest:permits_active"] != 1 || admin["latest:permits_today"] != 1 || admin["latest:repair_lists_today"] != 1 {
+		t.Errorf("admin latest: %v", admin)
 	}
 	if nobody := get("ai-nobody"); len(nobody) != 0 {
 		t.Errorf("insights without access: %v", nobody)

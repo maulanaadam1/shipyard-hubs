@@ -122,6 +122,30 @@ func TestRepairLists(t *testing.T) {
 	if v88 != 2 || items88 != 4 { // two version groups, one activity each
 		t.Errorf("Job Order 88: version %d, items %d", v88, items88)
 	}
+	// First repair list of the Job Order: "baru" (AI Assistant's Terbaru hari ini).
+	var kind88, changed88 string
+	db.QueryRow(`SELECT COALESCE(change_kind, ''), COALESCE(changed_at, '') FROM jo_repair_lists WHERE jo_id = '88'`).Scan(&kind88, &changed88)
+	if kind88 != "baru" || changed88 == "" {
+		t.Errorf("Job Order 88 change: %q at %q", kind88, changed88)
+	}
+	// The same version fetched again keeps it.
+	if err := storeRepairList("88", 2, nil); err != nil {
+		t.Fatal(err)
+	}
+	var again string
+	db.QueryRow(`SELECT COALESCE(changed_at, '') FROM jo_repair_lists WHERE jo_id = '88'`).Scan(&again)
+	if again != changed88 {
+		t.Errorf("refetch moved changed_at: %q -> %q", changed88, again)
+	}
+	if err := storeRepairList("88", 3, nil); err != nil {
+		t.Fatal(err)
+	}
+	db.QueryRow(`SELECT COALESCE(change_kind, '') FROM jo_repair_lists WHERE jo_id = '88'`).Scan(&kind88)
+	if kind88 != "tambahan" {
+		t.Errorf("newer version: %q", kind88)
+	}
+	db.Exec("DELETE FROM jo_repair_lists WHERE jo_id = '88'") // fetched again below with its real items
+	syncRepairLists()
 	var failure99 string
 	db.QueryRow(`SELECT COALESCE(error, '') FROM jo_repair_lists WHERE jo_id = '99'`).Scan(&failure99)
 	if failure99 != "tidak ada repair list di SIAGA" {
