@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
   Server, 
@@ -20,44 +20,57 @@ import {
   ChevronLeft,
   ChevronRight,
   Upload,
-  Download
+  Download,
+  KeyRound
 } from 'lucide-react';
 import { api, getHeaders } from '@/lib/api-client';
 import { useData } from '@/context/DataContext';
+import { extractCurlUrls, parseCurlHeaders, configHosts, mergeHeaders } from '@/lib/curl-headers';
 
-const extractCurlUrls = (curlCommand: string): string[] => {
-  const urls: string[] = [];
-  const normalizeMarkdownUrl = (value: string) => {
-    const markdownUrlMatch = value.match(/^\[https?:\/\/[^\]]+\]\((https?:\/\/[^)]+)\)$/i);
-    return markdownUrlMatch ? markdownUrlMatch[1].trim() : value;
-  };
-  const addUrl = (candidate?: string) => {
-    const cleaned = normalizeMarkdownUrl((candidate || '').trim());
-    if (!cleaned || cleaned === '--url' || cleaned === 'url' || cleaned.startsWith('-')) return;
-    if (!/^https?:\/\//i.test(cleaned)) return;
-    if (!urls.includes(cleaned)) urls.push(cleaned);
-  };
+const FOCUSABLE = 'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
 
-  const explicitUrlRegex = /--url\s+(?:'([^']+)'|"([^"]+)"|([^\s\\]+))/g;
-  let explicitMatch;
-  while ((explicitMatch = explicitUrlRegex.exec(curlCommand)) !== null) {
-    addUrl(explicitMatch[1] || explicitMatch[2] || explicitMatch[3]);
-  }
+// Modal keyboard behaviour: focus moves into the dialog on open, Tab stays
+// inside it, Escape closes it, and focus returns to the opener on close.
+function useDialogKeyboard(open: boolean, onClose: () => void) {
+  const ref = useRef<HTMLDivElement>(null);
+  const onCloseRef = useRef(onClose);
+  onCloseRef.current = onClose;
 
-  const firstArgRegex = /curl\s+(?:'([^']+)'|"([^"]+)"|([^\s\\]+))/g;
-  let firstArgMatch;
-  while ((firstArgMatch = firstArgRegex.exec(curlCommand)) !== null) {
-    addUrl(firstArgMatch[1] || firstArgMatch[2] || firstArgMatch[3]);
-  }
+  useEffect(() => {
+    if (!open) return;
+    const opener = document.activeElement as HTMLElement | null;
+    const focusables = () => Array.from(ref.current?.querySelectorAll<HTMLElement>(FOCUSABLE) || []);
+    const first = ref.current?.querySelector<HTMLElement>('textarea, input, select') || focusables()[0];
+    first?.focus();
 
-  return urls;
-};
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        onCloseRef.current();
+        return;
+      }
+      if (e.key !== 'Tab') return;
+      const items = focusables();
+      if (items.length === 0) return;
+      const start = items[0];
+      const end = items[items.length - 1];
+      if (e.shiftKey && document.activeElement === start) {
+        e.preventDefault();
+        end.focus();
+      } else if (!e.shiftKey && document.activeElement === end) {
+        e.preventDefault();
+        start.focus();
+      }
+    };
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('keydown', onKey);
+      opener?.focus();
+    };
+  }, [open]);
 
-const normalizeHeaderValue = (value: string) => {
-  const trimmed = value.trim();
-  const markdownUrlMatch = trimmed.match(/^\[https?:\/\/[^\]]+\]\((https?:\/\/[^)]+)\)$/i);
-  return markdownUrlMatch ? markdownUrlMatch[1].trim() : trimmed;
-};
+  return ref;
+}
 
 export default function ApiSyncManagement() {
   const { fetchData } = useData();
@@ -74,6 +87,17 @@ export default function ApiSyncManagement() {
   const [syncStatusMsg, setSyncStatusMsg] = useState("");
   const [isSyncing, setIsSyncing] = useState(false);
   const [lastSyncDate, setLastSyncDate] = useState("");
+
+  // Bulk cookie update: one fresh cURL rewrites the headers of every chosen config
+  const [isCookieModalOpen, setIsCookieModalOpen] = useState(false);
+  const [cookieCurl, setCookieCurl] = useState("");
+  const [cookieTargets, setCookieTargets] = useState<string[]>([]);
+  const [cookieResult, setCookieResult] = useState<{ ok: boolean; text: string } | null>(null);
+  const [isSavingCookie, setIsSavingCookie] = useState(false);
+  const [loadError, setLoadError] = useState("");
+
+  const editDialogRef = useDialogKeyboard(isModalOpen, () => setIsModalOpen(false));
+  const cookieDialogRef = useDialogKeyboard(isCookieModalOpen, () => setIsCookieModalOpen(false));
 
   // Query Params state
   const [baseUrl, setBaseUrl] = useState("");
@@ -162,8 +186,10 @@ export default function ApiSyncManagement() {
       const { data, error } = await api.from('sync_configs').select('*');
       if (error) throw error;
       setConfigs(data || []);
+      setLoadError("");
     } catch (e: any) {
       console.error(e);
+      setLoadError(e?.message || "periksa koneksi lalu coba lagi.");
     } finally {
       setIsLoading(false);
     }
@@ -332,28 +358,7 @@ export default function ApiSyncManagement() {
           throw new Error("URL API tidak ditemukan. Pastikan cURL berisi endpoint setelah curl atau --url, bukan placeholder '--url'.");
         }
 
-        const headerRegex = /-H\s+['"]([^'"]+)['"]/g;
-        let match;
-        while ((match = headerRegex.exec(curlCommand)) !== null) {
-          const headerStr = match[1];
-          const splitIndex = headerStr.indexOf(':');
-          if (splitIndex > -1) {
-            const key = headerStr.slice(0, splitIndex).trim();
-            const value = normalizeHeaderValue(headerStr.slice(splitIndex + 1));
-            headers[key] = value;
-          }
-        }
-
-        // Parse -b or --cookie
-        const cookieRegex = /(?:-b|--cookie)\s+['"]([^'"]+)['"]/g;
-        let cookieMatch;
-        while ((cookieMatch = cookieRegex.exec(curlCommand)) !== null) {
-          if (!headers['cookie'] && !headers['Cookie']) {
-             headers['Cookie'] = cookieMatch[1];
-          } else {
-             headers['Cookie'] = (headers['Cookie'] || headers['cookie']) + '; ' + cookieMatch[1];
-          }
-        }
+        headers = parseCurlHeaders(curlCommand);
       }
 
       // If updating without a new curl command, we must fetch the existing one to not overwrite with blanks
@@ -386,6 +391,51 @@ export default function ApiSyncManagement() {
     }
   };
 
+  const freshHeaders = useMemo(() => parseCurlHeaders(cookieCurl), [cookieCurl]);
+  const freshHeaderNames = Object.keys(freshHeaders);
+  const freshHost = useMemo(() => configHosts(extractCurlUrls(cookieCurl)[0])[0] || "", [cookieCurl]);
+  const hasCredential = freshHeaderNames.some(k => ['cookie', 'authorization'].includes(k.toLowerCase()));
+
+  // Preselect the configs that call the same host as the pasted cURL.
+  useEffect(() => {
+    if (!freshHost) {
+      setCookieTargets([]);
+      return;
+    }
+    setCookieTargets(configs.filter(c => configHosts(c.url).includes(freshHost)).map(c => c.id));
+  }, [freshHost, configs]);
+
+  const openCookieModal = () => {
+    setCookieCurl("");
+    setCookieTargets([]);
+    setCookieResult(null);
+    setIsCookieModalOpen(true);
+  };
+
+  const toggleCookieTarget = (id: string) => {
+    setCookieTargets(prev => prev.includes(id) ? prev.filter(t => t !== id) : [...prev, id]);
+  };
+
+  const handleSaveCookie = async () => {
+    if (freshHeaderNames.length === 0 || cookieTargets.length === 0) return;
+    setIsSavingCookie(true);
+    setCookieResult(null);
+    const failed: string[] = [];
+    for (const id of cookieTargets) {
+      const cfg = configs.find(c => c.id === id);
+      if (!cfg) continue;
+      const headers = mergeHeaders(cfg.headers, freshHeaders);
+      const { error } = await api.from('sync_configs').update({ headers: JSON.stringify(headers) }).eq('id', id);
+      if (error) failed.push(id);
+    }
+    const done = cookieTargets.length - failed.length;
+    setCookieResult(failed.length === 0
+      ? { ok: true, text: `Header diperbarui di ${done} konfigurasi.` }
+      : { ok: false, text: `Header diperbarui di ${done} konfigurasi. Gagal: ${failed.join(', ')}.` });
+    setIsSavingCookie(false);
+    fetchConfigs();
+  };
+
   const totalPages = Math.ceil(configs.length / itemsPerPage);
   const paginatedConfigs = configs.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
 
@@ -396,8 +446,8 @@ export default function ApiSyncManagement() {
           <h2 className="font-display font-bold text-2xl text-slate-800 tracking-tight">API Sync Management</h2>
           <p className="text-sm text-slate-500 mt-1">Kelola integrasi dengan API eksternal secara otomatis dan berkala.</p>
         </div>
-        <div className="flex items-center gap-3">
-          <input 
+        <div className="flex flex-wrap items-center gap-3">
+          <input
              type="file" 
              id="import-config" 
              accept=".json" 
@@ -406,27 +456,33 @@ export default function ApiSyncManagement() {
           />
           <button 
             onClick={() => document.getElementById('import-config')?.click()}
-            className="flex items-center justify-center gap-2 px-4 py-2.5 bg-slate-100 text-slate-700 rounded-xl text-sm font-bold hover:bg-slate-200 transition-all border border-slate-200"
+            className="flex items-center justify-center gap-2 px-4 py-2.5 min-h-11 bg-slate-100 text-slate-700 rounded-xl text-sm font-bold hover:bg-slate-200 transition-all border border-slate-200"
             title="Import JSON Configuration"
           >
             <Download className="w-4 h-4" /> Import
           </button>
           <button 
             onClick={handleExport}
-            className="flex items-center justify-center gap-2 px-4 py-2.5 bg-slate-100 text-slate-700 rounded-xl text-sm font-bold hover:bg-slate-200 transition-all border border-slate-200"
+            className="flex items-center justify-center gap-2 px-4 py-2.5 min-h-11 bg-slate-100 text-slate-700 rounded-xl text-sm font-bold hover:bg-slate-200 transition-all border border-slate-200"
             title="Export JSON Configuration"
           >
             <Upload className="w-4 h-4" /> Export
           </button>
+          <button
+            onClick={openCookieModal}
+            className="flex items-center justify-center gap-2 px-4 py-2.5 min-h-11 bg-slate-100 text-slate-700 rounded-xl text-sm font-bold hover:bg-slate-200 transition-all border border-slate-200"
+          >
+            <KeyRound className="w-4 h-4" /> Perbarui Cookie
+          </button>
           <button 
             onClick={() => triggerManualSync()}
-            className="flex items-center justify-center gap-2 px-6 py-2.5 bg-slate-100 text-slate-700 rounded-xl text-sm font-bold hover:bg-slate-200 transition-all border border-slate-200"
+            className="flex items-center justify-center gap-2 px-6 py-2.5 min-h-11 bg-slate-100 text-slate-700 rounded-xl text-sm font-bold hover:bg-slate-200 transition-all border border-slate-200"
           >
             <RefreshCw className="w-4 h-4" /> Sinkronisasi Semua
           </button>
           <button 
             onClick={handleAdd}
-            className="flex items-center justify-center gap-2 px-6 py-2.5 bg-[#FDB913] text-slate-900 rounded-xl text-sm font-bold hover:bg-[#e5a611] transition-all shadow-lg shadow-[#FDB913]/20"
+            className="flex items-center justify-center gap-2 px-6 py-2.5 min-h-11 bg-[#FDB913] text-slate-900 rounded-xl text-sm font-bold hover:bg-[#e5a611] transition-all shadow-lg shadow-[#FDB913]/20"
           >
             <Plus className="w-4 h-4" /> Tambah Konfigurasi
           </button>
@@ -451,8 +507,21 @@ export default function ApiSyncManagement() {
             <tbody className="divide-y divide-slate-100">
               {configs.length === 0 ? (
                 <tr>
-                  <td colSpan={8} className="px-6 py-12 text-center text-slate-400 text-sm">
-                    Belum ada konfigurasi API Sync. Silakan tambah baru.
+                  <td colSpan={8} className="px-6 py-12 text-center text-sm">
+                    {isLoading ? (
+                      <span role="status" className="inline-flex items-center gap-2 text-slate-500">
+                        <RefreshCw className="w-4 h-4 animate-spin" /> Memuat konfigurasi...
+                      </span>
+                    ) : loadError ? (
+                      <span role="alert" className="inline-flex flex-wrap items-center justify-center gap-3 text-red-700">
+                        Daftar konfigurasi gagal dimuat: {loadError}
+                        <button onClick={fetchConfigs} className="min-h-11 px-4 rounded-xl border border-red-200 bg-white font-semibold hover:bg-red-50">
+                          Coba lagi
+                        </button>
+                      </span>
+                    ) : (
+                      <span className="text-slate-500">Belum ada konfigurasi API Sync. Silakan tambah baru.</span>
+                    )}
                   </td>
                 </tr>
               ) : (
@@ -574,6 +643,10 @@ export default function ApiSyncManagement() {
               initial={{ scale: 0.95, opacity: 0, y: 20 }}
               animate={{ scale: 1, opacity: 1, y: 0 }}
               exit={{ scale: 0.95, opacity: 0, y: 20 }}
+              ref={editDialogRef}
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="edit-config-title"
               className="relative w-full max-w-2xl bg-white rounded-3xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]"
             >
               <div className="p-6 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
@@ -582,13 +655,13 @@ export default function ApiSyncManagement() {
                     <Server className="w-5 h-5" />
                   </div>
                   <div>
-                    <h2 className="text-lg font-bold text-slate-800">
+                    <h2 id="edit-config-title" className="text-lg font-bold text-slate-800">
                       {editingId ? 'Edit Konfigurasi API' : 'Setup Auto Sync Baru'}
                     </h2>
                     <p className="text-xs text-slate-500">Konfigurasi token, headers, dan target URL via bash cURL</p>
                   </div>
                 </div>
-                <button onClick={() => setIsModalOpen(false)} className="p-2 hover:bg-slate-200 rounded-full transition-colors">
+                <button onClick={() => setIsModalOpen(false)} aria-label="Tutup" className="min-w-11 min-h-11 flex items-center justify-center hover:bg-slate-200 rounded-full transition-colors">
                   <X className="w-5 h-5 text-slate-500" />
                 </button>
               </div>
@@ -829,6 +902,130 @@ export default function ApiSyncManagement() {
                 >
                   {isSyncing ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
                   Simpan Konfigurasi
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {isCookieModalOpen && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm"
+              onClick={() => setIsCookieModalOpen(false)}
+            />
+            <motion.div
+              initial={{ scale: 0.95, opacity: 0, y: 20 }}
+              animate={{ scale: 1, opacity: 1, y: 0 }}
+              exit={{ scale: 0.95, opacity: 0, y: 20 }}
+              ref={cookieDialogRef}
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="cookie-dialog-title"
+              className="relative w-full max-w-2xl bg-white rounded-3xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]"
+            >
+              <div className="p-6 border-b border-slate-100 flex justify-between items-center gap-3 bg-slate-50/50">
+                <div>
+                  <h2 id="cookie-dialog-title" className="text-lg font-bold text-slate-800">Perbarui Cookie dari Satu cURL</h2>
+                  <p className="text-xs text-slate-500">Header dari cURL ini ditulis ke semua konfigurasi yang dicentang. URL tiap konfigurasi tidak berubah.</p>
+                </div>
+                <button onClick={() => setIsCookieModalOpen(false)} aria-label="Tutup" className="shrink-0 min-w-11 min-h-11 flex items-center justify-center hover:bg-slate-200 rounded-full transition-colors">
+                  <X className="w-5 h-5 text-slate-500" />
+                </button>
+              </div>
+
+              <div className="p-6 space-y-4 overflow-y-auto">
+                <div className="space-y-1.5">
+                  <label htmlFor="cookie-curl" className="text-xs font-bold text-slate-500 uppercase tracking-wider">Script cURL (Bash Format)</label>
+                  <textarea
+                    id="cookie-curl"
+                    value={cookieCurl}
+                    onChange={e => { setCookieCurl(e.target.value); setCookieResult(null); }}
+                    placeholder={"curl 'https://api.external.com/v1/data' \\\n  -H 'accept: application/json' \\\n  -b 'session=...'"}
+                    className="w-full h-36 p-4 text-xs font-mono rounded-xl bg-slate-900 border-slate-800 text-emerald-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/50"
+                  />
+                  <p className="text-[11px] text-slate-500">Salin satu request SIAGA dari DevTools (Copy as cURL bash) setelah login ulang.</p>
+                </div>
+
+                {cookieCurl && (
+                  <div className="space-y-1 text-xs text-slate-600">
+                    <p>Host: <span className="font-mono">{freshHost || 'tidak ditemukan'}</span></p>
+                    <p>Header yang ditulis: {freshHeaderNames.length ? <span className="font-mono">{freshHeaderNames.join(', ')}</span> : 'tidak ada'}</p>
+                    {freshHeaderNames.length > 0 && !hasCredential && (
+                      <p className="text-amber-700">cURL ini tidak berisi Cookie atau Authorization. Pastikan yang disalin adalah request yang sudah login.</p>
+                    )}
+                  </div>
+                )}
+
+                <div className="space-y-2">
+                  <div className="flex justify-between items-end">
+                    <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">Konfigurasi tujuan</span>
+                    <span className="text-[11px] text-slate-500">{cookieTargets.length} dari {configs.length} dipilih</span>
+                  </div>
+                  <div className="border border-slate-200 rounded-xl divide-y divide-slate-100">
+                    {isLoading && configs.length === 0 && (
+                      <p role="status" className="px-4 py-3 text-xs text-slate-500 flex items-center gap-2">
+                        <RefreshCw className="w-3.5 h-3.5 animate-spin" /> Memuat konfigurasi...
+                      </p>
+                    )}
+                    {!isLoading && loadError && (
+                      <div role="alert" className="px-4 py-3 text-xs text-red-700 flex flex-wrap items-center gap-3">
+                        <span className="flex-1">Daftar konfigurasi gagal dimuat: {loadError}</span>
+                        <button onClick={fetchConfigs} className="min-h-11 px-4 rounded-xl border border-red-200 bg-white font-semibold hover:bg-red-50">
+                          Coba lagi
+                        </button>
+                      </div>
+                    )}
+                    {!isLoading && !loadError && configs.length === 0 && (
+                      <p className="px-4 py-3 text-xs text-slate-500">Belum ada konfigurasi.</p>
+                    )}
+                    {configs.map(cfg => {
+                      const hosts = configHosts(cfg.url);
+                      const sameHost = !!freshHost && hosts.includes(freshHost);
+                      return (
+                        <label key={cfg.id} className="flex items-center gap-3 px-4 py-2 min-h-11 cursor-pointer hover:bg-slate-50">
+                          <input
+                            type="checkbox"
+                            checked={cookieTargets.includes(cfg.id)}
+                            onChange={() => toggleCookieTarget(cfg.id)}
+                            className="w-4 h-4 text-indigo-600 rounded border-slate-300 focus:ring-indigo-500"
+                          />
+                          <span className="font-mono text-xs font-semibold text-slate-700 w-32 sm:w-44 shrink-0 truncate">{cfg.id}</span>
+                          <span className="text-xs text-slate-500 truncate flex-1">{hosts[0] || 'tanpa URL'}</span>
+                          {freshHost && !sameHost && <span className="text-[11px] text-slate-500 shrink-0">host lain</span>}
+                        </label>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {cookieResult && (
+                  <div role="status" className={`p-3 text-xs font-semibold rounded-xl flex items-center gap-2 ${cookieResult.ok ? 'bg-emerald-50 text-emerald-700 border border-emerald-100' : 'bg-red-50 text-red-700 border border-red-100'}`}>
+                    {cookieResult.ok ? <CheckCircle2 className="w-4 h-4" /> : <AlertCircle className="w-4 h-4" />}
+                    {cookieResult.text}
+                  </div>
+                )}
+              </div>
+
+              <div className="p-6 border-t border-slate-100 flex flex-wrap justify-end gap-3 bg-slate-50/50">
+                <button
+                  onClick={() => setIsCookieModalOpen(false)}
+                  className="px-6 py-2.5 min-h-11 text-sm font-semibold rounded-xl border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 transition"
+                >
+                  {cookieResult?.ok ? 'Tutup' : 'Batal'}
+                </button>
+                <button
+                  onClick={handleSaveCookie}
+                  disabled={isSavingCookie || freshHeaderNames.length === 0 || cookieTargets.length === 0}
+                  className="px-8 py-2.5 min-h-11 text-sm font-semibold rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white transition shadow-lg shadow-indigo-500/30 disabled:opacity-50 flex items-center gap-2"
+                >
+                  {isSavingCookie ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+                  Perbarui {cookieTargets.length} Konfigurasi
                 </button>
               </div>
             </motion.div>
