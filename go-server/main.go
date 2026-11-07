@@ -71,8 +71,10 @@ func main() {
 		AllowedHeaders: []string{"Content-Type", "Authorization"},
 	})
 	r.Use(c.Handler)
+	r.Use(handlers.Maintenance) // MAINTENANCE_MODE: API answers 503, the app shows its maintenance screen
 
 	// Public routes (no auth required)
+	r.Get("/api/health", handlers.GetHealth)
 	r.Post("/api/auth/login", handlers.Login)
 	r.Get("/api/auth/session", handlers.GetSession)
 	// External sources push rows here; each checks its own Bearer token
