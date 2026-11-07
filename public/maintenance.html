@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="theme-color" content="#FDB913" />
+  <title>Shipyard Hub sedang diperbarui</title>
+  <link rel="icon" type="image/svg+xml" href="/app_icon.svg" />
+  <style>
+    /* Served by the service worker when the server can't answer a page
+       (stopped or restarting during a deploy). Self-contained: no app assets. */
+    :root { --ink: #0f172a; --text: #334155; --muted: #64748b; --line: #e2e8f0; --bg: #f8fafc; --brand: #FDB913; }
+    * { box-sizing: border-box; }
+    body { margin: 0; min-height: 100vh; display: flex; flex-direction: column; background: var(--bg); color: var(--text);
+      font-family: "Inter", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+    header { padding: 20px 24px; display: flex; align-items: center; gap: 10px; }
+    .logo { width: 36px; height: 36px; border-radius: 12px; background: var(--brand); display: flex; align-items: center; justify-content: center; }
+    .name { font-family: "Plus Jakarta Sans", "Inter", system-ui, sans-serif; font-weight: 700; font-size: 18px; color: #1e293b; letter-spacing: -0.01em; }
+    main { flex: 1; display: flex; align-items: center; justify-content: center; padding: 24px 16px; }
+    .box { width: 100%; max-width: 460px; text-align: center; display: flex; flex-direction: column; align-items: center; gap: 18px; }
+    svg.sea { width: 100%; max-width: 320px; height: auto; }
+    h1 { margin: 0; font-family: "Plus Jakarta Sans", "Inter", system-ui, sans-serif; font-size: 20px; color: #1e293b; }
+    p { margin: 8px 0 0; font-size: 14px; line-height: 1.55; color: var(--muted); }
+    button { display: inline-flex; align-items: center; gap: 8px; padding: 10px 16px; border: 0; border-radius: 12px; background: var(--ink); color: #fff;
+      font: 600 14px "Inter", system-ui, sans-serif; cursor: pointer; }
+    button:hover { background: #1e293b; }
+    button:focus-visible { outline: 2px solid var(--ink); outline-offset: 3px; }
+    .hint { font-size: 12px; color: var(--muted); margin: 0; }
+  </style>
+</head>
+<body>
+  <header>
+    <span class="logo" aria-hidden="true">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#0f172a" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 21c.6.5 1.2 1 2.5 1 2.5 0 2.5-2 5-2 1.3 0 1.9.5 2.5 1 .6.5 1.2 1 2.5 1 2.5 0 2.5-2 5-2 1.3 0 1.9.5 2.5 1"/><path d="M19.38 20A11.6 11.6 0 0 0 21 14l-9-4-9 4c0 2.9.94 5.34 2.81 7.76"/><path d="M19 13V7a2 2 0 0 0-2-2H7a2 2 0 0 0-2 2v6"/><path d="M12 10v4"/><path d="M12 2v3"/></svg>
+    </span>
+    <span class="name">Shipyard Hub</span>
+  </header>
+  <main>
+    <div class="box">
+      <svg class="sea" viewBox="0 0 320 64" aria-hidden="true">
+        <g transform="translate(138 6)">
+          <path d="M6 30 L44 30 L38 42 L12 42 Z" fill="#0f172a" />
+          <rect x="16" y="20" width="16" height="10" rx="1.5" fill="#0f172a" />
+          <rect x="22" y="10" width="4" height="10" fill="#FDB913" />
+        </g>
+        <path d="M0 50 Q 20 44 40 50 T 80 50 T 120 50 T 160 50 T 200 50 T 240 50 T 280 50 T 320 50" fill="none" stroke="#94a3b8" stroke-width="2" />
+        <path d="M20 58 Q 40 53 60 58 T 100 58 T 140 58 T 180 58 T 220 58 T 260 58 T 300 58" fill="none" stroke="#cbd5e1" stroke-width="2" />
+      </svg>
+      <div>
+        <h1>Shipyard Hub sedang diperbarui</h1>
+        <p>Server sedang dimulai ulang atau diperbarui, biasanya hanya beberapa menit. Data Anda aman; halaman ini akan terbuka lagi sendiri begitu server siap.</p>
+      </div>
+      <button type="button" id="retry">Coba sekarang</button>
+      <p class="hint" id="hint" aria-live="polite">Mencoba lagi otomatis dalam 15 detik</p>
+    </div>
+  </main>
+  <script>
+    (function () {
+      var left = 15, hint = document.getElementById('hint'), btn = document.getElementById('retry');
+      function check() {
+        hint.textContent = 'Memeriksa server…';
+        fetch('/api/health', { cache: 'no-store' }).then(function (r) {
+          if (r.ok) {
+            // Shown in place of the page asked for: load it. Opened directly: go home.
+            if (window.location.pathname === '/maintenance.html') window.location.replace('/'); else window.location.reload();
+            return;
+          }
+          left = 15;
+        }).catch(function () { left = 15; });
+      }
+      btn.addEventListener('click', check);
+      setInterval(function () {
+        left -= 1;
+        if (left <= 0) { check(); return; }
+        hint.textContent = 'Mencoba lagi otomatis dalam ' + left + ' detik';
+      }, 1000);
+    })();
+  </script>
+</body>
+</html>

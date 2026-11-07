@@ -13,7 +13,7 @@ if (
 ) {
   window.addEventListener('load', () => {
     // Add version query to bypass potential intermediate caches
-    navigator.serviceWorker.register('/sw.js?v=3').then(registration => {
+    navigator.serviceWorker.register('/sw.js?v=4').then(registration => {
       console.log('SW registered: ', registration);
       
       // Check for updates frequently
@@ -46,6 +46,8 @@ if (
   });
 }
 import Dashboard from '../components/Dashboard';
+import { NotFoundPage, ServerStatusGate } from '../components/StatusPages';
+import { installServerWatch } from '../lib/server-status';
 import LandingPage from '../components/LandingPage';
 import Sidebar from '../components/Sidebar';
 import Header from '../components/Header';
@@ -205,9 +207,13 @@ function AppContent() {
   return <AppLayout />;
 }
 
+// Before the first render, so the session check's failures are seen too.
+installServerWatch();
+
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <BrowserRouter>
+      <ServerStatusGate>
       <DataProvider>
         <Routes>
           <Route path="/" element={<AppContent />}>
@@ -437,10 +443,11 @@ createRoot(document.getElementById('root')!).render(
                 <VesselLayout />
               </ProtectedRoute>
             } />
+            <Route path="*" element={<NotFoundPage />} />
           </Route>
-          <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </DataProvider>
+      </ServerStatusGate>
     </BrowserRouter>
   </StrictMode>
 );
