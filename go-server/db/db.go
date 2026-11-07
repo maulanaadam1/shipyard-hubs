@@ -692,6 +692,16 @@ func createTables() {
 	// ai_chat_log rows of the conversation. Deleting hides it from the user,
 	// the log stays for the Admin.
 	DB.Exec("ALTER TABLE ai_chat_log ADD COLUMN conversation_id TEXT DEFAULT ''")
+	// Kamus Istilah for the AI Assistant (handlers/ai_glossary_terms.go).
+	DB.Exec(`CREATE TABLE IF NOT EXISTS ai_glossary (
+		id TEXT PRIMARY KEY,
+		term TEXT NOT NULL,
+		meaning TEXT NOT NULL,
+		kind TEXT,
+		source TEXT,
+		updated_by TEXT,
+		updated_at TEXT
+	);`)
 	DB.Exec(`CREATE TABLE IF NOT EXISTS ai_conversations (
 		id TEXT PRIMARY KEY,
 		user_id TEXT,

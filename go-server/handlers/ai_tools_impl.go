@@ -158,6 +158,7 @@ func aiTools() []aiTool {
 		attendanceHoursTool(),
 		aiJobMarginTool(),
 		aiRepairListTool(),
+		aiResolveNamesTool(),
 		aiMarketingPriceTool(),
 		aiQueryDataTool(),
 	}
