@@ -10,7 +10,8 @@ import (
 
 func seedWorkPermits(t *testing.T) {
 	t.Helper()
-	db.Exec("DELETE FROM external_records WHERE source_id = 'hse-test'")
+	// Other tests leave work permits of their own (AI data tests): start clean.
+	db.Exec(`DELETE FROM external_records WHERE data LIKE '%"_sheet":"workpermit"%'`)
 	t.Cleanup(func() { db.Exec("DELETE FROM external_records WHERE source_id = 'hse-test'") })
 	for i, row := range []map[string]interface{}{
 		// Sheets write dates both ways; month first.
