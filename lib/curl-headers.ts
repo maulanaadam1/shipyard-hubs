@@ -79,6 +79,32 @@ export const configHosts = (url: string | null | undefined): string[] =>
     })
     .filter(Boolean);
 
+type StoredConfig = { id: string; url?: string | null; headers?: string | null; last_sync?: string | null };
+
+const hasStoredHeaders = (headers: string | null | undefined) => {
+  if (!headers) return false;
+  try {
+    const parsed = JSON.parse(headers);
+    return !!parsed && typeof parsed === 'object' && !Array.isArray(parsed) && Object.keys(parsed).length > 0;
+  } catch {
+    return false;
+  }
+};
+
+// Config whose headers a URL-only config can borrow: same host as one of
+// `urls`, has headers, not `excludeId`; the most recently synced one wins.
+export const pickHeaderDonor = <T extends StoredConfig>(configs: T[], urls: string[], excludeId?: string | null): T | null => {
+  const wanted = new Set(urls.flatMap(u => configHosts(u)));
+  if (wanted.size === 0) return null;
+  const candidates = configs.filter(c =>
+    c.id !== excludeId &&
+    hasStoredHeaders(c.headers) &&
+    configHosts(c.url).some(h => wanted.has(h)),
+  );
+  candidates.sort((a, b) => (b.last_sync || '').localeCompare(a.last_sync || ''));
+  return candidates[0] || null;
+};
+
 // Overwrite stored headers with fresh ones. Headers only in `stored` are kept;
 // a fresh header replaces a stored one whatever the letter case.
 export const mergeHeaders = (stored: string | null | undefined, fresh: Record<string, string>): Record<string, string> => {

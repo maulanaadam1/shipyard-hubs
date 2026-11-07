@@ -25,7 +25,7 @@ import {
 } from 'lucide-react';
 import { api, getHeaders } from '@/lib/api-client';
 import { useData } from '@/context/DataContext';
-import { extractCurlUrls, parseCurlHeaders, configHosts, mergeHeaders } from '@/lib/curl-headers';
+import { extractCurlUrls, parseCurlHeaders, configHosts, mergeHeaders, pickHeaderDonor } from '@/lib/curl-headers';
 
 const FOCUSABLE = 'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
 
@@ -330,6 +330,18 @@ export default function ApiSyncManagement() {
     }
   };
 
+  // A cURL with a URL but no headers borrows them: an edited config keeps its
+  // own, otherwise they come from a config on the same host.
+  const urlOnly = useMemo(() => {
+    const urls = extractCurlUrls(curlCommand);
+    if (urls.length === 0 || Object.keys(parseCurlHeaders(curlCommand)).length > 0) {
+      return { active: false, donor: null as any };
+    }
+    const own = editingId ? configs.find(c => c.id === editingId) : null;
+    const donor = own && pickHeaderDonor([own], urls) ? own : pickHeaderDonor(configs, urls, editingId);
+    return { active: true, donor: donor as any };
+  }, [curlCommand, configs, editingId]);
+
   const handleSaveSync = async () => {
     if (!formConfigId || !formName) {
        setSyncStatusMsg("Error: ID dan Nama Konfigurasi wajib diisi.");
@@ -359,6 +371,9 @@ export default function ApiSyncManagement() {
         }
 
         headers = parseCurlHeaders(curlCommand);
+        if (Object.keys(headers).length === 0 && urlOnly.donor) {
+          headers = JSON.parse(urlOnly.donor.headers);
+        }
       }
 
       // If updating without a new curl command, we must fetch the existing one to not overwrite with blanks
@@ -767,9 +782,18 @@ export default function ApiSyncManagement() {
                     placeholder={"curl 'https://api.external.com/v1/data?page=1' \\\n  -H 'accept: application/json'\n\ncurl 'https://api.external.com/v1/data?page=1&project=internal' \\\n  -H 'accept: application/json'"}
                     className="w-full h-40 p-4 text-xs font-mono rounded-xl bg-slate-900 border-slate-800 text-emerald-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/50"
                   />
-                  <p className="text-[10px] text-slate-400 pt-1">
-                    Script cURL akan otomatis mengekstrak Headers (termasuk Cookie). Jika ada lebih dari satu cURL, semua URL akan disinkronkan dan digabung.
+                  <p className="text-[11px] text-slate-500 pt-1">
+                    Script cURL akan otomatis mengekstrak Headers (termasuk Cookie). Jika ada lebih dari satu cURL, semua URL akan disinkronkan dan digabung. Cukup tulis <code className="font-mono">curl 'URL'</code> tanpa header untuk memakai header konfigurasi lain dengan host yang sama.
                   </p>
+                  {urlOnly.active && (urlOnly.donor ? (
+                    <p role="status" className="text-xs text-emerald-700 bg-emerald-50 border border-emerald-100 rounded-lg px-3 py-2">
+                      cURL ini tanpa header. Header akan disalin dari konfigurasi <span className="font-mono font-semibold">{urlOnly.donor.id}</span>{urlOnly.donor.id === editingId ? ' (header konfigurasi ini sendiri)' : ''}.
+                    </p>
+                  ) : (
+                    <p role="alert" className="text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+                      cURL ini tanpa header, dan belum ada konfigurasi lain dengan host yang sama. Header akan kosong, sehingga sinkronisasi kemungkinan ditolak. Tempel cURL lengkap dari DevTools.
+                    </p>
+                  ))}
                 </div>
 
                 {/* URL QUERY PARAMETERS */}
