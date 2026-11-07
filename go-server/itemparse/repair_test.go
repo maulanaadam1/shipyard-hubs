@@ -22,6 +22,8 @@ func TestParseRepair(t *testing.T) {
 		{"surface preparation word", "a. Lakukan Amplashing", "m2", 65, []string{"Lambung"}, "Persiapan permukaan (per m2)", "", false},
 		{"surface preparation on a named part", "Lakukan power tooling", "m2", 5, []string{"Bulwark", "Dinding luar"}, "Persiapan permukaan dinding", "", true},
 		{"surface work on an area with no part named", "Lakukan pengecatan 2 layer", "m2", 120, nil, "Pengecatan permukaan (per m2)", "", false},
+		{"cleaning before painting is painting", "jasa", "m2", 65, []string{"Tiang Navigasi", "c. Lakukan pembersihan dan pengecatan 2 Layer sampai merata"},
+			"Pengecatan tiang / mast", ComponentService, true},
 		{"docking line", "Docking", "ls", 1, []string{"Pelayanan Umum"}, "Biaya / jasa docking & undocking", "", false},
 		{"new building package", "Barge 300 feet - S0999", "unit", 1, nil, "Paket pembangunan kapal baru", "", false},
 		{"new building contract", "Pembangunan 1 unit kapal baru tug boat 2 x 1000 HP", "unit", 1, nil, "Paket pembangunan kapal baru", "", false},

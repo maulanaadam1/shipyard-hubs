@@ -107,7 +107,8 @@ func aiTools() []aiTool {
 		},
 		{
 			Name: "price_reference",
-			Description: "Reference (fair) unit prices per work type, size and unit (Harga Acuan), from approved items of the last 24 months " +
+			Description: "Reference (fair) VENDOR unit costs per work type, size and unit (Harga Acuan Jasa), from approved WO items of the last 24 months " +
+				"(prices offered to customers are marketing_price_reference) " +
 				"(or all years where there are too few). Call this when the user asks what a piece of work usually costs, whether a price " +
 				"is reasonable, or how a price compares between years or vendors. Search with query first; then pass the exact work_type, " +
 				"size and unit of one result to get its yearly trend, vendor medians and recent items. The usual range is P25-P75 " +
@@ -157,6 +158,7 @@ func aiTools() []aiTool {
 		attendanceHoursTool(),
 		aiJobMarginTool(),
 		aiRepairListTool(),
+		aiMarketingPriceTool(),
 		aiQueryDataTool(),
 	}
 }

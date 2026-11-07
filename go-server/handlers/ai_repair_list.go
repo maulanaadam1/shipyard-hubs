@@ -26,14 +26,15 @@ func aiRepairListTool() aiTool {
 			"failed. With jo_id, or when query matches one Job Order, it returns that Job Order's totals per version and its " +
 			"activities, filtered by wo, version and activity. For margin and vendor cost use job_order_margin.",
 		Schema: aiSchema(map[string]interface{}{
-			"query":    aiString("Words in the Job Order code, ship or customer, e.g. \"BARAKUDA\" or \"DRG26DKP045\"."),
-			"jo_id":    aiString("jo_id of one Job Order from a list result, for its activities."),
-			"wo":       aiString("Activities only with a WO (with) or without one yet (without).", "with", "without"),
-			"version":  aiInteger("Only this repair list version: 1 = main, 2 and up = additional.", 1, 50),
-			"activity": aiString("Words in the activity or its group, e.g. \"sandblasting\" or \"propeller\"."),
-			"state":    aiString("List only Job Orders in this state.", "ok", "pending", "none", "failed"),
-			"sort":     aiString("List order (default price, highest first; without_wo = most value without a WO).", "price", "without_wo", "progress"),
-			"limit":    aiInteger("How many Job Orders (default 10) or activities (default 40) to return.", 1, 150),
+			"query":     aiString("Words in the Job Order code, ship or customer, e.g. \"BARAKUDA\" or \"DRG26DKP045\"."),
+			"jo_id":     aiString("jo_id of one Job Order from a list result, for its activities."),
+			"wo":        aiString("Activities only with a WO (with) or without one yet (without).", "with", "without"),
+			"version":   aiInteger("Only this repair list version: 1 = main, 2 and up = additional.", 1, 50),
+			"activity":  aiString("Words in the activity, its group or its work type, e.g. \"sandblasting\" or \"propeller\"."),
+			"work_type": aiString("Words in the work type (jenis pekerjaan, as in Item Repair List), e.g. \"pengecatan\" or \"ganti baru plat\"."),
+			"state":     aiString("List only Job Orders in this state.", "ok", "pending", "none", "failed"),
+			"sort":      aiString("List order (default price, highest first; without_wo = most value without a WO).", "price", "without_wo", "progress"),
+			"limit":     aiInteger("How many Job Orders (default 10) or activities (default 40) to return.", 1, 150),
 		}),
 		Resource: ResourceRepairList,
 		Run:      runRepairList,
@@ -46,6 +47,7 @@ type repairListInput struct {
 	WO       string `json:"wo"`
 	Version  int    `json:"version"`
 	Activity string `json:"activity"`
+	WorkType string `json:"work_type"`
 	State    string `json:"state"`
 	Sort     string `json:"sort"`
 	Limit    int    `json:"limit"`
@@ -204,6 +206,7 @@ func aiRepairListDetail(r *http.Request, joID string, in repairListInput) (inter
 	}
 	perVersion := map[int]*versionTotal{}
 	words := strings.ToLower(strings.TrimSpace(in.Activity))
+	workWords := strings.ToLower(strings.TrimSpace(in.WorkType))
 	var picked []map[string]interface{}
 	matchedTotal, matchedCount := 0.0, 0
 	for _, it := range leaves {
@@ -230,12 +233,19 @@ func aiRepairListDetail(r *http.Request, joID string, in repairListInput) (inter
 			continue
 		}
 		g := group(n.parent)
-		if words != "" && !aiWordsIn(words, n.desc+" "+g) {
+		work := aiDataText(it["work_type"])
+		if words != "" && !aiWordsIn(words, n.desc+" "+g+" "+work) {
+			continue
+		}
+		if workWords != "" && !aiWordsIn(workWords, work) {
 			continue
 		}
 		matchedCount++
 		matchedTotal += price
-		row := map[string]interface{}{"no": it["path"], "activity": n.desc, "group": g, "qty": it["quantity"], "unit": it["unit"], "version": n.version}
+		row := map[string]interface{}{"no": it["path"], "activity": n.desc, "group": g, "work_type": work, "qty": it["quantity"], "unit": it["unit"], "version": n.version}
+		if c := aiDataText(it["component"]); c != "" {
+			row["part"] = c
+		}
 		if showPrice {
 			row["unit_price"], row["total_price"] = it["unit_price"], price
 		}

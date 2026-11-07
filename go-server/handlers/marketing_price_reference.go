@@ -1,7 +1,9 @@
 package handlers
 
 import (
+	"encoding/json"
 	"net/http"
+	"net/url"
 	"sort"
 	"strconv"
 	"strings"
@@ -273,4 +275,61 @@ func GetMarketingPriceReferenceDetail(w http.ResponseWriter, r *http.Request) {
 			"service": p.service, "est_start": p.start, "activity": p.activity, "group": p.group, "quantity": p.qty, "unit_price": p.price})
 	}
 	writeJSON(w, http.StatusOK, map[string]interface{}{"reference": summarizeMarketing(list), "years": years, "customers": customers, "items": items})
+}
+
+// aiMarketingPriceTool gives the AI Assistant the Harga Acuan Marketing data.
+func aiMarketingPriceTool() aiTool {
+	return aiTool{
+		Name: "marketing_price_reference",
+		Description: "Reference unit prices OFFERED TO CUSTOMERS (harga penawaran / harga marketing), from the Job Orders' repair lists, " +
+			"per work type, size, unit and part (whole job, jasa or material): median, fair range p25-p75, min-max, number of prices and " +
+			"Job Orders, latest price. Call this when the user asks what price is usually offered or quoted to customers for some work, " +
+			"e.g. \"harga penawaran sandblasting per m2 biasanya berapa\". This is not vendor cost: for vendor prices use price_reference " +
+			"(Harga Acuan Jasa). Default period: Job Orders planned to start in the last 24 months.",
+		Schema: aiSchema(map[string]interface{}{
+			"search":   aiString("Words in the work type or size, e.g. \"sandblasting\", \"ganti baru plat\", \"pipa 2\"."),
+			"unit":     aiString("Only this unit, e.g. \"m2\", \"kg\", \"ltr\", \"pcs\", \"m\"."),
+			"part":     aiString("Only whole jobs (none), jasa lines or material lines.", "none", "jasa", "material"),
+			"months":   aiInteger("Period in months by the Job Order's planned start (default 24; 0 = all).", 0, 120),
+			"job_type": aiString("Only Job Orders of this type, e.g. \"DOCKING REPAIR\"."),
+			"customer": aiString("Only this customer (exact name)."),
+			"limit":    aiInteger("How many references to return (default 10).", 1, 50),
+		}),
+		Resource: ResourceMarketingPriceReference,
+		Run: func(r *http.Request, input json.RawMessage) (interface{}, error) {
+			var in struct {
+				Search   string `json:"search"`
+				Unit     string `json:"unit"`
+				Part     string `json:"part"`
+				Months   *int   `json:"months"`
+				JobType  string `json:"job_type"`
+				Customer string `json:"customer"`
+				Limit    int    `json:"limit"`
+			}
+			if err := decodeAIInput(input, &in); err != nil {
+				return nil, err
+			}
+			if err := oneOf("part", in.Part, "none", "jasa", "material"); err != nil {
+				return nil, err
+			}
+			q := url.Values{"limit": {strconv.Itoa(limitOr(in.Limit, 10, 50))}}
+			setIf(q, "search", in.Search)
+			setIf(q, "unit", in.Unit)
+			setIf(q, "component", in.Part)
+			setIf(q, "service", in.JobType)
+			setIf(q, "customer", in.Customer)
+			if in.Months != nil {
+				q.Set("months", strconv.Itoa(*in.Months))
+			}
+			res, err := aiCall(GetMarketingPriceReference, r, "/api/marketing-price-reference", q)
+			if err != nil {
+				return nil, err
+			}
+			delete(res, "units")
+			if rows, _ := res["rows"].([]interface{}); len(rows) == 0 {
+				res["note"] = "Tidak ada harga acuan marketing yang cocok; coba kata lain, satuan lain, atau months: 0 (semua periode)."
+			}
+			return res, nil
+		},
+	}
 }

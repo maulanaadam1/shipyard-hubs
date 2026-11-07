@@ -18,7 +18,7 @@ type JobRow = {
 type WOUse = { wo_id: string; wo_code: string; vendor: string; cost?: number };
 type Item = {
   uniqcode: string; parent: string; depth: number; path: string; description: string; unit: string; quantity: number;
-  unit_price?: number; total_price?: number; leaf: boolean; wos: WOUse[];
+  unit_price?: number; total_price?: number; leaf: boolean; wos: WOUse[]; work_type?: string; size?: string; component?: string;
 };
 type Summary = {
   jo_id: string; jo_code: string; ship: string; customer: string; service: string; state: State; version: number; fetched_at: string; error: string;
@@ -364,16 +364,16 @@ function RepairListDetail({ joID }: { joID: string }) {
   const exportExcel = () => {
     if (!detail) return;
     const s = detail.summary;
-    const head = ['Path', 'Level', 'Aktivitas', 'Satuan', 'Qty', ...(showPrice ? ['Harga satuan', 'Total'] : []), 'WO', 'Vendor', ...(showPrice ? ['Biaya vendor'] : [])];
+    const head = ['Path', 'Level', 'Aktivitas', 'Jenis pekerjaan', 'Satuan', 'Qty', ...(showPrice ? ['Harga satuan', 'Total'] : []), 'WO', 'Vendor', ...(showPrice ? ['Biaya vendor'] : [])];
     const data = visible.map(it => [
-      it.path, it.level, `${'    '.repeat(Math.max(0, it.level))}${it.description}`, it.leaf ? it.unit : '', it.leaf ? it.quantity : '',
+      it.path, it.level, `${'    '.repeat(Math.max(0, it.level))}${it.description}`, it.leaf ? [it.work_type, it.component].filter(Boolean).join(' · ') : '', it.leaf ? it.unit : '', it.leaf ? it.quantity : '',
       ...(showPrice ? [it.leaf ? it.unit_price ?? '' : '', it.leaf ? it.total_price ?? '' : groups.get(it.uniqcode)?.total ?? ''] : []),
       it.wos.map(w => w.wo_code).join(', '), it.wos.map(w => w.vendor).filter(Boolean).join(', '),
       ...(showPrice ? [it.wos.length ? it.wos.reduce((t, w) => t + (w.cost || 0), 0) : ''] : []),
     ]);
     const title = [`${s.jo_code} ${s.ship}`.trim(), s.customer, multi ? (version > 0 ? (version === 1 ? 'Versi 1 (utama)' : `Tambahan versi ${version}`) : 'Semua versi') : `Versi ${s.version}`];
     const ws = XLSX.utils.aoa_to_sheet([title, [], head, ...data]);
-    ws['!cols'] = head.map((h, i) => ({ wch: i === 2 ? 60 : h === 'Path' ? 14 : 16 }));
+    ws['!cols'] = head.map((h, i) => ({ wch: i === 2 ? 60 : i === 3 ? 32 : h === 'Path' ? 14 : 16 }));
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, 'Repair List');
     const name = `${s.jo_code || joID}-${s.ship}`.replace(/[^\w.-]+/g, '_').replace(/_+/g, '_');
@@ -381,7 +381,7 @@ function RepairListDetail({ joID }: { joID: string }) {
   };
 
   const s = detail?.summary;
-  const colSpan = showPrice ? 6 : 4;
+  const colSpan = showPrice ? 7 : 5;
 
   return (
     <div className="min-h-screen bg-slate-50">
@@ -485,6 +485,7 @@ function RepairListDetail({ joID }: { joID: string }) {
                   <tr>
                     <th scope="col" className="px-3 py-2 text-left font-semibold hidden md:table-cell">Path</th>
                     <th scope="col" className="px-3 py-2 text-left font-semibold">Aktivitas</th>
+                    <th scope="col" className="px-3 py-2 text-left font-semibold hidden xl:table-cell">Jenis pekerjaan</th>
                     <th scope="col" className="px-3 py-2 text-right font-semibold">Qty</th>
                     {showPrice && <th scope="col" className="px-3 py-2 text-right font-semibold hidden lg:table-cell">Harga satuan</th>}
                     {showPrice && <th scope="col" className="px-3 py-2 text-right font-semibold">Total</th>}
@@ -506,6 +507,9 @@ function RepairListDetail({ joID }: { joID: string }) {
                               <span>{it.description || '–'} <span className="font-normal text-xs text-slate-500">{g?.n || 0} aktivitas</span></span>
                             </button>
                           )}
+                        </td>
+                        <td className="px-3 py-1.5 align-top text-xs hidden xl:table-cell">
+                          {it.leaf && (it.work_type ? <span className="text-slate-600">{it.work_type}{it.component ? <span className="text-slate-500"> · {it.component}</span> : null}</span> : <span className="text-slate-400">–</span>)}
                         </td>
                         <td className="px-3 py-1.5 text-right align-top tabular-nums whitespace-nowrap text-slate-600">
                           {it.leaf ? `${it.quantity.toLocaleString('id-ID')} ${it.unit || ''}` : ''}

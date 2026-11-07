@@ -270,6 +270,17 @@ func TestRepairLists(t *testing.T) {
 	if noPrice := runTool("rl-viewer", `{"jo_id": "77"}`); noPrice["activities"].([]map[string]interface{})[0]["total_price"] != nil || noPrice["matching_total_price"] != nil {
 		t.Errorf("repair_list prices without Harga Penawaran: %v", noPrice)
 	}
+	byWorkType := runTool("rl-admin", `{"jo_id": "77", "work_type": "pipa"}`)
+	if a := byWorkType["activities"].([]map[string]interface{}); len(a) != 1 || a[0]["work_type"] != "Ganti baru pipa" {
+		t.Errorf("repair_list by work type: %v", byWorkType)
+	}
+	if out, err := aiMarketingPriceTool().Run(aiRequest("rl-admin"), json.RawMessage(`{"search": "pipa", "months": 0}`)); err != nil ||
+		len(out.(map[string]interface{})["rows"].([]interface{})) != 1 {
+		t.Errorf("marketing_price_reference: %v, %v", out, err)
+	}
+	if d := get("rl-admin", "/api/repair-lists/77"); d["items"].([]interface{})[5].(map[string]interface{})["work_type"] != "Ganti baru pipa" {
+		t.Errorf("detail work type: %v", d["items"].([]interface{})[5])
+	}
 	if none := runTool("rl-admin", `{"jo_id": "99"}`); !strings.Contains(none["note"].(string), "tidak punya repair list") {
 		t.Errorf("repair_list none: %v", none)
 	}
